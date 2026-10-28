@@ -3,10 +3,17 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$modelName = 'qwen2.5vl:7b'
+$modelName = 'qwen3-vl:8b'
 $ollamaApi = 'http://127.0.0.1:11434'
 $previousHost = $env:OLLAMA_HOST
 $previousNoCloud = $env:OLLAMA_NO_CLOUD
+$previousAiProvider = $env:ALICIA_AI_PROVIDER
+$previousTtsProvider = $env:ALICIA_TTS_PROVIDER
+$previousSttProvider = $env:ALICIA_STT_PROVIDER
+$previousWhisperDevice = $env:ALICIA_WHISPER_DEVICE
+$previousModel = $env:ALICIA_OLLAMA_MODEL
+$previousUrl = $env:ALICIA_OLLAMA_URL
+$previousCommandPath = $env:Path
 
 function Refresh-CommandPath {
     $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -39,10 +46,35 @@ function Test-Ollama {
     } catch { return $false }
 }
 
+function Install-DesktopShortcut {
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcutPath = Join-Path ($shell.SpecialFolders.Item('Desktop')) 'Alicia.lnk'
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $shell.ExpandEnvironmentStrings('%SystemRoot%\System32\wscript.exe')
+        $shortcut.Arguments = '"' + (Join-Path $projectRoot 'Lancer_Alicia.vbs') + '"'
+        $shortcut.WorkingDirectory = $projectRoot
+        $shortcut.WindowStyle = 7
+        $shortcut.Description = 'Alicia - copilote local gratuit'
+        $shortcut.IconLocation = (Join-Path $projectRoot 'src\alicia\assets\alicia.ico') + ',0'
+        $shortcut.Save()
+        Write-Host 'Raccourci Alicia cree sur le Bureau : lancement sans terminal.'
+    } catch {
+        # A managed or read-only Desktop does not prevent using the application.
+        Write-Warning 'Le raccourci Bureau n a pas pu etre cree. Lancez Lancer_Alicia.vbs dans le dossier Alicia.'
+    }
+}
+
 Push-Location $projectRoot
 try {
     $env:OLLAMA_HOST = $ollamaApi
     $env:OLLAMA_NO_CLOUD = '1'
+    $env:ALICIA_AI_PROVIDER = 'ollama'
+    $env:ALICIA_TTS_PROVIDER = 'chatterbox'
+    $env:ALICIA_STT_PROVIDER = 'whisper'
+    $env:ALICIA_WHISPER_DEVICE = 'auto'
+    $env:ALICIA_OLLAMA_MODEL = $modelName
+    $env:ALICIA_OLLAMA_URL = $ollamaApi
     Write-Host 'Alicia : preparation du mode local gratuit, sans cle API.'
     Write-Host 'Cette installation telecharge les outils, le modele visuel et les modeles audio locaux.'
 
@@ -67,6 +99,11 @@ try {
         $ollamaExecutable = Find-Tool 'ollama.exe' $ollamaCandidates
     }
     if (-not $ollamaExecutable) { throw 'Ollama reste introuvable. Fermez et rouvrez PowerShell puis relancez.' }
+
+    # A fallback uv.exe path may not be on PATH yet. The isolated voice installer
+    # discovers uv in a child Python process, so expose the exact tool found above.
+    $uvDirectory = Split-Path -Parent $uvExecutable
+    $env:Path = $uvDirectory + [IO.Path]::PathSeparator + $env:Path
 
     & $uvExecutable --version
     if ($LASTEXITCODE -ne 0) { throw 'uv ne peut pas demarrer.' }
@@ -98,19 +135,29 @@ try {
     & $uvExecutable sync --python 3.12 --frozen --extra dev
     if ($LASTEXITCODE -ne 0) { throw 'Installation des dependances Alicia impossible.' }
 
-    Write-Host 'Preparation de Whisper pour la reconnaissance et de Kokoro pour la voix neuronale francaise...'
+    Write-Host 'Preparation de Whisper Turbo pour la reconnaissance et de Chatterbox pour la voix francaise expressive...'
     & $uvExecutable run --frozen alicia --prepare-audio
     if ($LASTEXITCODE -ne 0) { throw 'Preparation des modeles audio impossible. Consultez le message puis relancez Installer_Alicia.bat.' }
+
+    Install-DesktopShortcut
 
     # Existing user configuration is intentionally preserved.
     Write-Host ''
     Write-Host 'Installation terminee. Aucun fichier .env existant n a ete modifie.'
-    Write-Host 'La voix feminine francaise Kokoro et la reconnaissance Whisper restent sur votre PC.'
+    Write-Host 'La voix francaise Chatterbox et la reconnaissance Whisper Turbo restent sur votre PC.'
     Write-Host 'Alicia observe l ecran principal et active le microphone au lancement. Stop coupe les deux.'
     Write-Host 'La recherche web reste desactivee tant que vous ne l autorisez pas dans Alicia.'
-    Write-Host 'Pour lancer Alicia : .\scripts\start_alicia.ps1'
+    Write-Host 'Pour lancer Alicia sans terminal : raccourci Alicia ou Lancer_Alicia.vbs.'
+    Write-Host 'Pour afficher un diagnostic : Lancer_Alicia_Debug.bat.'
 } finally {
     $env:OLLAMA_HOST = $previousHost
     $env:OLLAMA_NO_CLOUD = $previousNoCloud
+    $env:ALICIA_AI_PROVIDER = $previousAiProvider
+    $env:ALICIA_TTS_PROVIDER = $previousTtsProvider
+    $env:ALICIA_STT_PROVIDER = $previousSttProvider
+    $env:ALICIA_WHISPER_DEVICE = $previousWhisperDevice
+    $env:ALICIA_OLLAMA_MODEL = $previousModel
+    $env:ALICIA_OLLAMA_URL = $previousUrl
+    $env:Path = $previousCommandPath
     Pop-Location
 }

@@ -17,6 +17,19 @@ def create_vision_provider(settings: Settings):
 
 
 def create_speech_provider(settings: Settings):
+    if settings.tts_provider == "chatterbox":
+        from alicia.audio.chatterbox_speech import (
+            ChatterboxSpeechProvider,
+            ChatterboxSpeechSettings,
+        )
+
+        return ChatterboxSpeechProvider(
+            ChatterboxSpeechSettings(
+                runtime_directory=settings.expressive_runtime_directory,
+                model_directory=settings.expressive_model_directory,
+                device=settings.expressive_device,
+            )
+        )
     if settings.tts_provider == "kokoro":
         from alicia.audio.kokoro_speech import KokoroSpeechProvider, KokoroSpeechSettings
 

@@ -4,6 +4,8 @@ from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from alicia.resources import DEFAULT_PORTRAIT
+
 
 class Avatar(QWidget):
     """Visuel original local ; bouche animée pendant la lecture audio réelle."""
@@ -14,6 +16,8 @@ class Avatar(QWidget):
         self.state = "idle"
         self.phase = 0
         self.picture = QPixmap()
+        if DEFAULT_PORTRAIT.is_file():
+            self.load_picture(str(DEFAULT_PORTRAIT))
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self._tick)

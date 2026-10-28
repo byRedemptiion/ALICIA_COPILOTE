@@ -24,10 +24,15 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--prepare-audio",
         action="store_true",
-        help="Installer explicitement Kokoro et Whisper pour l’audio local",
+        help="Installer explicitement la voix locale choisie et Whisper Turbo",
+    )
+    parser.add_argument(
+        "--prepare-expressive-voice",
+        action="store_true",
+        help="Installer explicitement la voix française expressive Chatterbox",
     )
     options = parser.parse_args(argv)
-    if options.prepare_voice or options.prepare_audio:
+    if options.prepare_voice or options.prepare_audio or options.prepare_expressive_voice:
         from alicia.audio.ports import SpeechError
         from alicia.config import load_settings
         from alicia.core.ports import ConfigurationError
@@ -36,13 +41,35 @@ def main(argv=None) -> int:
             parser.error("La préparation audio s’utilise seule.")
         try:
             settings = load_settings()
+            if options.prepare_expressive_voice or (
+                options.prepare_audio and settings.tts_provider == "chatterbox"
+            ):
+                from alicia.audio.chatterbox_setup import prepare_expressive_voice
+                from alicia.resources import VOICE_REFERENCE
+
+                print("Préparation de la voix française expressive Chatterbox…", flush=True)
+                prepare_expressive_voice(
+                    settings.expressive_runtime_directory,
+                    settings.expressive_model_directory,
+                    reference_audio=VOICE_REFERENCE,
+                    device=settings.expressive_device,
+                )
+                if not options.prepare_audio:
+                    print("Voix expressive locale prête.")
+                    return 0
             if options.prepare_audio:
-                from alicia.audio.neural_setup import prepare_neural_voice
                 from alicia.audio.whisper_setup import prepare_whisper_model
 
-                print("Préparation de la voix neuronale française Kokoro…", flush=True)
-                prepare_neural_voice(settings.neural_model_directory)
-                print("Préparation de la reconnaissance française Whisper…", flush=True)
+                if settings.tts_provider == "kokoro":
+                    from alicia.audio.neural_setup import prepare_neural_voice
+
+                    print("Préparation de la voix neuronale française Kokoro…", flush=True)
+                    prepare_neural_voice(settings.neural_model_directory)
+                elif settings.tts_provider != "chatterbox":
+                    raise ConfigurationError(
+                        "La préparation audio nécessite chatterbox ou kokoro comme voix locale."
+                    )
+                print("Préparation de la reconnaissance française Whisper Turbo…", flush=True)
                 prepare_whisper_model(settings.whisper_model_path)
                 print("Modèles audio locaux prêts.")
                 return 0

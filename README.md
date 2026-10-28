@@ -1,50 +1,56 @@
 # Alicia
 
-Copilote IA gratuit pour Windows : Alicia regarde ce qui est affiché sur l’écran principal, répond aux questions et conseille. Elle ne joue jamais à votre place et ne génère ni touches ni clics.
+Copilote IA gratuit pour Windows : Alicia observe l’écran principal, répond aux questions et conseille sans générer de touches ni de clics. Le lancement normal active l’observation et le microphone, avec un état visible et un bouton Stop.
 
-Le parcours par défaut utilise **Ollama** pour la vision et le raisonnement, **Whisper local** pour reconnaître le français et **Kokoro** pour une voix neuronale féminine française (`ff_siwis`). Aucun compte, clé API ou abonnement n’est nécessaire. Il ne s’agit pas de cette conversation ChatGPT, et la voix ne reproduit pas une voix de ChatGPT.
+La v0.4 utilise **Ollama avec Qwen3-VL 8B**, **Whisper large-v3-turbo multilingue** et **Chatterbox Multilingual** pour une voix locale plus expressive. Aucun compte, clé API ou abonnement n’est nécessaire. La qualité et la vitesse restent à évaluer sur votre PC ; Alicia n’est pas cette conversation ChatGPT.
 
 ![Interface Alicia](docs/assets/interface-demo.png)
 
 ## Installer ou mettre à jour
 
-1. Extraire complètement la nouvelle archive dans un dossier.
-2. Double-cliquer sur **Installer_Alicia.bat** et attendre la fin de la préparation.
-3. Double-cliquer sur **Lancer_Alicia.bat**.
+1. Fermer l’ancienne Alicia et extraire complètement la nouvelle archive.
+2. Double-cliquer sur **Installer_Alicia.bat** et attendre la fin des téléchargements. La fenêtre se ferme après réussite ; une erreur reste visible.
+3. Utiliser le raccourci **Alicia** du Bureau ou **Lancer_Alicia.vbs** pour un lancement sans terminal.
 
-L’installation prépare Python 3.12, uv, Ollama, les dépendances verrouillées et les modèles locaux. Les téléchargements initiaux représentent plusieurs Go pour la vision et des modèles audio supplémentaires. L’installation conserve votre `.env` ; un ancien modèle Vosk ou une voix Windows ne sont plus les moteurs par défaut.
+**Lancer_Alicia.bat** reste compatible et appelle le lancement masqué ; il peut afficher brièvement une console. Une boîte de dialogue signale les erreurs du lanceur masqué. **Lancer_Alicia_Debug.bat** garde une console pour le diagnostic.
 
-Les scripts PowerShell équivalents sont `scripts/setup_local.ps1` et `scripts/start_alicia.ps1`. Le lanceur impose le parcours gratuit pour ce processus, puis restaure les variables de la console. Il ne télécharge pas de modèle pendant le lancement ou une question. Voir [Installation gratuite](docs/INSTALLATION_GRATUITE.md).
+L’installateur conserve votre `.env`, prépare les dépendances verrouillées et télécharge explicitement les modèles. Chatterbox dispose d’un environnement Python séparé. Prévoir plusieurs Go pour les modèles et leurs dépendances, et un premier chargement plus lent. Le lancement et les questions ne téléchargent aucun modèle. Voir [Installation gratuite](docs/INSTALLATION_GRATUITE.md), notamment pour choisir explicitement la voix Kokoro plus légère.
 
 ## Parler à Alicia
 
-Au lancement normal, **l’écran principal et le microphone démarrent automatiquement**, selon la demande de l’utilisateur. L’indicateur d’état montre l’écoute. Il n’est plus nécessaire de choisir une fenêtre ou d’appuyer sur Activer le micro.
-
-Passez dans votre jeu ou votre navigateur, puis dites par exemple :
+Passez dans votre jeu ou votre navigateur sur l’écran principal, puis dites par exemple :
 
 > « Alicia, décris ce que tu vois. »
 >
-> « Alicia, lequel de ces objets semble le plus adapté ? »
+> « Alicia, lequel de ces objets semble le plus adapté, et pourquoi ? »
 
-Laissez un silence en fin de question. Dire seulement « Alicia » ouvre aussi une fenêtre de huit secondes pour la phrase suivante. Les autres conversations sont ignorées. Alicia prend une capture fraîche, l’analyse localement puis lit sa réponse. Un historique court de la session aide les questions de suivi ; la capture actuelle reste prioritaire si l’écran a changé.
+Laissez un silence en fin de question. Dire seulement « Alicia » ouvre une fenêtre de huit secondes pour la phrase suivante. Les conversations sans ce mot d’activation ne déclenchent aucune question au modèle. Alicia prend une capture fraîche, utilise le contexte court de la session, affiche sa réponse puis la lit.
 
-**Stop** coupe l’observation et l’écoute ; **Reprendre** les relance. L’écoute se suspend pendant le traitement et la lecture pour éviter qu’Alicia ne se réponde à elle-même, puis reprend. Cette version fonctionne par tours : l’interruption vocale pendant sa réponse n’est pas encore proposée.
+**« Alicia, stop »** demande de couper la voix pendant la lecture et de revenir à l’écoute. **Stop**, dans l’interface, coupe l’observation et le microphone et efface le contexte ; **Reprendre** les relance. La détection vocale demande un délai de reconnaissance et doit être testée avec votre micro. Un casque aide à éviter que le son des haut-parleurs revienne dans le micro.
 
-L’aperçu est actualisé environ chaque seconde, sans demander une analyse IA à chaque image. Le délai de transcription, de chargement et d’inférence reste mesurable ; aucune réponse instantanée n’est promise. L’écran principal comprend tout son contenu visible : minimisez Alicia ou passez dans le jeu pour qu’elle voie ce contenu. Une source différente reste disponible dans les options avancées.
+L’écoute ordinaire se suspend pendant le traitement. Pendant la lecture, seules les commandes d’interruption sont prises en compte. Les protections contre l’écho ne constituent pas une annulation d’écho complète.
 
-## Voix, contexte et recherche
+L’aperçu se met à jour environ chaque seconde, sans analyse IA de chaque image. Alicia voit tout le contenu visible de l’écran principal : minimisez sa fenêtre pour lui montrer le jeu. Une autre source reste accessible dans les options avancées.
 
-Kokoro produit une voix française féminine neuronale locale. Son volume est réglable ; l’avatar s’anime pendant la lecture. Le rendu doit être écouté sur votre sortie audio, sans promettre la qualité ou le timbre exact de ChatGPT. Une image personnelle peut remplacer le portrait et reste locale.
+## Voix, reconnaissance et réponses
 
-Un [extrait de voix généré réellement](examples/voix-francaise.wav) est fourni pour écouter ce nouveau timbre. Sur le CPU du cloud, cet extrait de 8,37 secondes a été généré en 4,81 secondes au premier appel. Ces mesures ne prédisent pas la latence de votre jeu ou de votre PC.
+Chatterbox produit du français localement à partir d’une référence féminine synthétique fournie avec l’application. Cette référence vient de Kokoro ; aucune voix de personne réelle n’est clonée. Le rendu Chatterbox doit être écouté sur votre sortie audio avant de le qualifier de plus naturel. Le volume est réglable et l’avatar s’anime pendant la lecture réelle. L’image fournie pour Alicia sert d’icône arrondie et de portrait par défaut.
 
-Whisper remplace le petit modèle Vosk par défaut. Les noms propres, le bruit et les termes de jeu peuvent encore être mal reconnus. Le texte de la question reconnue reste visible pour le vérifier. Le contexte court aide le modèle à suivre l’échange, sans garantir qu’un « celui-là » ambigu sera résolu : Alicia doit alors demander une précision. Stop ou un changement de source efface ce contexte ; aucune mémoire de conversation n’est persistée.
+L’[extrait audio fourni](examples/voix-francaise.wav) est un **exemple Kokoro**, généré réellement lors de la v0.3 ; il ne démontre pas le rendu Chatterbox.
 
-La case **Autoriser la recherche web** est désactivée par défaut. Si vous l’autorisez, le moteur reçoit uniquement le texte de la question, sans image ni audio. Les extraits, liens et dates de récupération sont affichés comme sources. Une date de récupération n’est pas une date de publication ; les pages complètes ne sont pas lues dans ce premier adaptateur. Une erreur réseau ou un CAPTCHA est annoncé, sans repli payant ni fausse information récente.
+Whisper large-v3-turbo remplace les poids small précédents. Le français reste imposé et les transcriptions peu fiables doivent être rejetées plutôt que transformées en mots inventés. Les noms propres, accents et bruits du jeu restent à tester. La carte graphique est utilisée si l’initialisation CUDA réussit ; le mode automatique peut revenir au CPU, plus lent.
+
+Les réponses privilégient les faits visibles, un conseil court et sa justification utile. L’historique aide les questions de suivi, mais l’écran actuel prime. Si « celui-là » reste ambigu ou qu’un texte est illisible, Alicia doit demander une précision. Le modèle visuel reste chargé quinze minutes après utilisation pour limiter les rechargements ; aucun gain de vitesse mesuré n’est promis.
+
+## Recherche web et données
+
+La case **Autoriser la recherche web** est désactivée par défaut. Après autorisation, seule la question est envoyée au moteur, sans capture ni audio. Les extraits, liens et dates de récupération sont affichés ; les pages complètes ne sont pas lues par ce premier adaptateur. Une date de récupération n’est pas une date de publication.
+
+Les captures, le contexte court et l’audio du micro restent locaux dans le parcours gratuit. Les logs tournants, sous `%LOCALAPPDATA%/Alicia/logs`, ne contiennent ni capture, ni question, ni transcription, ni réponse, ni audio. Stop ou un changement de source efface le contexte. Aucun service payant ne remplace silencieusement un moteur local absent.
 
 ## Vérifier le développement
 
-Depuis la racine du dépôt :
+Depuis la racine :
 
 ```powershell
 uv sync --python 3.12 --frozen --extra dev
@@ -54,11 +60,11 @@ uv run --frozen pytest -q
 uv run --frozen alicia --smoke-test
 ```
 
-La démonstration `uv run --frozen alicia --demo` utilise une image fictive et ne démarre pas automatiquement le microphone. Le smoke test reste hors écran, sans micro, analyse IA ou voix réelle. Les tests avec doubles ne remplacent pas les essais du micro, du jeu et des modèles sur Windows. Les résultats réellement exécutés doivent être rapportés séparément ; suivre [Validation Windows](docs/VALIDATION_WINDOWS.md).
+La démonstration `uv run --frozen alicia --demo` utilise une image fictive et ne démarre pas automatiquement le microphone. Le smoke test n’exécute ni périphérique, ni modèle ou recherche réels. Les tests avec doubles ne remplacent pas les essais Windows décrits dans [Validation Windows](docs/VALIDATION_WINDOWS.md).
 
-Les logs tournants sont sous `%LOCALAPPDATA%/Alicia/logs`. Les captures, questions, transcriptions, réponses et flux audio ne sont pas enregistrés dans les logs par défaut. Les modèles sont installés sous `%LOCALAPPDATA%/Alicia/models`, hors du dépôt. Une CI Linux et Windows est définie dans `.github/workflows/checks.yml`.
+Vérifications v0.4 : **554 tests Python réussis**, smoke test graphique sans appel IA, construction du paquet avec ses ressources et **10 scénarios/141 assertions PowerShell**. Le moteur CPU Chatterbox a été installé et importé réellement ; son tokenizer français et le watermark fourni ont été vérifiés avec les accès réseau interdits. Ces vérifications ne produisent pas de parole Chatterbox.
 
-Vérifications de cette version : 450 tests Python réussis, parcours graphique hors écran réussi et 6 scénarios/68 assertions PowerShell avec outils factices. La synthèse Kokoro a aussi réellement généré du français. Le téléchargement Whisper est refusé par le réseau du cloud (403) : la transcription réelle, le microphone et la capture de l’écran principal sous Windows restent à valider sur le PC cible.
+La synthèse Kokoro a été exécutée réellement dans le cloud. Les téléchargements Hugging Face de Whisper et Chatterbox y sont refusés par le réseau (403) : leur transcription et synthèse réelles, la capture de l’écran principal, le microphone, l’interruption et le rendu audio Windows restent à valider sur le PC cible.
 
 ## Documents
 

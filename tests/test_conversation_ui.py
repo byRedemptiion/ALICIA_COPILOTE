@@ -23,6 +23,7 @@ class FakeListener:
         self.active = False
         self.paused = False
         self.pause_count = 0
+        self.interruption_modes = []
 
     def start(self, _device=None):
         self.active = True
@@ -35,6 +36,9 @@ class FakeListener:
 
     def resume(self):
         self.paused = False
+
+    def set_interruption_mode(self, enabled):
+        self.interruption_modes.append(enabled)
 
     def stop(self):
         self.active = False
@@ -198,7 +202,9 @@ def test_wake_question_captures_fresh_frame_and_answers_aloud(conversation_windo
     assert request.frame.capture_id != previous.capture_id
     assert fixture.syntheses == ["Réponse de test avec source [1]."]
     assert fixture.window.avatar.state == "speaking"
-    assert listener.paused
+    assert not listener.paused
+    assert fixture.window.conversation.interrupting
+    assert listener.interruption_modes[-1] is True
     finish_audio(fixture)
 
 
@@ -232,7 +238,7 @@ def test_own_voice_and_extra_questions_are_ignored_while_speaking(conversation_w
     listener = listen(fixture)
     listener.on_text("Alicia, explique cet écran")
     wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
-    assert listener.paused
+    assert not listener.paused
     listener.on_text("Alicia, répète cette réponse")
     fixture.app.processEvents()
     assert len(fixture.vision.requests) == 1
@@ -336,7 +342,132 @@ def test_research_finishing_after_analysis_still_advances_to_speech(conversation
     wait_until(fixture.app, lambda: not window.jobs and bool(fixture.audio))
     assert fixture.syntheses == ["Réponse déjà reçue pendant la recherche."]
     assert window.conversation.phase == "speaking"
+    assert not listener.paused
+
+
+def test_addressed_stop_interrupts_playback_and_keeps_session_listening(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia, explique cet écran")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
+    window = fixture.window
+    generation = window.session.generation
+    audio_generation = window.audio_generation
+    assert window.playback.active
+    assert window.conversation.interrupting
+    listener.on_text("Alicia, stop !")
+    fixture.app.processEvents()
+    assert not window.playback.active
+    assert not window.conversation.interrupting
+    assert window.session.active
+    assert window.session.generation == generation
+    assert window.audio_generation > audio_generation
+    window._speech_ready(generation, audio_generation, b"stale speech must remain ignored")
+    assert len(fixture.audio) == 1
+    assert not window.playback.active
+    assert listener.active
+    assert listener.interruption_modes[-1] is False
     assert listener.paused
+    wait_until(fixture.app, lambda: not listener.paused)
+    assert window.conversation.phase == "idle"
+    assert len(fixture.vision.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "text", ["stop", "Alicia", "Alicia explique stop", "Dis Alicia stop pour interrompre"]
+)
+def test_non_command_speech_during_playback_cannot_interrupt(conversation_window, text):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia, explique cet écran")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
+    listener.on_text(text)
+    fixture.app.processEvents()
+    assert fixture.window.playback.active
+    assert fixture.window.conversation.interrupting
+    assert len(fixture.vision.requests) == 1
+
+
+def test_spoken_help_with_stop_phrase_does_not_listen_to_its_own_command(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    window = fixture.window
+    window.capture(background=True)
+    wait_until(fixture.app, lambda: not window.jobs)
+    window.session.result = AnalysisResult(
+        "Dites Alicia stop pour interrompre ma voix.",
+        "fake-test",
+        0.1,
+        window.session.frame.capture_id,
+    )
+    window.speak()
+    wait_until(fixture.app, lambda: not window.jobs and bool(fixture.audio))
+    assert listener.paused
+    assert not window.conversation.interrupting
+    listener.on_text("Alicia stop")
+    fixture.app.processEvents()
+    assert window.playback.active
+    window.stop_audio()
+    assert not window.playback.active
+    wait_until(fixture.app, lambda: not listener.paused)
+
+
+def test_stop_command_in_idle_never_sends_a_question_to_the_model(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia stop")
+    fixture.app.processEvents()
+    assert fixture.capture.count == 0
+    assert fixture.vision.requests == []
+    assert listener.active
+
+
+def test_queued_playback_command_after_full_stop_cannot_restart_listening(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia, explique cet écran")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
+    serial = fixture.window.conversation.serial
+    epoch = fixture.window.conversation.input_epoch
+    fixture.window.stop()
+    fixture.window.conversation.final_received.emit(serial, epoch, "Alicia stop")
+    fixture.app.processEvents()
+    assert not listener.active
+    assert fixture.window.conversation.listener is None
+    assert not fixture.window.session.active
+    assert not fixture.window.conversation.cooldown_timer.isActive()
+
+
+def test_manual_capture_during_playback_exits_stop_only_mode(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia, explique cet écran")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
+    # The normal mode keeps microphone consent when a fresh manual capture is requested.
+    fixture.window.automatic_mode = True
+    fixture.window.capture()
+    wait_until(fixture.app, lambda: not fixture.window.jobs)
+    wait_until(fixture.app, lambda: not listener.paused)
+    assert not fixture.window.conversation.interrupting
+    assert listener.interruption_modes[-1] is False
+    assert fixture.window.conversation.phase == "idle"
+
+
+def test_queued_old_command_cannot_interrupt_a_later_response(conversation_window):
+    fixture = conversation_window
+    listener = listen(fixture)
+    listener.on_text("Alicia, explique cet écran")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and bool(fixture.audio))
+    controller = fixture.window.conversation
+    serial, old_epoch = controller.serial, controller.input_epoch
+    finish_audio(fixture)
+    listener.on_text("Alicia, compare ces objets")
+    wait_until(fixture.app, lambda: not fixture.window.jobs and len(fixture.audio) == 2)
+    assert controller.input_epoch != old_epoch
+    controller.final_received.emit(serial, old_epoch, "Alicia stop")
+    fixture.app.processEvents()
+    assert fixture.window.playback.active
+    assert controller.interrupting
 
 
 def test_end_of_playback_keeps_short_echo_cooldown_despite_job_completion(conversation_window):

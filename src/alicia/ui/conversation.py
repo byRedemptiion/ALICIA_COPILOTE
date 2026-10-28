@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QPushBu
 
 from alicia.audio.listening import list_input_devices
 from alicia.audio.ports import SpeechError
+from alicia.core.interruption import is_stop_command, speech_contains_stop_command
 from alicia.core.wake_word import WakeWordGate
 from alicia.providers import create_listener_factory
 
@@ -30,6 +31,8 @@ class ConversationController(QObject):
         self.question = None
         self.generation = None
         self.resume_not_before = 0.0
+        self.interrupting = False
+        self.speech_can_be_interrupted = False
         self.cooldown_timer = QTimer(self)
         self.cooldown_timer.setSingleShot(True)
         self.cooldown_timer.setTimerType(Qt.PreciseTimer)
@@ -129,7 +132,7 @@ class ConversationController(QObject):
             return
         if (
             self.window.settings.ai_provider != "ollama"
-            or self.window.settings.tts_provider not in {"windows", "kokoro"}
+            or self.window.settings.tts_provider not in {"windows", "kokoro", "chatterbox"}
         ):
             self.window._error("Le mode mains libres gratuit requiert l’IA et la voix locales.")
             return
@@ -161,7 +164,12 @@ class ConversationController(QObject):
         self.input_epoch += 1
         listener, self.listener = self.listener, None
         if listener is not None:
+            setter = getattr(listener, "set_interruption_mode", None)
+            if setter is not None:
+                setter(False)
             listener.stop()
+        self.interrupting = False
+        self.speech_can_be_interrupted = False
         self.gate.reset()
         self.phase = "idle"
         self.question = None
@@ -189,11 +197,24 @@ class ConversationController(QObject):
         self.refresh_controls()
 
     def _partial(self, serial, epoch, text):
-        if self._valid(serial, epoch) and "alicia" in text.casefold().split():
+        if (
+            not self.interrupting
+            and self._valid(serial, epoch)
+            and "alicia" in text.casefold().split()
+        ):
             self.status.setText("Alicia détecté · terminez votre question…")
 
     def _heard(self, serial, epoch, text):
-        if not self._valid(serial, epoch) or self.phase != "idle":
+        if not self._valid(serial, epoch):
+            return
+        if self.interrupting:
+            if self.window.playback.active and is_stop_command(text):
+                self.window.stop_audio()
+            return
+        if self.phase != "idle":
+            return
+        if is_stop_command(text):
+            self.window.stop_audio()
             return
         query = self.gate.feed(text)
         if query is None:
@@ -215,8 +236,49 @@ class ConversationController(QObject):
         if self.listener is not None:
             self.listener.pause()
 
+    def prepare_speech(self, text):
+        """Arm interruption only for speech that cannot quote its own command."""
+        self.speech_can_be_interrupted = not speech_contains_stop_command(text)
+
+    def audio_started(self):
+        """Listen for the stop command on the existing stream during playback."""
+        if self.interrupting or not self.window.playback.active:
+            return
+        if (
+            self.listener is None
+            or not self.listener.active
+            or not self.window.session.active
+            or not self.window.consent.isChecked()
+        ):
+            return
+        if not self.speech_can_be_interrupted:
+            self.pause()
+            self.status.setText(
+                "Lecture en cours · utilisez « Arrêter la voix » pendant cette explication."
+            )
+            return
+        self.cooldown_timer.stop()
+        self.phase = "speaking"
+        self.gate.reset()
+        self.input_epoch += 1
+        setter = getattr(self.listener, "set_interruption_mode", None)
+        if setter is not None:
+            setter(True)
+        self.interrupting = True
+        self.listener.resume()
+        self.status.setText("Alicia parle · dites « Alicia, stop » pour couper sa voix.")
+
     def before_job(self, kind):
         if kind != "devices" and not (kind == "capture" and self.window.background_capture_active):
+            if self.interrupting:
+                self.input_epoch += 1
+                setter = getattr(self.listener, "set_interruption_mode", None)
+                if setter is not None:
+                    setter(False)
+                self.interrupting = False
+                self.phase = "idle"
+                self.question = self.generation = None
+                self.gate.reset()
             self.pause()
 
     def _advance(self):
@@ -267,6 +329,14 @@ class ConversationController(QObject):
         self._finish_question()
 
     def _finish_question(self):
+        self.input_epoch += 1
+        if self.listener is not None:
+            setter = getattr(self.listener, "set_interruption_mode", None)
+            if setter is not None:
+                setter(False)
+            self.listener.pause()
+        self.interrupting = False
+        self.speech_can_be_interrupted = False
         self.phase = "idle"
         self.question = None
         self.generation = None

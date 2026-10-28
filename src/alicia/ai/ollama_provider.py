@@ -25,6 +25,43 @@ if TYPE_CHECKING:
 logger = logging.getLogger("alicia.ai.local")
 
 
+def _final_answer(content: str) -> str:
+    """Keep the answer only if a local model embeds its private draft in content.
+
+    Ollama normally separates ``thinking`` from ``content``. Some custom model
+    templates still include think tags in the latter. An unfinished draft must
+    never reach the avatar, speech synthesis, or conversation memory.
+    """
+    parts: list[str] = []
+    depth = 0
+    cursor = 0
+    for tag in re.finditer(r"<\s*(/?)\s*think\s*>", content, re.IGNORECASE):
+        if tag.group(1):
+            if depth:
+                depth -= 1
+            else:
+                # A model can omit its opening tag; discard that draft prefix.
+                parts.clear()
+        else:
+            if not depth:
+                parts.append(content[cursor : tag.start()])
+            depth += 1
+        cursor = tag.end()
+    if not depth:
+        parts.append(content[cursor:])
+    return "".join(parts).strip()
+
+
+def _explicit_thinking_model(model: str) -> bool:
+    """Only request the boolean control for the named Qwen3-VL Thinking variant.
+
+    Instruct models (including the default qwen3-vl:8b) need no thinking flag;
+    Ollama can reject a true flag for a model that does not implement it.
+    """
+    family, _, variant = model.rsplit("/", 1)[-1].casefold().partition(":")
+    return family == "qwen3-vl" and "thinking" in variant.split("-")
+
+
 def validate_local_model(value: str) -> str:
     if (
         not isinstance(value, str)
@@ -103,9 +140,11 @@ class OllamaVisionProvider:
             "model": self.settings.ai_model,
             "messages": messages,
             "stream": False,
-            "keep_alive": "2m",
-            "options": {"num_predict": 1200, "temperature": 0.2},
+            "keep_alive": "15m",
+            "options": {"num_predict": 700, "temperature": 0.2},
         }
+        if _explicit_thinking_model(self.settings.ai_model):
+            payload["think"] = True
         started = time.monotonic()
         logger.info("local_analysis_started capture_id=%s", request.frame.capture_id)
         # A fresh owned client makes cleanup deterministic. Proxies and redirects are
@@ -156,7 +195,8 @@ class OllamaVisionProvider:
             raise AnalysisError("Ollama a répondu avec un modèle différent de celui configuré.")
         message = result.get("message") if isinstance(result, dict) else None
         text = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(text, str) or not text.strip():
+        text = _final_answer(text) if isinstance(text, str) else ""
+        if not text:
             self._failure("empty_response")
             raise AnalysisError("Ollama n’a retourné aucun texte exploitable.")
         elapsed = time.monotonic() - started
@@ -166,7 +206,7 @@ class OllamaVisionProvider:
             elapsed,
         )
         return AnalysisResult(
-            text=text.strip(),
+            text=text,
             model=self.settings.ai_model,
             elapsed_seconds=elapsed,
             capture_id=request.frame.capture_id,

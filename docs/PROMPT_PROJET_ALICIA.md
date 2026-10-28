@@ -16,6 +16,8 @@ Alicia ne joue jamais à la place du joueur : aucune touche ou clic automatique,
 - Mot d’activation « Alicia », puis question. Stop coupe l’observation et l’écoute ; Reprendre les relance.
 - Voix française féminine neuronale locale, plus naturelle que la voix Windows initiale, sans prétendre reproduire une voix de ChatGPT.
 - Reconnaissance locale française plus précise et historique court pour mieux suivre la conversation.
+- Terminal masqué au lancement normal, diagnostic accessible et icône arrondie à partir de l’image fournie.
+- Commande « Alicia, stop » pendant la lecture pour couper la voix et retrouver l’écoute.
 
 Alicia n’est pas la session ChatGPT du joueur. Ne pas faire croire que le modèle local est cette conversation ou qu’un abonnement ChatGPT fournit une API gratuite. Les données restent locales, sauf les questions de recherche web envoyées après autorisation.
 
@@ -25,19 +27,19 @@ Privilégier stabilité, précision mesurée, latence raisonnable, consommation 
 
 Base : Python 3.12, PySide6 et dépendances verrouillées avec uv. Séparer interface, capture, IA, reconnaissance, synthèse, configuration, logs, contexte et recherche.
 
-Le parcours gratuit utilise Ollama loopback avec `qwen2.5vl:7b`, faster-whisper small pour le français et Kokoro ONNX avec la voix `ff_siwis`. Les modèles sont téléchargés explicitement pendant l’installation. Aucun téléchargement caché au démarrage ou lors d’une question, et aucun service distant pour l’analyse ou l’audio par défaut.
+Le parcours gratuit v0.4 utilise Ollama loopback avec `qwen3-vl:8b`, faster-whisper large-v3-turbo multilingue pour le français et Chatterbox Multilingual pour la voix. Le moteur Chatterbox est isolé dans son propre environnement Python pour préserver les dépendances de l’application. La référence féminine fournie est une voix synthétique Kokoro ; aucune personne réelle n’est clonée. Kokoro ONNX avec `ff_siwis` reste un choix local explicite. Les modèles sont téléchargés explicitement pendant l’installation. Aucun téléchargement caché au démarrage ou lors d’une question, et aucun service distant pour l’analyse ou l’audio par défaut.
 
 Le cœur générique reste indépendant d’un jeu. Ajouter games/ quand un besoin concret le justifie, sans y coupler le fonctionnement général.
 
 ## Parcours normal
 
 1. Installer les dépendances et modèles via Installer_Alicia.bat.
-2. Lancer Alicia : l’écran principal et le micro commencent avec un indicateur d’état.
+2. Lancer Alicia via le raccourci ou Lancer_Alicia.vbs, sans terminal visible : l’écran principal et le micro commencent avec un indicateur d’état. Lancer_Alicia_Debug.bat permet le diagnostic avec console.
 3. Passer dans le jeu ou le navigateur pour afficher le contenu à analyser.
 4. Dire « Alicia, … », puis laisser un silence en fin de question.
 5. Capturer une image fraîche, ajouter le contexte court et les sources web autorisées, puis demander une réponse locale.
 6. Afficher le texte et lire la réponse avec la voix neuronale, en animant l’avatar pendant la lecture réelle.
-7. Revenir à l’attente d’Alicia, ou s’arrêter immédiatement via Stop.
+7. Permettre « Alicia, stop » pendant la lecture pour couper la voix, puis revenir à l’attente. Le bouton Stop coupe l’ensemble observation et écoute.
 
 Dire Alicia seule ouvre une fenêtre de huit secondes pour la phrase suivante. Les autres conversations sont ignorées. L’entrée texte reste disponible si le micro est indisponible.
 
@@ -59,25 +61,25 @@ Whisper doit traiter le français localement après segmentation de parole, en l
 
 Une meilleure reconnaissance ne garantit pas le « sens » d’une demande. Distinguer erreur de transcription, référence ambiguë et information absente. Les noms propres et termes de jeu doivent être testés sur des phrases réelles.
 
-Une seule demande est traitée à la fois. La reconnaissance se suspend pendant traitement et lecture pour empêcher l’écho et l’empilement de questions, puis reprend après un délai. L’interruption vocale pendant qu’Alicia parle reste une amélioration ultérieure, qui exige une maîtrise de l’écho.
+Une seule demande est traitée à la fois. L’écoute ordinaire se suspend pendant le traitement. Pendant la lecture réelle, le micro accepte seulement la commande « Alicia, stop » et ignore les autres phrases ; il reprend l’écoute ordinaire après la lecture et son délai antiécho. Prévenir l’auto-déclenchement si la voix prononce elle-même la commande. Ce mécanisme n’est pas une annulation d’écho complète : tester avec casque et haut-parleurs, et mesurer son délai. Le bouton Arrêter la voix reste disponible.
 
 Stop coupe les ressources et invalide les callbacks tardifs. Après une erreur, montrer un état clair plutôt que relancer silencieusement en boucle. Ne stocker ni audio de micro ni transcription dans les logs.
 
 ## Voix et présence visuelle
 
-Kokoro doit produire une voix synthétique française féminine, douce, calme et intelligible, avec volume réglable. Le naturel perçu doit être écouté sur la sortie cible. Ne pas promettre le timbre exact d’une voix de ChatGPT ou cloner une personne.
+Chatterbox doit produire une voix synthétique française féminine, douce, calme et intelligible, avec volume réglable et une référence synthétique fournie. Le naturel perçu doit être écouté sur la sortie cible avant de déclarer une amélioration. Ne pas promettre le timbre exact d’une voix de ChatGPT ou cloner une personne. Le mode automatique peut utiliser CUDA si son initialisation réussit, sinon le CPU ; la charge et la latence se mesurent avec le jeu ouvert.
 
-L’avatar peut être vectoriel ou provenir d’une image locale choisie. Le portrait reste local et ne devient pas automatiquement un personnage articulé. Donner des états cohérents : attente, capture, analyse, parole, pause et erreur.
+L’icône arrondie et l’avatar par défaut proviennent de l’image fournie par l’utilisateur. L’avatar peut aussi provenir d’une image locale choisie. Le portrait reste local et ne devient pas automatiquement un personnage articulé. Donner des états cohérents : attente, capture, analyse, parole, pause et erreur.
 
 Pendant la lecture réelle, animer halo, expression et bouche légère à partir de l’état du lecteur. Une animation sans son doit être annoncée comme démonstration. La synchronisation par amplitude puis phonèmes est une amélioration future après mesure du coût.
 
-Nettoyer les WAV temporaires après libération du lecteur. Une réponse trop longue reste intégralement visible, avec une lecture bornée annoncée. Ne pas basculer silencieusement vers une voix Windows robotique ou un service payant quand Kokoro manque.
+Nettoyer les WAV temporaires après libération du lecteur. Une réponse trop longue reste intégralement visible, avec une lecture bornée annoncée. Ne pas basculer silencieusement vers Kokoro, une voix Windows ou un service payant quand le moteur sélectionné manque.
 
 ## Contexte et incertitude
 
 Conserver un historique court borné en mémoire seulement. Il peut aider des questions de suivi comme « et celui-là ? », mais la capture actuelle prime si l’écran a changé. Ajouter les échanges acceptés uniquement ; les erreurs et résultats périmés ne deviennent pas des faits.
 
-Distinguer faits visibles, informations du joueur, contexte antérieur et hypothèses. Si une statistique est illisible, un objet non désigné ou une mécanique inconnue, le dire et demander une précision. Ne pas inventer de valeurs ou de noms.
+Répondre d’abord par un conseil court en français naturel et une justification utile. Privilégier la cohérence avec la question et les faits visibles plutôt qu’un discours long. Une transcription incohérente appelle une précision, pas une intention inventée. Distinguer faits visibles, informations du joueur, contexte antérieur et hypothèses. Si une statistique est illisible, un objet non désigné ou une mécanique inconnue, le dire et demander une précision. Ne pas inventer de valeurs ou de noms.
 
 Stop et changement de source effacent le contexte. Une mémoire persistante du personnage, équipement, objectifs ou décisions exige une conception séparée avec provenance, limites et effacement.
 
@@ -107,7 +109,7 @@ Implémenter par fonctionnalités cohérentes avec contrat, risques et preuve de
 
 Séparer tests avec doubles, modèles réels, matériel et essais Windows. Ne pas présenter une commande non exécutée comme réussie. Les tests doivent notamment vérifier écran principal par défaut, écoute automatique normale, absence de micro dans démo/smoke, Stop, contexte effacé et absence de repli payant.
 
-Les étapes futures comprennent détection de changements, interruption vocale maîtrisée, mémoire sourcée plus riche, interventions spontanées selon importance et confiance, modes Silent/Copilot/Coach/Analyst, sources par jeu, overlay et packaging Windows.
+Les étapes futures comprennent détection de changements, contrôle de l’écho plus robuste, mémoire sourcée plus riche, interventions spontanées selon importance et confiance, modes Silent/Copilot/Coach/Analyst, sources par jeu, overlay et packaging Windows.
 
 Chaque tâche cloud est déjà isolée : utiliser le checkout existant sans worktree supplémentaire sauf demande explicite. Publier uniquement dans le périmètre autorisé par l’utilisateur.
 

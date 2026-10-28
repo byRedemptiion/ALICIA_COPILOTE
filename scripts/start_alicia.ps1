@@ -1,15 +1,16 @@
 [CmdletBinding()]
-param([switch]$Demo)
+param([switch]$Demo, [switch]$Windowless)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$modelName = 'qwen2.5vl:7b'
+$modelName = 'qwen3-vl:8b'
 $ollamaApi = 'http://127.0.0.1:11434'
 $previousHost = $env:OLLAMA_HOST
 $previousNoCloud = $env:OLLAMA_NO_CLOUD
 $previousAiProvider = $env:ALICIA_AI_PROVIDER
 $previousTtsProvider = $env:ALICIA_TTS_PROVIDER
 $previousSttProvider = $env:ALICIA_STT_PROVIDER
+$previousWhisperDevice = $env:ALICIA_WHISPER_DEVICE
 $previousModel = $env:ALICIA_OLLAMA_MODEL
 $previousUrl = $env:ALICIA_OLLAMA_URL
 
@@ -35,15 +36,24 @@ try {
     $env:OLLAMA_NO_CLOUD = '1'
     # Explicit process settings also take precedence over old .env files.
     $env:ALICIA_AI_PROVIDER = 'ollama'
-    $env:ALICIA_TTS_PROVIDER = 'kokoro'
+    $env:ALICIA_TTS_PROVIDER = 'chatterbox'
     $env:ALICIA_STT_PROVIDER = 'whisper'
+    $env:ALICIA_WHISPER_DEVICE = 'auto'
     $env:ALICIA_OLLAMA_MODEL = $modelName
     $env:ALICIA_OLLAMA_URL = $ollamaApi
-    $uvExecutable = Find-Tool 'uv.exe' @(
-        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uv.exe",
-        "$env:USERPROFILE\.local\bin\uv.exe"
-    )
-    if (-not $uvExecutable) { throw 'uv est absent. Lancez d abord .\scripts\setup_local.ps1.' }
+    if ($Windowless) {
+        # Run the already installed environment: starting Alicia never installs packages.
+        $pythonExecutable = Join-Path $projectRoot '.venv\Scripts\pythonw.exe'
+        if (-not (Test-Path -LiteralPath $pythonExecutable -PathType Leaf)) {
+            throw 'Python Alicia est absent. Lancez d abord Installer_Alicia.bat.'
+        }
+    } else {
+        $uvExecutable = Find-Tool 'uv.exe' @(
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uv.exe",
+            "$env:USERPROFILE\.local\bin\uv.exe"
+        )
+        if (-not $uvExecutable) { throw 'uv est absent. Lancez d abord Installer_Alicia.bat.' }
+    }
     if (-not (Test-Ollama)) {
         $ollamaExecutable = Find-Tool 'ollama.exe' @(
             "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe",
@@ -63,18 +73,26 @@ try {
     if ($installedModels -notcontains $modelName) {
         throw "Le modele local $modelName manque. Lancez .\scripts\setup_local.ps1 pour le telecharger."
     }
-    if ($Demo) {
+    if ($Windowless) {
+        $pythonArguments = @('-m', 'alicia')
+        if ($Demo) { $pythonArguments += '--demo' }
+        $application = Start-Process -FilePath $pythonExecutable -ArgumentList $pythonArguments -WorkingDirectory $projectRoot -WindowStyle Hidden -Wait -PassThru
+        if ($application.ExitCode -ne 0) {
+            throw "Alicia s'est terminee avec une erreur ($($application.ExitCode)). Utilisez Lancer_Alicia_Debug.bat."
+        }
+    } elseif ($Demo) {
         & $uvExecutable run --frozen alicia --demo
     } else {
         & $uvExecutable run --frozen alicia
     }
-    if ($LASTEXITCODE -ne 0) { throw "Alicia s'est terminee avec une erreur ($LASTEXITCODE). Consultez les logs locaux." }
+    if (-not $Windowless -and $LASTEXITCODE -ne 0) { throw "Alicia s'est terminee avec une erreur ($LASTEXITCODE). Consultez les logs locaux." }
 } finally {
     $env:OLLAMA_HOST = $previousHost
     $env:OLLAMA_NO_CLOUD = $previousNoCloud
     $env:ALICIA_AI_PROVIDER = $previousAiProvider
     $env:ALICIA_TTS_PROVIDER = $previousTtsProvider
     $env:ALICIA_STT_PROVIDER = $previousSttProvider
+    $env:ALICIA_WHISPER_DEVICE = $previousWhisperDevice
     $env:ALICIA_OLLAMA_MODEL = $previousModel
     $env:ALICIA_OLLAMA_URL = $previousUrl
     Pop-Location

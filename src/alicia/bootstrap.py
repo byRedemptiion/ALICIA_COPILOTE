@@ -1,6 +1,7 @@
 import logging
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from alicia.capture.demo import DemoCapture
@@ -9,6 +10,7 @@ from alicia.config import load_settings
 from alicia.core.ports import ConfigurationError
 from alicia.logging_config import configure_logging
 from alicia.providers import create_vision_provider
+from alicia.resources import APP_ICON
 from alicia.ui.main_window import MainWindow
 
 
@@ -24,7 +26,8 @@ def run(options) -> int:
             if isinstance(error, ConfigurationError)
             else "Répertoire de logs inaccessible."
         )
-        print("Alicia : " + message, file=sys.stderr)
+        if sys.stderr is not None:
+            print("Alicia : " + message, file=sys.stderr)
         return 2
     logger = logging.getLogger("alicia")
     logger.info(
@@ -33,6 +36,7 @@ def run(options) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Alicia")
     app.setOrganizationName("Alicia")
+    app.setWindowIcon(QIcon(str(APP_ICON)))
     demo = options.demo or options.smoke_test
     source = DemoCapture() if demo else DesktopCaptureSource()
     window = MainWindow(settings, source, vision_provider, demo=demo, autostart=not demo)

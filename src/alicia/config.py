@@ -30,22 +30,33 @@ def default_neural_model_directory() -> Path:
 
 
 def default_whisper_model_path() -> Path:
-    return _default_log_directory().parent / "models" / "faster-whisper-small"
+    return _default_log_directory().parent / "models" / "faster-whisper-large-v3-turbo"
+
+
+def default_expressive_model_directory() -> Path:
+    return _default_log_directory().parent / "models" / "chatterbox"
+
+
+def default_expressive_runtime_directory() -> Path:
+    return _default_log_directory().parent / "runtimes" / "chatterbox"
 
 
 @dataclass(frozen=True, slots=True)
 class Settings:
     ai_provider: str = "ollama"
-    ai_model: str = "qwen2.5vl:7b"
+    ai_model: str = "qwen3-vl:8b"
     ollama_url: str = "http://127.0.0.1:11434"
     api_key: str | None = field(default=None, repr=False)
     api_timeout_seconds: float = 120.0
     image_max_edge: int = 1600
     tts_model: str = "gpt-4o-mini-tts"
     tts_voice: str = "shimmer"
-    tts_provider: str = "kokoro"
+    tts_provider: str = "chatterbox"
     stt_provider: str = "whisper"
-    whisper_device: str = "cpu"
+    whisper_device: str = "auto"
+    expressive_model_directory: Path = field(default_factory=default_expressive_model_directory)
+    expressive_runtime_directory: Path = field(default_factory=default_expressive_runtime_directory)
+    expressive_device: str = "auto"
     neural_model_directory: Path = field(default_factory=default_neural_model_directory)
     neural_voice: str = "ff_siwis"
     neural_speed: float = 0.95
@@ -65,19 +76,24 @@ def load_settings(env_file: Path | None = Path(".env")) -> Settings:
     if provider not in {"ollama", "openai"}:
         raise ConfigurationError("ALICIA_AI_PROVIDER doit être ollama ou openai.")
     model_variable = "ALICIA_OLLAMA_MODEL" if provider == "ollama" else "ALICIA_AI_MODEL"
-    model_default = "qwen2.5vl:7b" if provider == "ollama" else "gpt-4.1-mini"
+    model_default = "qwen3-vl:8b" if provider == "ollama" else "gpt-4.1-mini"
     model = os.environ.get(model_variable, model_default).strip()
     if not model:
         raise ConfigurationError(f"{model_variable} doit désigner un modèle multimodal.")
-    tts_provider = os.environ.get("ALICIA_TTS_PROVIDER", "kokoro").strip().lower()
-    if tts_provider not in {"kokoro", "windows", "openai"}:
-        raise ConfigurationError("ALICIA_TTS_PROVIDER doit être kokoro, windows ou openai.")
+    tts_provider = os.environ.get("ALICIA_TTS_PROVIDER", "chatterbox").strip().lower()
+    if tts_provider not in {"chatterbox", "kokoro", "windows", "openai"}:
+        raise ConfigurationError(
+            "ALICIA_TTS_PROVIDER doit être chatterbox, kokoro, windows ou openai."
+        )
     stt_provider = os.environ.get("ALICIA_STT_PROVIDER", "whisper").strip().lower()
     if stt_provider not in {"whisper", "vosk"}:
         raise ConfigurationError("ALICIA_STT_PROVIDER doit être whisper ou vosk.")
-    whisper_device = os.environ.get("ALICIA_WHISPER_DEVICE", "cpu").strip().lower()
-    if whisper_device not in {"cpu", "cuda"}:
-        raise ConfigurationError("ALICIA_WHISPER_DEVICE doit être cpu ou cuda.")
+    whisper_device = os.environ.get("ALICIA_WHISPER_DEVICE", "auto").strip().lower()
+    if whisper_device not in {"auto", "cpu", "cuda"}:
+        raise ConfigurationError("ALICIA_WHISPER_DEVICE doit être auto, cpu ou cuda.")
+    expressive_device = os.environ.get("ALICIA_EXPRESSIVE_DEVICE", "auto").strip().lower()
+    if expressive_device not in {"auto", "cpu", "cuda"}:
+        raise ConfigurationError("ALICIA_EXPRESSIVE_DEVICE doit être auto, cpu ou cuda.")
     neural_voice = os.environ.get("ALICIA_NEURAL_VOICE", "ff_siwis").strip()
     if neural_voice != "ff_siwis":
         raise ConfigurationError(
@@ -142,6 +158,14 @@ def load_settings(env_file: Path | None = Path(".env")) -> Settings:
         tts_provider=tts_provider,
         stt_provider=stt_provider,
         whisper_device=whisper_device,
+        expressive_device=expressive_device,
+        expressive_model_directory=Path(
+            os.environ.get("ALICIA_EXPRESSIVE_MODEL_DIR") or default_expressive_model_directory()
+        ),
+        expressive_runtime_directory=Path(
+            os.environ.get("ALICIA_EXPRESSIVE_RUNTIME_DIR")
+            or default_expressive_runtime_directory()
+        ),
         neural_voice=neural_voice,
         neural_speed=neural_speed,
         neural_model_directory=Path(

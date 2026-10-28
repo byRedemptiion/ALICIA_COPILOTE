@@ -140,3 +140,24 @@ def test_empty_audio_fails_without_creating_backend(playback):
     playback.play(b"")
     assert len(errors) == 1
     assert FakeAudio.created == FakePlayer.created == 0
+
+
+def test_explicit_stop_ignores_late_media_events_without_replaying_audio(playback):
+    finished, errors, speaking = [], [], []
+    playback.finished.connect(lambda: finished.append(True))
+    playback.failed.connect(errors.append)
+    playback.speaking_changed.connect(speaking.append)
+    playback.play(b"RIFFtestWAVE")
+    player = playback._player
+    path = Path(player.source.toLocalFile())
+    playback.stop()
+    player.mediaStatusChanged.emit(Player.MediaStatus.EndOfMedia)
+    player.errorOccurred.emit(Player.Error.ResourceError)
+    player.playbackStateChanged.emit(Player.PlaybackState.PlayingState)
+    assert not playback.active
+    assert not path.exists()
+    assert player.source.isEmpty()
+    assert player.play_calls == 1
+    assert not finished
+    assert not errors
+    assert speaking[-1] is False

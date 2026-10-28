@@ -13,18 +13,29 @@ from pathlib import Path
 
 from alicia.audio.ports import SpeechError
 
-WHISPER_REPOSITORY = "Systran/faster-whisper-small"
+# The upstream faster-whisper registry maps both "turbo" and "large-v3-turbo"
+# to this conversion of OpenAI's multilingual model. English-only distil models
+# are unsuitable for the French microphone used by Alicia.
+WHISPER_REPOSITORY = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 WHISPER_FILES = ("config.json", "model.bin", "tokenizer.json")
 WHISPER_PATTERNS = (*WHISPER_FILES, "preprocessor_config.json", "vocabulary.*", "README.md")
-MAX_MODEL_BYTES = 1024 * 1024 * 1024
+MAX_MODEL_BYTES = 3 * 1024 * 1024 * 1024
 
 
 def whisper_model_is_present(path: Path) -> bool:
-    return all(
-        (path / name).is_file() and (path / name).stat().st_size > 0 for name in WHISPER_FILES
-    ) and any(
-        (path / name).is_file() and (path / name).stat().st_size > 0
-        for name in ("vocabulary.txt", "vocabulary.json")
+    def complete_file(name: str) -> bool:
+        candidate = path / name
+        try:
+            return (
+                not candidate.is_symlink() and candidate.is_file() and candidate.stat().st_size > 0
+            )
+        except OSError:
+            return False
+
+    return (
+        not path.is_symlink()
+        and all(complete_file(name) for name in WHISPER_FILES)
+        and any(complete_file(name) for name in ("vocabulary.txt", "vocabulary.json"))
     )
 
 
@@ -61,6 +72,8 @@ def prepare_whisper_model(target: Path, downloader=None) -> Path:
                 allow_patterns=list(WHISPER_PATTERNS),
                 max_workers=2,
             )
+            if staging.is_symlink() or any(path.is_symlink() for path in staging.iterdir()):
+                raise SpeechError("Le téléchargement Whisper contient un fichier invalide.")
             if not whisper_model_is_present(staging):
                 raise SpeechError(
                     "Le téléchargement Whisper ne contient pas tous les fichiers attendus."

@@ -20,6 +20,7 @@ from alicia.audio.listening import LocalListener, _load_sounddevice
 from alicia.audio.ports import SpeechError
 
 logger = logging.getLogger("alicia.audio.whisper")
+_MAX_BUFFERED_BLOCKS = 120  # Six seconds of 50 ms mono PCM; discarded on pause/Stop.
 
 
 def _rms(pcm: bytes) -> float:
@@ -35,12 +36,12 @@ def _rms(pcm: bytes) -> float:
 class _PhraseBuffer:
     """Bounded energy endpoint detector; Whisper's VAD filters the final phrase."""
 
-    def __init__(self, sample_rate: int, silence_seconds: float = 0.7):
+    def __init__(self, sample_rate: int, silence_seconds: float = 0.7, *, interruption=False):
         self.sample_rate = sample_rate
         self.silence_limit = round(sample_rate * silence_seconds)
         self.pre_roll_limit = round(sample_rate * 0.25)
-        self.maximum = sample_rate * 12
-        self.minimum_speech = round(sample_rate * 0.25)
+        self.maximum = sample_rate * (4 if interruption else 20)
+        self.minimum_speech = round(sample_rate * (0.15 if interruption else 0.25))
         self.noise_floor = 0.002
         self.reset()
 
@@ -113,19 +114,29 @@ def _load_whisper():
     return WhisperModel, _load_sounddevice()
 
 
-def _transcribe(engine, pcm: bytes, sample_rate: int) -> str:
+def _decode(engine, pcm: bytes, sample_rate: int, *, interruption=False) -> str:
     samples = _resample_audio(pcm, sample_rate)
     segments, _information = engine.transcribe(
         samples,
         language="fr",
-        beam_size=5,
+        task="transcribe",
+        beam_size=1 if interruption else 5,
+        temperature=0.0,
         vad_filter=True,
-        vad_parameters={"min_speech_duration_ms": 250, "min_silence_duration_ms": 300},
+        vad_parameters={
+            "min_speech_duration_ms": 150 if interruption else 250,
+            "min_silence_duration_ms": 200 if interruption else 300,
+            "speech_pad_ms": 200,
+        },
         condition_on_previous_text=False,
-        initial_prompt="Conversation en français entre un joueur et son assistante Alicia.",
+        initial_prompt="Alicia.",
         no_speech_threshold=0.6,
-        log_prob_threshold=-1.0,
+        log_prob_threshold=-0.8,
         compression_ratio_threshold=2.4,
+        repetition_penalty=1.1,
+        no_repeat_ngram_size=3,
+        word_timestamps=True,
+        hallucination_silence_threshold=1.0,
     )
     pieces = []
     for segment in segments:
@@ -134,21 +145,96 @@ def _transcribe(engine, pcm: bytes, sample_rate: int) -> str:
             continue
         log_probability = getattr(segment, "avg_logprob", -100)
         no_speech = getattr(segment, "no_speech_prob", 1)
-        if not isinstance(log_probability, (int, float)) or not isinstance(no_speech, (int, float)):
-            continue
-        if not math.isfinite(log_probability) or not math.isfinite(no_speech):
-            continue
-        if log_probability < -1.0 or no_speech > 0.75:
-            continue
+        compression = getattr(segment, "compression_ratio", 0)
+        if not all(
+            isinstance(value, (int, float)) and math.isfinite(value)
+            for value in (log_probability, no_speech, compression)
+        ):
+            return ""
+        # Reject the complete phrase when a segment is unreliable. Joining words
+        # from either side of a missing segment can turn a question into another
+        # request, particularly with negations. Never repair it using an LLM.
+        if log_probability < -0.8 or no_speech > 0.6 or compression > 2.4:
+            return ""
+        probabilities = [
+            getattr(word, "probability", None) for word in (getattr(segment, "words", None) or [])
+        ]
+        if probabilities and (
+            not all(
+                isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= 1
+                for value in probabilities
+            )
+            or sum(probabilities) / len(probabilities) < 0.45
+        ):
+            return ""
         pieces.append(text.strip())
-    return " ".join(pieces)
+    text = " ".join(pieces)
+    return text if len(text) <= 2000 else ""
+
+
+def _transcribe(engine, pcm: bytes, sample_rate: int) -> str:
+    return _decode(engine, pcm, sample_rate)
+
+
+def _transcribe_interruption(engine, pcm: bytes, sample_rate: int) -> str:
+    return _decode(engine, pcm, sample_rate, interruption=True)
+
+
+def _cuda_is_available() -> bool:
+    try:
+        import ctranslate2
+
+        return ctranslate2.get_cuda_device_count() > 0
+    except (ImportError, OSError, RuntimeError):
+        return False
+
+
+def _probe_cuda_engine(engine) -> None:
+    """Force one local encoder/decode pass: CUDA DLL loading can be lazy."""
+    import numpy as np
+
+    segments, _ = engine.transcribe(
+        np.zeros(8000, dtype=np.float32),
+        language="fr",
+        beam_size=1,
+        temperature=0.0,
+        vad_filter=False,
+        condition_on_previous_text=False,
+    )
+    for _segment in segments:
+        pass
+
+
+def _create_engine(factory, model_path: Path, device: str):
+    options = {
+        "local_files_only": True,
+        "cpu_threads": 4,
+        "num_workers": 1,
+    }
+    if device == "auto" and _cuda_is_available():
+        try:
+            engine = factory(str(model_path), device="cuda", compute_type="float16", **options)
+            _probe_cuda_engine(engine)
+            return engine
+        except Exception as error:
+            # No raw driver error or environment detail enters the logs. A
+            # missing cuDNN library must not make automatic listening unusable.
+            logger.info("recognition_gpu_unavailable kind=%s", type(error).__name__)
+            engine = None
+    selected = "cpu" if device == "auto" else device
+    return factory(
+        str(model_path),
+        device=selected,
+        compute_type="int8" if selected == "cpu" else "float16",
+        **options,
+    )
 
 
 class WhisperListener(LocalListener):
     """Keep the existing bounded listener lifecycle with more accurate decoding.
 
-    CPU int8 is the portable default. CUDA is an explicit optional selection;
-    missing CUDA libraries produce an error instead of a cloud fallback.
+    Automatic mode probes local CUDA and falls back to local CPU int8 when its
+    libraries are unavailable. Explicit CUDA keeps a visible failure.
     """
 
     def __init__(
@@ -160,13 +246,15 @@ class WhisperListener(LocalListener):
         on_partial=None,
         *,
         backend: tuple[Any, Any] | None = None,
-        device: str = "cpu",
+        device: str = "auto",
     ):
-        if device not in {"cpu", "cuda"}:
-            raise SpeechError("Le périphérique Whisper doit être cpu ou cuda.")
+        if device not in {"auto", "cpu", "cuda"}:
+            raise SpeechError("Le périphérique Whisper doit être auto, cpu ou cuda.")
         super().__init__(model_path, on_text, on_error, on_activity, on_partial, backend=backend)
         self.device = device
         self._decoding = threading.Event()
+        self._interruption_mode = False
+        self._audio = queue.Queue(maxsize=_MAX_BUFFERED_BLOCKS)
 
     def start(self, device_index: int | None = None) -> None:
         from alicia.audio.whisper_setup import whisper_model_is_present
@@ -177,21 +265,24 @@ class WhisperListener(LocalListener):
             )
         super().start(device_index)
 
-    def _put_audio(self, generation: int, indata: Any, status: Any) -> None:
-        if not self._decoding.is_set():
-            super()._put_audio(generation, indata, status)
+    def set_interruption_mode(self, enabled: bool) -> None:
+        """Select short-command decoding without opening or resuming a stream.
+
+        The UI still owns pause/resume and accepts only an explicit stop phrase
+        while playing. The new epoch invalidates any prior inference result.
+        """
+        with self._lock:
+            enabled = bool(enabled)
+            if self._interruption_mode == enabled:
+                return
+            self._interruption_mode = enabled
+            self._epoch += 1
+            self._discard_audio()
 
     def _run(self, generation: int, device_index: int | None) -> None:
         try:
             factory, sounddevice = self._backend or _load_whisper()
-            engine = factory(
-                str(self.model_path),
-                device=self.device,
-                compute_type="int8" if self.device == "cpu" else "float16",
-                local_files_only=True,
-                cpu_threads=4,
-                num_workers=1,
-            )
+            engine = _create_engine(factory, self.model_path, self.device)
             if self._stopping.is_set():
                 return
             device = sounddevice.query_devices(device_index, "input")
@@ -260,16 +351,21 @@ class WhisperListener(LocalListener):
             if not current:
                 continue
             if epoch != previous_epoch:
-                segmenter.reset()
+                with self._lock:
+                    interruption = self._interruption_mode
+                segmenter = _PhraseBuffer(
+                    sample_rate,
+                    silence_seconds=0.35 if interruption else 0.7,
+                    interruption=interruption,
+                )
                 previous_epoch = epoch
             phrase = segmenter.push(data)
             if phrase is None:
                 continue
             self._decoding.set()
             try:
-                self._discard_audio()
-                text = _transcribe(engine, phrase, sample_rate)
+                transcribe = _transcribe_interruption if interruption else _transcribe
+                text = transcribe(engine, phrase, sample_rate)
                 self._emit_text(generation, epoch, text)
             finally:
-                self._discard_audio()
                 self._decoding.clear()

@@ -69,7 +69,9 @@ def test_local_request_contains_exact_question_and_bounded_png():
     with Image.open(io.BytesIO(base64.b64decode(payload["messages"][1]["images"][0]))) as image:
         assert image.size == (256, 128)
     assert payload["stream"] is False
-    assert payload["keep_alive"] == "2m"
+    assert payload["keep_alive"] == "15m"
+    assert payload["options"]["num_predict"] == 700
+    assert "think" not in payload
     assert result.text == "Une interface est visible."
     assert result.capture_id == "local-capture"
     assert result.model == "qwen2.5vl:7b"
@@ -137,6 +139,77 @@ def test_matching_response_model_is_accepted():
             OllamaVisionProvider(settings(), client).analyze(analysis_request()).text
             == "Known model answer"
         )
+
+
+@pytest.mark.parametrize("model", ["qwen2.5vl:7b", "qwen3-vl:8b", "other-model:thinking"])
+def test_regular_models_are_not_sent_unsupported_thinking_control(model):
+    requests = []
+
+    def handle(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": "Réponse courte."}})
+
+    with transport_client(handle) as client:
+        OllamaVisionProvider(settings(ai_model=model), client).analyze(analysis_request())
+    assert len(requests) == 1
+    assert "think" not in requests[0]
+
+
+def test_explicit_thinking_variant_keeps_only_final_answer():
+    requests = []
+
+    def handle(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "model": "qwen3-vl:8b-thinking",
+                "message": {"thinking": "private-draft", "content": "Utilise le bouclier."},
+            },
+        )
+
+    with transport_client(handle) as client:
+        result = OllamaVisionProvider(settings(ai_model="qwen3-vl:8b-thinking"), client).analyze(
+            analysis_request()
+        )
+    assert len(requests) == 1
+    assert requests[0]["think"] is True
+    assert result.text == "Utilise le bouclier."
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<think>private-draft</think>Utilise le bouclier.",
+        "<THINK>private-draft\nwith lines</THINK>Utilise le bouclier.",
+        "<think>private-draft<think>nested</think>still private</think>Utilise le bouclier.",
+        "private-draft</think>Utilise le bouclier.",
+        "<think>first</think><think>second</think>Utilise le bouclier.",
+        "Utilise le bouclier.<think>unfinished private-draft",
+    ],
+)
+def test_embedded_drafts_never_reach_answer(content, caplog):
+    payload = {"message": {"content": content}}
+    with transport_client(lambda _: httpx.Response(200, json=payload)) as client:
+        result = OllamaVisionProvider(settings(), client).analyze(analysis_request())
+    assert result.text == "Utilise le bouclier."
+    assert "private-draft" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"thinking": "private-draft", "content": ""},
+        {"thinking": "private-draft"},
+        {"content": "<think>private-draft</think>"},
+        {"content": "<think>unfinished private-draft"},
+    ],
+)
+def test_draft_only_response_is_an_error(message, caplog):
+    with transport_client(lambda _: httpx.Response(200, json={"message": message})) as client:
+        with pytest.raises(AnalysisError, match="aucun texte"):
+            OllamaVisionProvider(settings(), client).analyze(analysis_request())
+    assert "private-draft" not in caplog.text
 
 
 @pytest.mark.parametrize("kind", ["timeout", "connection"])

@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from alicia.ai.ollama_provider import OllamaVisionProvider
+from alicia.audio.chatterbox_speech import ChatterboxSpeechProvider
 from alicia.audio.kokoro_speech import KokoroSpeechProvider
 from alicia.capture.demo import DemoCapture
 from alicia.config import Settings
@@ -17,6 +18,11 @@ from alicia.providers import create_speech_provider, create_vision_provider
 def test_default_providers_are_local_without_key():
     settings = Settings()
     assert isinstance(create_vision_provider(settings), OllamaVisionProvider)
+    assert isinstance(create_speech_provider(settings), ChatterboxSpeechProvider)
+
+
+def test_explicit_lightweight_voice_stays_available():
+    settings = replace(Settings(), tts_provider="kokoro")
     assert isinstance(create_speech_provider(settings), KokoroSpeechProvider)
 
 

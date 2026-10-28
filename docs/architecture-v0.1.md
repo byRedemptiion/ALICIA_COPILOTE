@@ -1,18 +1,19 @@
-# Alicia — Architecture du socle et évolution V0.3
+# Alicia — Architecture du socle et évolution V0.4
 
 ## Objectif
 
 Application Windows gratuite qui observe et conseille sans contrôler le jeu. Le mode normal vise un démarrage direct sur l’écran principal avec microphone actif, comme demandé par l’utilisateur. Stop coupe l’observation et l’écoute ; Reprendre les relance. Les capacités natives doivent être validées sur le PC cible.
 
-La V0.3 améliore le prototype en remplaçant par défaut Vosk par faster-whisper et la voix SAPI par Kokoro. Elle ajoute un historique court, sans mémoire persistante. Elle ne reprend pas la session ChatGPT du joueur.
+La V0.4 remplace les poids Whisper small par large-v3-turbo multilingue, propose Chatterbox dans un moteur isolé et ajoute une commande d’interruption pendant la lecture. Elle conserve un historique court sans mémoire persistante. Elle ne reprend pas la session ChatGPT du joueur.
 
 ## Composants
 
 - Python 3.12, PySide6 et dépendances verrouillées avec uv.
 - Capture de l’écran principal dans un processus Windows isolé, avec coordonnées et dimensions physiques tenant compte du DPI. Une source de fenêtre précise reste une option avancée.
-- Ollama en boucle locale, modèle visuel `qwen2.5vl:7b`, via HTTPX. Aucune capture envoyée à un modèle distant par défaut et aucun repli payant.
-- faster-whisper small pour les phrases françaises, avec segmentation de parole, bornes et filtrage du silence. Le modèle est déjà présent sur disque ; l’écoute ne déclenche aucun téléchargement.
-- Kokoro ONNX, voix française féminine `ff_siwis`, pour synthèse locale puis WAV. Le modèle est chargé à la demande et réutilisé ; aucune API vocale n’est appelée.
+- Ollama en boucle locale, modèle visuel `qwen3-vl:8b`, via HTTPX. Aucune capture envoyée à un modèle distant par défaut et aucun repli payant.
+- faster-whisper large-v3-turbo multilingue pour les phrases françaises, avec segmentation de parole, bornes et rejet des transcriptions douteuses. Le mode automatique essaie CUDA, puis le CPU si son initialisation échoue. Le modèle est déjà présent sur disque ; l’écoute ne déclenche aucun téléchargement.
+- Chatterbox Multilingual v2, paquet stable `chatterbox-tts==0.1.7`, dans un environnement Python séparé. Un processus persistant charge les modèles locaux et une référence féminine synthétique Kokoro, puis produit du WAV sans API vocale. Les modes hors ligne sont imposés pendant les questions.
+- Kokoro ONNX, voix `ff_siwis`, reste un fournisseur local explicite ; aucune bascule automatique ne modifie la voix demandée.
 - Qt Multimedia pour la lecture WAV, le volume et l’état parlant de l’avatar.
 - DuckDuckGo sur autorisation pour les extraits web, sans lecture automatique des pages sources.
 - Historique court typé et borné en mémoire, remis à zéro lors de Stop ou d’un changement de source.
@@ -23,7 +24,8 @@ La V0.3 améliore le prototype en remplaçant par défaut Vosk par faster-whispe
 Écran principal → capture locale périodique → aperçu
 Microphone → segmentation → Whisper français → réveil Alicia / question
 Question → capture fraîche + historique court + sources autorisées
-        → Ollama → réponse affichée → Kokoro → WAV → lecteur → avatar
+        → Ollama → réponse affichée → Chatterbox local → WAV → lecteur → avatar
+Pendant lecture : microphone → commande « Alicia stop » → arrêt de la voix
 ```
 
 L’aperçu périodique n’appelle pas le modèle à chaque image. Une question autorisée provoque sa propre capture récente. L’ancienne conversation ne doit pas prévaloir sur un écran qui a changé.
@@ -38,21 +40,21 @@ Les objets du SDK et détails Win32 ne traversent pas le cœur. Les anciens adap
 
 Une seule demande de joueur est traitée à la fois. Les files audio et captures sont bornées ; une capture d’aperçu ne réinitialise pas le reconnaisseur en cours. Les résultats portent une génération de session et un identifiant de capture pour ignorer les réponses tardives.
 
-Le micro démarre automatiquement seulement en mode normal, avec état visible. La démonstration et le smoke test n’ouvrent pas le périphérique. La reconnaissance se suspend pendant capture de question, recherche, analyse et lecture, puis reprend après un délai antiécho. La lecture n’est pas interrompue par la voix dans cette étape.
+Le micro démarre automatiquement seulement en mode normal, avec état visible. La démonstration et le smoke test n’ouvrent pas le périphérique. L’écoute ordinaire se suspend pendant capture de question, recherche et analyse. Pendant la lecture réelle, le même flux micro peut accepter uniquement « Alicia, stop ». La commande invalide l’audio en attente et arrête le lecteur sans fermer la session ; les autres paroles ne deviennent pas une nouvelle question. Des protections contre l’auto-déclenchement et un délai antiécho restent nécessaires ; ce dispositif ne constitue pas une annulation d’écho complète.
 
 Stop coupe écoute et capture, invalide les résultats et efface le contexte court. La fermeture attend une terminaison bornée des opérations démarrées. Les appels Win32 bloquants restent dans un processus jetable avec délai et nettoyage. Les callbacks Qt et les timers ne doivent pas survivre à leur propriétaire.
 
 ## Modèles et installation
 
-`Installer_Alicia.bat` appelle le script d’installation. Celui-ci prépare les dépendances, le modèle Ollama et `uv run --frozen alicia --prepare-audio` pour Kokoro et Whisper. Les ressources sont sous le dossier de données utilisateur, hors du dépôt. Un téléchargement échoué ne peut pas produire un faux état prêt.
+`Installer_Alicia.bat` appelle le script d’installation. Celui-ci prépare les dépendances, le modèle Ollama et `uv run --frozen alicia --prepare-audio` pour la voix sélectionnée et Whisper turbo. Chatterbox utilise un environnement Python distinct sous le dossier de données utilisateur. Les ressources sont sous le dossier de données utilisateur, hors du dépôt. Un téléchargement échoué ne peut pas produire un faux état prêt.
 
 Les téléchargements utilisent les sources officielles et TLS vérifié. Les fichiers complets sont réutilisés ; les fichiers existants inconnus sont préservés. Ne pas inventer de checksum indépendant. Aucun modèle n’est téléchargé pendant le lancement, la capture ou la question.
 
-Le lanceur force `ALICIA_AI_PROVIDER=ollama`, `ALICIA_TTS_PROVIDER=kokoro` et `ALICIA_STT_PROVIDER=whisper` pour le processus. Il préserve `.env` et restaure les variables de la console à sa fin.
+Le lanceur VBS masque PowerShell et utilise le pythonw installé pour l’interface. Il signale un code de sortie en erreur par une boîte de dialogue ; le lanceur Debug reste visible. Le raccourci du Bureau utilise l’icône arrondie fournie. Le lanceur force `ALICIA_AI_PROVIDER=ollama`, `ALICIA_TTS_PROVIDER=chatterbox` et `ALICIA_STT_PROVIDER=whisper` pour le processus. Il préserve `.env` et restaure les variables de la console à sa fin.
 
 ## Contexte et sources
 
-L’historique garde seulement quelques échanges avec une limite de caractères. Ajouter un échange après un résultat accepté, jamais sur erreur ou résultat périmé. Les anciennes citations ne constituent pas une nouvelle recherche. Si une référence comme « celui-là » reste ambiguë, demander une précision.
+L’historique garde seulement quelques échanges avec une limite de caractères. Ajouter un échange après un résultat accepté, jamais sur erreur ou résultat périmé. Les anciennes citations ne constituent pas une nouvelle recherche. Le modèle reste chargé quinze minutes après utilisation ; les réponses sont bornées à 700 tokens. Une variante thinking explicitement choisie ne transmet que sa réponse finale à l’interface et à la voix, sans exposer son raisonnement interne. Si une référence comme « celui-là » reste ambiguë, demander une précision.
 
 La recherche web est désactivée au lancement. Après autorisation, seule la question est transmise au moteur ; les résultats restent des extraits, avec URL et date de récupération. Le modèle les reçoit comme données non fiables, sans pouvoir exécuter leurs instructions. Une erreur de recherche ne doit pas devenir une réponse faussement actuelle.
 
@@ -62,4 +64,4 @@ Logs UTC tournants : transitions, capture, demande, erreurs nettoyées et durée
 
 Tests unitaires et UI avec doubles pour concurrence, mot d’activation, contexte, annulation et absence de repli payant. Un `QApplication` unique et une destruction des widgets sur le thread graphique sont nécessaires dans les tests. Les essais de modèles réels, micro, sortie audio, écran principal et jeu Windows restent des preuves distinctes ; voir [Validation Windows](VALIDATION_WINDOWS.md).
 
-Mesurer le naturel perçu, les erreurs de reconnaissance, la latence et la charge avec le jeu ouvert. Aucun moteur local ne garantit à lui seul la qualité de ChatGPT, une transcription parfaite ou la compréhension d’une image illisible.
+Le cloud a exécuté la voix Kokoro, mais le téléchargement Hugging Face de Chatterbox et Whisper y reste refusé (403). La synthèse et la reconnaissance réelles de ces nouveaux modèles ne sont donc pas validées par les doubles. Mesurer le naturel perçu, les erreurs de reconnaissance, la latence et la charge avec le jeu ouvert. Aucun moteur local ne garantit à lui seul la qualité de ChatGPT, une transcription parfaite ou la compréhension d’une image illisible.

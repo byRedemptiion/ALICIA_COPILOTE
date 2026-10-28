@@ -117,13 +117,13 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         header.addWidget(label("ALICIA", "title"))
         header.addStretch()
-        header.addWidget(label("V0.3  ·  Copilote visuel & vocal", "muted"))
+        header.addWidget(label("V0.4  ·  Copilote visuel & vocal", "muted"))
         layout.addLayout(header)
         layout.addWidget(
             label(
                 "MODE LOCAL GRATUIT · Aucune clé API ni abonnement"
                 if self.settings.ai_provider == "ollama"
-                and self.settings.tts_provider in {"windows", "kokoro"}
+                and self.settings.tts_provider in {"windows", "kokoro", "chatterbox"}
                 else "FOURNISSEUR EXTERNE ACTIVÉ · Des appels peuvent être facturés",
                 "state",
             )
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
             label(
                 "DÉMONSTRATION — inventaire fictif, aucune fenêtre de jeu observée."
                 if demo
-                else "Votre partie, votre contrôle. Alicia observe une fenêtre et vous conseille.",
+                else "Votre partie, votre contrôle. Alicia observe votre écran et vous conseille.",
                 "muted",
             )
         )
@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
         left.addWidget(
             label(
                 "Voix synthétique sur votre PC. Lecture gratuite à la demande."
-                if self.settings.tts_provider in {"windows", "kokoro"}
+                if self.settings.tts_provider in {"windows", "kokoro", "chatterbox"}
                 else "Lecture à la demande. La voix est générée par une IA.",
                 "muted",
             )
@@ -165,6 +165,9 @@ class MainWindow(QMainWindow):
         left.addWidget(self.speak_button)
         self.mute_button = button("Arrêter la voix", self.stop_audio)
         left.addWidget(self.mute_button)
+        left.addWidget(
+            label("Dites « Alicia, stop » pour interrompre la voix. Casque conseillé.", "muted")
+        )
         left.addWidget(label("Volume", "muted"))
         volume = QSlider(Qt.Horizontal)
         volume.setRange(0, 100)
@@ -273,6 +276,8 @@ class MainWindow(QMainWindow):
             self._event("Voix française féminine Windows : synthèse locale gratuite.")
         elif self.settings.tts_provider == "kokoro":
             self._event("Voix neuronale française Kokoro : synthèse locale gratuite.")
+        elif self.settings.tts_provider == "chatterbox":
+            self._event("Voix française expressive Chatterbox : synthèse locale gratuite.")
         self._update_controls()
 
     def _event(self, message):
@@ -407,6 +412,7 @@ class MainWindow(QMainWindow):
         self.session.stop()
         self.audio_generation += 1
         self.playback.stop()
+        self._close_speech_provider()
         self.preview.clear()
         self.preview.setText("Observation arrêtée. Aucune capture active.")
         self.capture_details.setText("Aucune capture en mémoire.")
@@ -555,10 +561,11 @@ class MainWindow(QMainWindow):
         self.audio_generation += 1
         audio_generation = self.audio_generation
         text = spoken_excerpt(self.session.result.text)
+        self.conversation.prepare_speech(text)
         self._state("Je prépare ma voix…", "thinking")
         self._event(
-            "Lecture demandée : voix Windows locale, aucun texte envoyé sur Internet."
-            if self.settings.tts_provider in {"windows", "kokoro"}
+            "Lecture demandée : voix locale, aucun texte envoyé sur Internet."
+            if self.settings.tts_provider in {"windows", "kokoro", "chatterbox"}
             else "Lecture demandée : le texte de la réponse est envoyé au service vocal IA."
         )
         self._job(
@@ -577,7 +584,7 @@ class MainWindow(QMainWindow):
 
     def _speaking(self, active):
         if active:
-            self.conversation.pause()
+            self.conversation.audio_started()
             self._state("Alicia vous parle · voix synthétique", "speaking")
         elif self.avatar.state == "speaking":
             self._state("Prête pour votre prochaine question")
@@ -590,15 +597,23 @@ class MainWindow(QMainWindow):
         # Invalide aussi une synthèse qui n’a pas encore répondu.
         self.audio_generation += 1
         self.playback.stop()
+        if "speech" in self.jobs:
+            self._close_speech_provider()
         self.conversation.audio_finished()
         self._state("Voix arrêtée")
         self._event("Arrêt vocal demandé.")
+
+    def _close_speech_provider(self):
+        close_speech = getattr(self.speech_provider, "close", None)
+        if close_speech is not None:
+            close_speech()
 
     def cancel_pending_analysis(self):
         self.session.generation += 1
         self.session.result = None
         self.audio_generation += 1
         self.playback.stop()
+        self._close_speech_provider()
         self.conversation.stop_listening()
         self.answer.clear()
         self.sources.clear()
@@ -624,4 +639,5 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         logger.info("application_closed")
+        self._close_speech_provider()
         event.accept()
