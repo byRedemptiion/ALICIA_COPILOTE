@@ -30,6 +30,7 @@ from alicia.core.ports import AnalysisError, CaptureError, ConfigurationError
 from alicia.core.session import Session
 from alicia.providers import create_speech_provider
 from alicia.research.search import DuckDuckGoSearch, SearchError
+from alicia.ui.actions import RequestController
 from alicia.ui.avatar import Avatar
 from alicia.ui.conversation import ConversationController
 from alicia.ui.playback import SpeechPlayback
@@ -88,6 +89,7 @@ class MainWindow(QMainWindow):
         self.jobs = set()
         self.workers = {}
         self.audio_generation = 0
+        self.response_text = ""
         self.close_pending = False
         self.automatic_mode = autostart and not demo
         self.autostart_pending = False
@@ -100,11 +102,15 @@ class MainWindow(QMainWindow):
         self.playback.speaking_changed.connect(self._speaking)
         self.playback.failed.connect(self._error)
         self.playback.finished.connect(self._audio_finished)
+        self.actions = RequestController(self, demo=demo)
         self.setWindowTitle("Alicia — Votre copilote de jeu")
         self.resize(1240, 1020)
         self.setMinimumSize(1000, 900)
         self.setStyleSheet(STYLE)
         self._build_ui(demo)
+        self.result_scroll_timer = QTimer(self)
+        self.result_scroll_timer.setSingleShot(True)
+        self.result_scroll_timer.timeout.connect(self._reveal_response)
         self.refresh_windows()
         self.autostart_pending = self.automatic_mode
 
@@ -117,7 +123,7 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         header.addWidget(label("ALICIA", "title"))
         header.addStretch()
-        header.addWidget(label("V0.4  ·  Copilote visuel & vocal", "muted"))
+        header.addWidget(label("V0.5  ·  Votre assistant visuel & vocal", "muted"))
         layout.addLayout(header)
         layout.addWidget(
             label(
@@ -224,10 +230,15 @@ class MainWindow(QMainWindow):
         self.capture_details = label("Aucune capture en mémoire.", "muted")
         right.addWidget(self.capture_details)
         self.question = QPlainTextEdit()
-        self.question.setPlaceholderText("Que souhaitez-vous savoir sur cet écran ?")
+        self.question.setPlaceholderText(
+            "Une question ou une consigne : « ouvre la calculatrice », "
+            "« cherche un guide », « note que… »"
+        )
         self.question.setMaximumHeight(85)
         self.question.textChanged.connect(self._update_controls)
         right.addWidget(self.question)
+        self.send_button = button("Envoyer la demande", self.dispatch_request, True)
+        right.addWidget(self.send_button)
         self.consent = QCheckBox(
             "Autoriser l’analyse locale des captures manuelles et vocales."
             if self.settings.ai_provider == "ollama"
@@ -236,9 +247,9 @@ class MainWindow(QMainWindow):
         self.consent.toggled.connect(self._update_controls)
         self.consent.toggled.connect(self.conversation.permission_changed)
         right.addWidget(self.consent)
-        self.analyze_button = button("Analyser la capture", self.analyze, True)
+        self.analyze_button = button("Analyser la capture", self.analyze)
         right.addWidget(self.analyze_button)
-        right.addWidget(label("LA RÉPONSE D’ALICIA", "muted"))
+        right.addWidget(label("LA RÉPONSE OU LE RÉSULTAT D’ALICIA", "muted"))
         self.answer = QPlainTextEdit()
         self.answer.setReadOnly(True)
         self.answer.setPlaceholderText(
@@ -254,6 +265,7 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(right_widget)
+        self.content_scroll = scroll
         body.addWidget(scroll, 1)
         layout.addLayout(body, 1)
         self.events = QPlainTextEdit()
@@ -298,7 +310,7 @@ class MainWindow(QMainWindow):
         self._event(message)
         self._state("Une action demande votre attention", "error")
 
-    def _job(self, kind, operation, callback):
+    def _job(self, kind, operation, callback, *, safe_errors=(), on_error=None):
         if kind in self.jobs:
             return
         self.jobs.add(kind)
@@ -306,14 +318,22 @@ class MainWindow(QMainWindow):
         audio_generation = self.audio_generation
         self.conversation.before_job(kind)
         worker = Worker(
-            operation, (CaptureError, AnalysisError, ConfigurationError, SpeechError, SearchError)
+            operation,
+            (
+                CaptureError,
+                AnalysisError,
+                ConfigurationError,
+                SpeechError,
+                SearchError,
+                *safe_errors,
+            ),
         )
         worker.signals.setParent(self)
         self.workers[kind] = worker
         worker.signals.succeeded.connect(callback)
         worker.signals.failed.connect(
             lambda message: (
-                self._error(message)
+                (on_error or self._error)(message)
                 if generation == self.session.generation
                 and (kind != "speech" or audio_generation == self.audio_generation)
                 else None
@@ -331,6 +351,7 @@ class MainWindow(QMainWindow):
         if kind == "capture":
             self.background_capture_active = False
         self._update_controls()
+        self.actions.job_finished()
         self.conversation.job_finished(kind)
         if kind == "windows" and self.autostart_pending and not self.close_pending:
             self.startup_timer.start(0)
@@ -346,8 +367,13 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(
             not busy and not self.session.active and self.windows.currentData() is not None
         )
-        self.stop_button.setEnabled(self.session.active)
+        self.stop_button.setEnabled(
+            self.session.active or self.actions.busy or bool(self.jobs) or self.playback.active
+        )
         self.capture_button.setEnabled(self.session.active and not busy)
+        self.send_button.setEnabled(
+            bool(self.question.toPlainText().strip()) and not busy and not self.close_pending
+        )
         self.analyze_button.setEnabled(
             self.session.active
             and self.session.frame is not None
@@ -355,7 +381,9 @@ class MainWindow(QMainWindow):
             and self.consent.isChecked()
             and not busy
         )
-        self.speak_button.setEnabled(self.session.result is not None and not busy)
+        self.speak_button.setEnabled(
+            (bool(self.response_text) or self.session.result is not None) and not busy
+        )
         self.conversation.refresh_controls()
 
     def refresh_windows(self):
@@ -405,6 +433,7 @@ class MainWindow(QMainWindow):
                 self.conversation.toggle_listening()
 
     def stop(self):
+        self.actions.cancel()
         self.startup_timer.stop()
         self.autostart_pending = False
         self.conversation.stop_listening()
@@ -417,6 +446,7 @@ class MainWindow(QMainWindow):
         self.preview.setText("Observation arrêtée. Aucune capture active.")
         self.capture_details.setText("Aucune capture en mémoire.")
         self.answer.clear()
+        self.response_text = ""
         self.sources.clear()
         self.sources.hide()
         self.consent.setChecked(False)
@@ -434,6 +464,7 @@ class MainWindow(QMainWindow):
             self.session.frame = None
             self.session.result = None
             self.answer.clear()
+            self.response_text = ""
             self.sources.clear()
             self.sources.hide()
             self.preview.clear()
@@ -487,6 +518,7 @@ class MainWindow(QMainWindow):
         self.playback.stop()
         self.audio_generation += 1
         self.session.result = None
+        self.response_text = ""
         self.answer.clear()
         self.sources.clear()
         self.sources.hide()
@@ -537,30 +569,55 @@ class MainWindow(QMainWindow):
             if question is not None:
                 self.session.memory.append(question, result.text)
             self.answer.setPlainText(result.text)
+            self.response_text = result.text
             self._state("Voici ce que j’observe")
             self._event(
                 f"Réponse reçue en {result.elapsed_seconds:.1f} s. Lecture vocale disponible à la demande."
             )
-            if result.web_sources:
-                items = [
-                    f'<b>[{index}]</b> <a href="{escape(source.url, quote=True)}">{escape(source.title)}</a>'
-                    f" — récupéré le {source.retrieved_at.astimezone():%d/%m/%Y à %H:%M}"
-                    for index, source in enumerate(result.web_sources, 1)
-                ]
-                self.sources.setHtml(
-                    "<b>Sources : extraits du moteur, pages non consultées.</b><br>"
-                    + "<br>".join(items)
-                )
-                self.sources.show()
+            self.show_sources(result.web_sources)
+            self.reveal_response()
+
+    def reveal_response(self):
+        # Defer until Qt has laid out the accepted result and its source panel.
+        # A parented timer is cancelled when the window is destroyed.
+        self.result_scroll_timer.start(0)
+
+    def _reveal_response(self):
+        if self.response_text and not self.close_pending:
+            self.content_scroll.ensureWidgetVisible(self.answer, 20, 20)
+
+    def show_sources(self, sources):
+        self.sources.clear()
+        self.sources.hide()
+        if sources:
+            items = [
+                f'<b>[{index}]</b> <a href="{escape(source.url, quote=True)}">{escape(source.title)}</a>'
+                f" — récupéré le {source.retrieved_at.astimezone():%d/%m/%Y à %H:%M}"
+                for index, source in enumerate(sources, 1)
+            ]
+            self.sources.setHtml(
+                "<b>Sources : extraits du moteur, pages non consultées.</b><br>"
+                + "<br>".join(items)
+            )
+            self.sources.show()
+
+    def dispatch_request(self, text=None, *, vocal=False):
+        # QPushButton.clicked supplies a boolean; it is not request text.
+        if not isinstance(text, str):
+            text = self.question.toPlainText()
+        return self.actions.submit(text, vocal=vocal)
 
     def speak(self):
-        if self.jobs or self.session.result is None:
+        text = self.response_text or (
+            self.session.result.text if self.session.result is not None else ""
+        )
+        if self.jobs or not text:
             return
         self.playback.stop()
         generation = self.session.generation
         self.audio_generation += 1
         audio_generation = self.audio_generation
-        text = spoken_excerpt(self.session.result.text)
+        text = spoken_excerpt(text)
         self.conversation.prepare_speech(text)
         self._state("Je prépare ma voix…", "thinking")
         self._event(
@@ -576,8 +633,8 @@ class MainWindow(QMainWindow):
 
     def _speech_ready(self, generation, audio_generation, audio):
         if (
-            self.session.active
-            and self.session.generation == generation
+            self.session.generation == generation
+            and not self.close_pending
             and audio_generation == self.audio_generation
         ):
             self.playback.play(audio)
@@ -588,6 +645,7 @@ class MainWindow(QMainWindow):
             self._state("Alicia vous parle · voix synthétique", "speaking")
         elif self.avatar.state == "speaking":
             self._state("Prête pour votre prochaine question")
+        self._update_controls()
 
     def _audio_finished(self):
         self._event("Lecture audio terminée.")
@@ -609,6 +667,7 @@ class MainWindow(QMainWindow):
             close_speech()
 
     def cancel_pending_analysis(self):
+        self.actions.cancel()
         self.session.generation += 1
         self.session.result = None
         self.audio_generation += 1
@@ -616,6 +675,7 @@ class MainWindow(QMainWindow):
         self._close_speech_provider()
         self.conversation.stop_listening()
         self.answer.clear()
+        self.response_text = ""
         self.sources.clear()
         self.sources.hide()
         self._state("Résultat en cours ignoré après retrait de l’autorisation")

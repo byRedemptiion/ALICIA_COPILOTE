@@ -1,10 +1,12 @@
 # Alicia — Installation locale gratuite sous Windows
 
-Le parcours v0.4 utilise Ollama (`qwen3-vl:8b`), Whisper large-v3-turbo multilingue et Chatterbox Multilingual. Aucun abonnement, crédit API ou compte OpenAI n’est requis. Les téléchargements initiaux nécessitent Internet ; la vision, la reconnaissance et la voix restent ensuite locales. La recherche web autorisée nécessite toujours Internet.
+Le parcours v0.5 conserve Ollama (`qwen3-vl:8b`), Whisper large-v3-turbo multilingue et Chatterbox Multilingual, et ajoute les consignes d’action. Aucun abonnement, crédit API ou compte OpenAI n’est requis. Les téléchargements initiaux nécessitent Internet ; la vision, la reconnaissance, la voix et les actions locales restent ensuite sur le PC. La recherche web autorisée nécessite toujours Internet.
 
 ## Installation ou mise à jour
 
 Fermer l’ancienne Alicia, extraire complètement la nouvelle archive, puis double-cliquer sur **Installer_Alicia.bat**. Le terminal reste visible pendant la préparation et les téléchargements, puis se ferme après réussite. Une erreur reste visible ; une préparation échouée ne rend pas les modèles prêts. Le `.env` existant est conservé.
+
+Une installation v0.4 complète peut réutiliser ses modèles locaux : la v0.5 ajoute les actions sans changer les moteurs vocaux ou le modèle visuel.
 
 L’installation prépare :
 
@@ -31,11 +33,26 @@ Utiliser le raccourci **Alicia** ou double-cliquer sur **Lancer_Alicia.vbs**. **
 
 Une boîte de dialogue signale un échec du lancement masqué. Pour garder la console et diagnostiquer l’installation, utiliser **Lancer_Alicia_Debug.bat**. Les états, erreurs et contrôles restent visibles dans l’interface d’Alicia.
 
-Au lancement normal, **l’écran principal et le microphone sont actifs**. Passer dans le jeu ou le navigateur sur cet écran, puis dire « Alicia » suivi de la question. Minimiser l’interface d’Alicia pour montrer le jeu. La sélection d’une autre source reste une option avancée.
+Au lancement normal, **l’écran principal et le microphone sont actifs**. Dire « Alicia » suivi d’une question ou d’une consigne, puis laisser un silence. Pour une question visuelle, passer dans le jeu ou le navigateur sur cet écran et minimiser Alicia pour montrer le contenu. La sélection d’une autre source reste une option avancée.
 
-**Stop** coupe observation et écoute et efface le contexte court. **Reprendre** les relance. **« Alicia, stop »**, pendant la lecture, coupe seulement la voix et permet une prochaine demande.
+**Stop** coupe observation et écoute, annule les actions encore en attente et efface le contexte court. **Reprendre** relance observation et écoute. **« Alicia, stop »**, pendant la lecture, coupe seulement la voix et permet une prochaine demande. Les pages déjà ouvertes et les notes déjà créées restent accessibles.
 
 La démonstration reste disponible avec `uv run --frozen alicia --demo` ou `scripts/start_alicia.ps1 -Demo`. Elle utilise une image fictive et n’ouvre pas automatiquement le micro.
+
+## Demander une action
+
+Les mêmes consignes sont utilisables au micro et dans l’entrée texte avec **Envoyer la demande**, sans les transformer en questions. Une action écrite peut être demandée pendant que l’observation est arrêtée :
+
+- « Alicia, cherche un guide de guerrier sur WoW Forever. »
+- « Alicia, ouvre la calculatrice. »
+- « Alicia, ouvre mes téléchargements. »
+- « Alicia, prends une note : acheter des potions. »
+
+La première version sait ouvrir Bloc-notes, Calculatrice, Paint, Explorateur de fichiers ou le navigateur, ouvrir Bureau/Documents/Téléchargements/dossier personnel, ouvrir une URL web publique et créer une note `.txt` ou `.md`. Les notes sont limitées à 10 000 caractères et conservées sous `%LOCALAPPDATA%/Alicia/notes` ; un nom déjà utilisé n’est pas écrasé. Alicia affiche le résultat ou l’information manquante. Une application absente et une action non prise en charge sont signalées.
+
+Une recherche explicite autorise cette requête web même si la case des questions ordinaires reste décochée. Le navigateur affiche une synthèse locale fondée sur les extraits, puis les sources, liens et dates de récupération. Les pages sources ne sont pas lues intégralement. Si la synthèse échoue, le compte rendu affiche les résultats seuls. Si la recherche échoue, le navigateur peut afficher la requête sur le moteur ; Alicia indique alors qu’elle n’a pas obtenu de sources vérifiées.
+
+Les actions n’ont pas besoin d’une capture d’écran. Une question écrite sur l’écran demande une observation active et l’autorisation d’analyse, puis **Envoyer la demande** prend une capture fraîche. **Analyser la capture** garde le parcours manuel. Les résultats vocaux sont lus si la réponse vocale automatique est cochée ; une consigne écrite reste affichée sans lecture imposée. Une demande comme « explique comment ouvrir la calculatrice » doit produire une explication, sans ouvrir l’application. Le catalogue est extensible ; cette version ne donne pas accès à n’importe quelle commande Windows ou aux contrôles du jeu.
 
 ## Choisir une voix plus légère
 
@@ -69,7 +86,9 @@ L’écoute ordinaire est suspendue pendant le traitement. Pendant la lecture r�
 - **Réponse ou voix lente** : mesurer à chaud avec le jeu ouvert ; vérifier si les moteurs utilisent CPU ou GPU. Kokoro reste disponible explicitement pour une synthèse plus légère.
 - **Interruption manquée** : dire la commande complète, utiliser un casque et vérifier le micro ; le bouton Arrêter la voix reste accessible.
 - **Recherche refusée** : lire l’erreur. CAPTCHA et restrictions réseau ne sont pas contournés.
+- **Application ou dossier introuvable** : utiliser un nom du catalogue et vérifier sa présence sur Windows. Une erreur n’est pas annoncée comme une ouverture réussie.
+- **Note indisponible** : vérifier le dossier indiqué et ses droits d’écriture. Les fichiers existants sont préservés.
 
-La recherche web reste désactivée par défaut et n’envoie que la question après autorisation. Les captures, audio et contexte restent locaux dans le parcours gratuit ; les logs ne contiennent pas leur contenu.
+La recherche des questions ordinaires reste désactivée par défaut. Une consigne explicite de recherche autorise la requête correspondante. Captures, audio et contexte restent locaux dans le parcours gratuit ; les logs ne contiennent pas leur contenu.
 
 Les tests cloud utilisent des doubles pour les modèles et périphériques. Les téléchargements Hugging Face y sont bloqués (403) ; suivre [Validation Windows](VALIDATION_WINDOWS.md) pour les essais réels sur le PC cible.

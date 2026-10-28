@@ -24,6 +24,7 @@ def clear_configuration(monkeypatch):
         "ALICIA_EXPRESSIVE_RUNTIME_DIR",
         "ALICIA_EXPRESSIVE_DEVICE",
         "ALICIA_WHISPER_MODEL_PATH",
+        "ALICIA_NOTES_DIR",
         "ALICIA_WINDOWS_RATE",
         "ALICIA_WINDOWS_VOICE",
         "ALICIA_API_TIMEOUT_SECONDS",

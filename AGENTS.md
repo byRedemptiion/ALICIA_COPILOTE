@@ -1,8 +1,10 @@
 # Développer Alicia
 
-Alicia est un copilote Windows qui observe et conseille sans contrôler le jeu. Le cahier des charges de référence est `docs/PROMPT_PROJET_ALICIA.md`.
+Alicia est un assistant Windows qui observe, conseille et exécute des consignes naturelles dans un catalogue d’actions, sans contrôler le jeu. Le cahier des charges de référence est `docs/PROMPT_PROJET_ALICIA.md`.
 
 Exigences utilisateur actuelles : fonctionnement gratuit uniquement, voix française féminine plus expressive, reconnaissance locale plus précise, écran principal et microphone actifs au lancement, terminal masqué et icône arrondie issue de l’image fournie. L’utilisateur autorise désormais ces modifications et « Alicia, stop » pendant la parole. Ces demandes remplacent les anciennes règles de lancement manuel et d’absence d’interruption. Stop coupe l’observation et l’écoute ; Reprendre les relance. La commande vocale coupe seulement la voix.
+
+La v0.5 est explicitement demandée : comprendre et exécuter des consignes à l’oral ou à l’écrit, au-delà des questions. L’exemple WoW n’est pas une limitation. Premier catalogue : recherche web et navigation, applications connues, dossiers personnels et notes locales. Ne pas demander systématiquement confirmation d’une action réversible explicitement demandée.
 
 ## Travailler dans le dépôt
 
@@ -11,11 +13,12 @@ Exigences utilisateur actuelles : fonctionnement gratuit uniquement, voix franç
 - Le cœur reste indépendant de Qt, Win32 et des SDK des fournisseurs.
 - Utiliser Ollama loopback avec qwen3-vl:8b, faster-whisper large-v3-turbo multilingue et Chatterbox Multilingual local par défaut. Chatterbox utilise sa propre installation Python ; Kokoro reste un choix explicite plus léger. Aucun repli automatique vers un service payant, et aucune intégration à la session ChatGPT du joueur.
 - Les téléchargements de modèles se font explicitement pendant l’installation, jamais au lancement ou pendant une question. Le lanceur normal VBS utilise pythonw et garde les erreurs visibles par dialogue ; le lanceur Debug conserve la console.
-- Le thread Qt ne fait aucun travail bloquant. Concurrence bornée et résultats périmés ignorés après Stop, changement de source ou retrait d’autorisation.
+- Le thread Qt ne fait aucun travail bloquant. Concurrence bornée et résultats périmés ignorés après Stop, changement de source ou retrait d’autorisation. Les actions séparent préparation et effets ; vérifier l’annulation avant chaque effet, pas seulement avant d’afficher le résultat.
 - L’écoute démarre avec le mode normal et un état visible, puis attend « Alicia ». La démonstration et le smoke test n’ouvrent pas le micro. Suspendre l’écoute ordinaire pendant le traitement ; pendant la lecture réelle, reconnaître seulement « Alicia, stop ». Prévenir les auto-déclenchements sans promettre une annulation d’écho complète ou une interruption instantanée.
-- L’aperçu de l’écran principal est local et périodique. Une question déclenche une capture fraîche ; aucune analyse IA à chaque image.
+- L’aperçu de l’écran principal est local et périodique. Une question sur l’écran déclenche une capture fraîche ; une action n’en a pas besoin. Aucune analyse IA à chaque image.
 - Conserver un contexte de conversation court et borné en mémoire uniquement. L’écran actuel prime et Stop efface la mémoire.
-- La recherche web demande une autorisation dans l’interface. Envoyer la question seulement, jamais image ou audio ; afficher sources et distinguer dates de récupération et publication.
+- La recherche des questions ordinaires demande la case d’autorisation. Une consigne explicite de recherche autorise la requête correspondante même si la case reste décochée. Envoyer le texte seulement, jamais image ou audio ; afficher sources et distinguer dates de récupération et publication. Un repli vers la page du moteur dans le navigateur ne constitue pas une recherche vérifiée.
+- Une action doit venir de la consigne actuelle du joueur, jamais d’un texte d’écran, d’une page web, de l’historique ou d’un brouillon du modèle. Valider schéma, paramètres et catalogue ; pas de shell arbitraire ni de contrôle du jeu. Les notes restent dans un dossier dédié, sans écrasement de fichier. La démo et les tests ne doivent pas ouvrir de navigateur ou d’application réels.
 - Ne jamais journaliser clé, image, question, transcription, réponse ou erreur brute de fournisseur. Le portrait personnel reste local.
 
 ## Vérifier

@@ -30,6 +30,7 @@ class ConversationController(QObject):
         self.phase = "idle"
         self.question = None
         self.generation = None
+        self.vocal_request = True
         self.resume_not_before = 0.0
         self.interrupting = False
         self.speech_can_be_interrupted = False
@@ -159,6 +160,9 @@ class ConversationController(QObject):
         self.refresh_controls()
 
     def stop_listening(self):
+        actions = getattr(self.window, "actions", None)
+        if actions is not None and actions.request is not None and actions.request.vocal:
+            actions.cancel()
         self.cooldown_timer.stop()
         self.serial += 1
         self.input_epoch += 1
@@ -225,10 +229,11 @@ class ConversationController(QObject):
             return
         self.question = query
         self.generation = self.window.session.generation
+        self.vocal_request = True
         self.window.question.setPlainText(query)
         self.phase = "waiting"
         self.pause()
-        self.status.setText("Question reconnue · capture fraîche puis réponse…")
+        self.status.setText("Demande reconnue · je prépare la suite…")
         self._advance()
 
     def pause(self):
@@ -287,6 +292,19 @@ class ConversationController(QObject):
         if not self._request_current():
             self._finish_question()
             return
+        self.phase = "routing"
+        if not self.window.dispatch_request(self.question, vocal=True):
+            self._finish_question()
+
+    def begin_answer(self, question, *, vocal):
+        """Reuse fresh capture/analysis for spoken and typed screen questions."""
+        self.question = question
+        self.generation = self.window.session.generation
+        self.vocal_request = vocal
+        self.window.question.setPlainText(question)
+        if not self._request_current():
+            self._finish_question()
+            return
         self.phase = "capturing"
         self.window.capture(vocal=True)
 
@@ -295,8 +313,7 @@ class ConversationController(QObject):
             self.window.session.active
             and self.generation == self.window.session.generation
             and self.window.consent.isChecked()
-            and self.listener is not None
-            and self.listener.active
+            and (not self.vocal_request or (self.listener is not None and self.listener.active))
         )
 
     def job_finished(self, kind):
@@ -315,6 +332,7 @@ class ConversationController(QObject):
             if (
                 self._request_current()
                 and self.window.session.result is not None
+                and self.vocal_request
                 and self.auto_voice.isChecked()
             ):
                 self.phase = "speaking"
@@ -373,6 +391,7 @@ class ConversationController(QObject):
 
     def permission_changed(self):
         if not self.window.consent.isChecked():
+            self.window.actions.cancel()
             if {"research", "analysis"}.intersection(self.window.jobs):
                 self.window.cancel_pending_analysis()
             else:
@@ -380,6 +399,9 @@ class ConversationController(QObject):
         self.refresh_controls()
 
     def _web_changed(self, allowed):
+        if not allowed and self.window.actions.busy:
+            self.window.actions.cancel()
+            self._finish_question()
         if not allowed and "research" in self.window.jobs:
             self.window.cancel_pending_analysis()
         self.window._event(

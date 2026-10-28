@@ -41,6 +41,10 @@ def default_expressive_runtime_directory() -> Path:
     return _default_log_directory().parent / "runtimes" / "chatterbox"
 
 
+def default_notes_directory() -> Path:
+    return _default_log_directory().parent / "notes"
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     ai_provider: str = "ollama"
@@ -65,6 +69,7 @@ class Settings:
     windows_rate: int = -1
     voice_model_path: Path = field(default_factory=default_voice_model_path)
     capture_interval_ms: int = 1000
+    notes_directory: Path = field(default_factory=default_notes_directory)
     log_directory: Path = field(default_factory=_default_log_directory)
 
 
@@ -180,4 +185,5 @@ def load_settings(env_file: Path | None = Path(".env")) -> Settings:
             os.environ.get("ALICIA_VOICE_MODEL_PATH") or default_voice_model_path()
         ),
         capture_interval_ms=capture_interval,
+        notes_directory=Path(os.environ.get("ALICIA_NOTES_DIR") or default_notes_directory()),
     )

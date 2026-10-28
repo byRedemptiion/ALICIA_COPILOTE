@@ -23,11 +23,15 @@ La qualité de Chatterbox, la précision de Whisper turbo, la latence d’interr
 
 ## V0.5 — Exécuter des consignes naturelles
 
-L’utilisateur veut un assistant capable de réaliser une tâche demandée, au-delà des questions et réponses. « Alicia, trouve-moi le stuff du war sur WoW Forever » est un exemple, pas une limitation à WoW ou aux recherches web. Comprendre des consignes naturelles à l’oral ou à l’écrit et choisir les actions disponibles : rechercher et ouvrir une page, ouvrir une application, préparer un fichier ou effectuer une autre tâche locale prise en charge. Ce système d’actions extensible est prévu pour la prochaine version et n’est pas activé dans la v0.4.
+L’utilisateur veut un assistant capable de réaliser une tâche demandée, au-delà des questions et réponses. « Alicia, trouve-moi le stuff du war sur WoW Forever » est un exemple, pas une limitation à WoW ou aux recherches web. La v0.5 introduit un premier catalogue extensible : rechercher et ouvrir une réponse sourcée dans le navigateur, ouvrir une URL publique, une application connue ou un dossier personnel, et créer une note locale `.txt` ou `.md`.
 
 Distinguer une demande d’action d’une question, identifier les paramètres utiles, exécuter les actions disponibles et rendre leur résultat visible. La demande explicite autorise l’action ciblée ; ne pas demander de reformuler en question ou de confirmer systématiquement une action réversible déjà demandée. Poser une précision seulement si une information indispensable manque. Employer un catalogue d’actions avec paramètres validés plutôt qu’exécuter librement des commandes produites par le modèle. Le contenu observé sur l’écran ou sur une page ne constitue pas une nouvelle consigne de l’utilisateur.
 
-Reconnaître l’intention de recherche et l’ouverture demandée, employer le jeu, le serveur, la spécialisation, le contenu visé et la version lorsqu’ils sont connus, puis demander la précision qui change réellement la recommandation. Ne pas présenter un guide d’une autre version comme applicable au serveur. Vérifier les sources avant d’ouvrir une page ; fournir une synthèse avec les liens lorsque plusieurs guides sont nécessaires. La demande explicite autorise la recherche de cette question, sans transmettre capture ni audio. Une simple question ne doit pas ouvrir spontanément le navigateur.
+Les actions utilisent le même routage à l’oral et à l’écrit, sans capture d’écran. La recherche explicite autorise la requête correspondante, sans transmettre capture ni audio. Le compte rendu regroupe une synthèse issue des extraits disponibles, les sources et leurs liens ; il conserve les résultats seuls si la synthèse est indisponible. Une recherche refusée peut ouvrir la page du moteur avec un état non vérifié. Une simple question ne doit pas ouvrir spontanément le navigateur.
+
+Le catalogue d’applications initial comprend Bloc-notes, Calculatrice, Paint, Explorateur et navigateur. Les notes restent dans le dossier Alicia dédié sans écrasement. Stop annule les effets encore en attente et les résultats périmés. La démonstration bloque les effets réels.
+
+Les évolutions suivantes pourront affiner une recherche selon le jeu, le serveur, la spécialisation, le contenu visé et la version, puis lire et comparer les pages sources. Les extraits actuels ne suffisent pas à affirmer qu’un équipement s’applique à un serveur particulier.
 
 Ce parcours reste gratuit et doit conserver un contrôle visible sur la navigation. L’ouverture d’une page ne doit pas créer de touches ou de clics dans le jeu.
 

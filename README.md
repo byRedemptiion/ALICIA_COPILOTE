@@ -1,8 +1,8 @@
 # Alicia
 
-Copilote IA gratuit pour Windows : Alicia observe l’écran principal, répond aux questions et conseille sans générer de touches ni de clics. Le lancement normal active l’observation et le microphone, avec un état visible et un bouton Stop.
+Assistant IA gratuit pour Windows : Alicia répond aux questions sur l’écran et exécute des consignes naturelles, à l’oral ou à l’écrit. Le lancement normal active l’observation et le microphone, avec un état visible et un bouton Stop. Alicia ne génère aucune touche ni aucun clic dans le jeu.
 
-La v0.4 utilise **Ollama avec Qwen3-VL 8B**, **Whisper large-v3-turbo multilingue** et **Chatterbox Multilingual** pour une voix locale plus expressive. Aucun compte, clé API ou abonnement n’est nécessaire. La qualité et la vitesse restent à évaluer sur votre PC ; Alicia n’est pas cette conversation ChatGPT.
+La v0.5 ajoute un premier catalogue d’actions aux moteurs locaux existants : **Ollama avec Qwen3-VL 8B**, **Whisper large-v3-turbo multilingue** et **Chatterbox Multilingual**. Aucun compte, clé API ou abonnement n’est nécessaire. La qualité et la vitesse restent à évaluer sur votre PC ; Alicia n’est pas cette conversation ChatGPT.
 
 ![Interface Alicia](docs/assets/interface-demo.png)
 
@@ -16,7 +16,22 @@ La v0.4 utilise **Ollama avec Qwen3-VL 8B**, **Whisper large-v3-turbo multilingu
 
 L’installateur conserve votre `.env`, prépare les dépendances verrouillées et télécharge explicitement les modèles. Chatterbox dispose d’un environnement Python séparé. Prévoir plusieurs Go pour les modèles et leurs dépendances, et un premier chargement plus lent. Le lancement et les questions ne téléchargent aucun modèle. Voir [Installation gratuite](docs/INSTALLATION_GRATUITE.md), notamment pour choisir explicitement la voix Kokoro plus légère.
 
-## Parler à Alicia
+## Donner une consigne à Alicia
+
+Dire « Alicia » suivi de la demande, ou écrire celle-ci puis cliquer sur **Envoyer la demande**. Il n’est pas nécessaire de la formuler comme une question. Les actions écrites restent utilisables quand l’observation est arrêtée.
+
+| Exemple | Action disponible |
+| --- | --- |
+| « Alicia, cherche un guide de guerrier sur WoW Forever. » | Rechercher sur le web et ouvrir une réponse accompagnée de ses sources. |
+| « Alicia, ouvre la calculatrice. » | Ouvrir une application du catalogue. |
+| « Alicia, ouvre mes téléchargements. » | Ouvrir un dossier personnel connu. |
+| « Alicia, prends une note : acheter des potions. » | Créer une note locale et afficher son emplacement. |
+
+Le catalogue initial comprend Bloc-notes, Calculatrice, Paint, Explorateur de fichiers, le navigateur, les dossiers Bureau/Documents/Téléchargements/personnel, les pages web publiques et les notes `.txt` ou `.md`. Une demande hors de ce catalogue est signalée ; Alicia ne peut pas exécuter n’importe quelle commande Windows. Le même parcours traite les consignes vocales et écrites. Les actions ne demandent pas de capture d’écran.
+
+Une demande explicite de recherche autorise l’envoi de cette requête au moteur, même si la case de recherche des questions ordinaires reste décochée. Elle n’envoie ni image ni audio. Le navigateur affiche une synthèse locale à partir des extraits trouvés, avec les sources et leurs liens ; les pages complètes ne sont pas lues. Si la synthèse est indisponible, le compte rendu conserve les résultats. Si le moteur de recherche est indisponible, Alicia peut ouvrir la requête dans le navigateur en indiquant qu’aucune source n’a été vérifiée.
+
+## Poser une question sur l’écran
 
 Passez dans votre jeu ou votre navigateur sur l’écran principal, puis dites par exemple :
 
@@ -24,13 +39,15 @@ Passez dans votre jeu ou votre navigateur sur l’écran principal, puis dites p
 >
 > « Alicia, lequel de ces objets semble le plus adapté, et pourquoi ? »
 
-Laissez un silence en fin de question. Dire seulement « Alicia » ouvre une fenêtre de huit secondes pour la phrase suivante. Les conversations sans ce mot d’activation ne déclenchent aucune question au modèle. Alicia prend une capture fraîche, utilise le contexte court de la session, affiche sa réponse puis la lit.
+Laissez un silence en fin de demande. Dire seulement « Alicia » ouvre une fenêtre de huit secondes pour la phrase suivante. Les conversations sans ce mot d’activation ne déclenchent aucune demande. Pour une question sur l’écran, Alicia prend une capture fraîche, utilise le contexte court de la session, affiche sa réponse puis la lit.
 
-**« Alicia, stop »** demande de couper la voix pendant la lecture et de revenir à l’écoute. **Stop**, dans l’interface, coupe l’observation et le microphone et efface le contexte ; **Reprendre** les relance. La détection vocale demande un délai de reconnaissance et doit être testée avec votre micro. Un casque aide à éviter que le son des haut-parleurs revienne dans le micro.
+**« Alicia, stop »** demande de couper la voix pendant la lecture et de revenir à l’écoute. **Stop**, dans l’interface, coupe l’observation et le microphone, annule les actions encore en attente et efface le contexte ; **Reprendre** relance observation et écoute. Une page déjà ouverte ou une note déjà créée reste accessible. La détection vocale demande un délai de reconnaissance et doit être testée avec votre micro. Un casque aide à éviter que le son des haut-parleurs revienne dans le micro.
 
 L’écoute ordinaire se suspend pendant le traitement. Pendant la lecture, seules les commandes d’interruption sont prises en compte. Les protections contre l’écho ne constituent pas une annulation d’écho complète.
 
 L’aperçu se met à jour environ chaque seconde, sans analyse IA de chaque image. Alicia voit tout le contenu visible de l’écran principal : minimisez sa fenêtre pour lui montrer le jeu. Une autre source reste accessible dans les options avancées.
+
+Une question écrite sur l’écran demande une observation active et l’autorisation d’analyse ; **Envoyer la demande** prend alors une capture fraîche. **Analyser la capture** conserve le parcours manuel sur une capture choisie. Les résultats des consignes vocales sont lus lorsque la réponse vocale automatique est cochée ; une demande écrite n’impose pas de lecture.
 
 ## Voix, reconnaissance et réponses
 
@@ -44,9 +61,9 @@ Les réponses privilégient les faits visibles, un conseil court et sa justifica
 
 ## Recherche web et données
 
-La case **Autoriser la recherche web** est désactivée par défaut. Après autorisation, seule la question est envoyée au moteur, sans capture ni audio. Les extraits, liens et dates de récupération sont affichés ; les pages complètes ne sont pas lues par ce premier adaptateur. Une date de récupération n’est pas une date de publication.
+La case **Autoriser la recherche web** est désactivée par défaut pour les questions ordinaires. Une consigne explicite comme « cherche… » autorise la recherche de cette demande. Seule la requête est envoyée au moteur, sans capture ni audio. Les extraits, liens et dates de récupération sont affichés ; les pages complètes ne sont pas lues par ce premier adaptateur. Une date de récupération n’est pas une date de publication.
 
-Les captures, le contexte court et l’audio du micro restent locaux dans le parcours gratuit. Les logs tournants, sous `%LOCALAPPDATA%/Alicia/logs`, ne contiennent ni capture, ni question, ni transcription, ni réponse, ni audio. Stop ou un changement de source efface le contexte. Aucun service payant ne remplace silencieusement un moteur local absent.
+Les captures, le contexte court et l’audio du micro restent locaux dans le parcours gratuit. Les notes créées sur demande sont conservées sous `%LOCALAPPDATA%/Alicia/notes`, sans écraser une note existante. Les logs tournants, sous `%LOCALAPPDATA%/Alicia/logs`, ne contiennent ni capture, ni demande, ni transcription, ni réponse, ni audio. Stop ou un changement de source efface le contexte. Aucun service payant ne remplace silencieusement un moteur local absent.
 
 ## Vérifier le développement
 
@@ -60,11 +77,13 @@ uv run --frozen pytest -q
 uv run --frozen alicia --smoke-test
 ```
 
-La démonstration `uv run --frozen alicia --demo` utilise une image fictive et ne démarre pas automatiquement le microphone. Le smoke test n’exécute ni périphérique, ni modèle ou recherche réels. Les tests avec doubles ne remplacent pas les essais Windows décrits dans [Validation Windows](docs/VALIDATION_WINDOWS.md).
+La démonstration `uv run --frozen alicia --demo` utilise une image fictive, ne démarre pas automatiquement le microphone et bloque les ouvertures ou créations réelles. Le smoke test n’exécute ni périphérique, ni modèle ou recherche réels. Les tests avec doubles ne remplacent pas les essais Windows décrits dans [Validation Windows](docs/VALIDATION_WINDOWS.md).
 
-Vérifications v0.4 : **554 tests Python réussis**, smoke test graphique sans appel IA, construction du paquet avec ses ressources et **10 scénarios/141 assertions PowerShell**. Le moteur CPU Chatterbox a été installé et importé réellement ; son tokenizer français et le watermark fourni ont été vérifiés avec les accès réseau interdits. Ces vérifications ne produisent pas de parole Chatterbox.
+Vérifications v0.5 : **734 tests Python réussis**, smoke test graphique sans appel IA, paquet construit avec ses ressources et **10 scénarios/141 assertions PowerShell**. Les tests d’intégration créent réellement une note et un compte rendu HTML dans des répertoires temporaires ; le navigateur, les applications et le modèle sont remplacés par des doubles. Le test web réel du cloud a préparé le repli vers le navigateur, sans ouvrir celui-ci.
 
-La synthèse Kokoro a été exécutée réellement dans le cloud. Les téléchargements Hugging Face de Whisper et Chatterbox y sont refusés par le réseau (403) : leur transcription et synthèse réelles, la capture de l’écran principal, le microphone, l’interruption et le rendu audio Windows restent à valider sur le PC cible.
+Le moteur CPU Chatterbox a été installé et importé réellement ; son tokenizer français et le watermark fourni ont été vérifiés avec les accès réseau interdits. Ces vérifications ne produisent pas de parole Chatterbox.
+
+La synthèse Kokoro a été exécutée réellement dans le cloud. Les téléchargements Hugging Face de Whisper et Chatterbox y sont refusés par le réseau (403) : leur transcription et synthèse réelles, la capture de l’écran principal, le microphone, l’interruption et le rendu audio Windows restent à valider sur le PC cible. L’ouverture native du navigateur, des applications et dossiers Windows demande également les essais de la procédure dédiée.
 
 ## Documents
 

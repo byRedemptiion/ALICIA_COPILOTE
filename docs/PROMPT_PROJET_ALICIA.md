@@ -4,7 +4,7 @@ Ce cahier des charges décrit la cible et les règles de développement. Il ne p
 
 ## Mission
 
-Développer Alicia, une application Windows servant de copilote IA pendant que le joueur joue. Elle doit donner l’impression d’une personne compétente, calme et agréable qui regarde la partie et conseille.
+Développer Alicia, une application Windows servant de copilote IA pendant que le joueur joue et d’assistant capable d’exécuter des consignes naturelles. Elle doit donner l’impression d’une personne compétente, calme et agréable qui regarde la partie, conseille et réalise les tâches prises en charge.
 
 Alicia ne joue jamais à la place du joueur : aucune touche ou clic automatique, aucune lecture de mémoire du jeu, aucune injection ou contournement de protection. Le joueur garde le contrôle.
 
@@ -13,13 +13,14 @@ Alicia ne joue jamais à la place du joueur : aucune touche ou clic automatique,
 - Fonctionnement **gratuit uniquement** par défaut, sans clé API ou abonnement. Aucun repli automatique payant si un moteur local échoue.
 - Observation de **l’écran principal par défaut**, sans obligation de chercher une fenêtre dans une liste.
 - **Microphone actif au lancement normal**, avec état visible. Cette demande explicite remplace l’ancienne activation manuelle initiale.
-- Mot d’activation « Alicia », puis question. Stop coupe l’observation et l’écoute ; Reprendre les relance.
+- Mot d’activation « Alicia », puis demande. Stop coupe l’observation et l’écoute et annule les actions en attente ; Reprendre relance observation et écoute.
 - Voix française féminine neuronale locale, plus naturelle que la voix Windows initiale, sans prétendre reproduire une voix de ChatGPT.
 - Reconnaissance locale française plus précise et historique court pour mieux suivre la conversation.
 - Terminal masqué au lancement normal, diagnostic accessible et icône arrondie à partir de l’image fournie.
 - Commande « Alicia, stop » pendant la lecture pour couper la voix et retrouver l’écoute.
+- Comprendre des consignes à l’oral et à l’écrit, au-delà des questions : rechercher, ouvrir une page ou une application, accéder à un dossier personnel et créer une note. L’exemple d’équipement sur WoW est un exemple de demande, pas une limitation au jeu ou à Internet.
 
-Alicia n’est pas la session ChatGPT du joueur. Ne pas faire croire que le modèle local est cette conversation ou qu’un abonnement ChatGPT fournit une API gratuite. Les données restent locales, sauf les questions de recherche web envoyées après autorisation.
+Alicia n’est pas la session ChatGPT du joueur. Ne pas faire croire que le modèle local est cette conversation ou qu’un abonnement ChatGPT fournit une API gratuite. Les données restent locales, sauf les requêtes de recherche web envoyées après autorisation par la case ou consigne explicite.
 
 ## Priorités et technologies
 
@@ -27,7 +28,7 @@ Privilégier stabilité, précision mesurée, latence raisonnable, consommation 
 
 Base : Python 3.12, PySide6 et dépendances verrouillées avec uv. Séparer interface, capture, IA, reconnaissance, synthèse, configuration, logs, contexte et recherche.
 
-Le parcours gratuit v0.4 utilise Ollama loopback avec `qwen3-vl:8b`, faster-whisper large-v3-turbo multilingue pour le français et Chatterbox Multilingual pour la voix. Le moteur Chatterbox est isolé dans son propre environnement Python pour préserver les dépendances de l’application. La référence féminine fournie est une voix synthétique Kokoro ; aucune personne réelle n’est clonée. Kokoro ONNX avec `ff_siwis` reste un choix local explicite. Les modèles sont téléchargés explicitement pendant l’installation. Aucun téléchargement caché au démarrage ou lors d’une question, et aucun service distant pour l’analyse ou l’audio par défaut.
+Le parcours gratuit v0.5 conserve Ollama loopback avec `qwen3-vl:8b`, faster-whisper large-v3-turbo multilingue pour le français et Chatterbox Multilingual pour la voix. Le moteur Chatterbox est isolé dans son propre environnement Python pour préserver les dépendances de l’application. La référence féminine fournie est une voix synthétique Kokoro ; aucune personne réelle n’est clonée. Kokoro ONNX avec `ff_siwis` reste un choix local explicite. Les modèles sont téléchargés explicitement pendant l’installation. Aucun téléchargement caché au démarrage ou lors d’une demande, et aucun service distant pour l’analyse ou l’audio par défaut.
 
 Le cœur générique reste indépendant d’un jeu. Ajouter games/ quand un besoin concret le justifie, sans y coupler le fonctionnement général.
 
@@ -36,14 +37,24 @@ Le cœur générique reste indépendant d’un jeu. Ajouter games/ quand un beso
 1. Installer les dépendances et modèles via Installer_Alicia.bat.
 2. Lancer Alicia via le raccourci ou Lancer_Alicia.vbs, sans terminal visible : l’écran principal et le micro commencent avec un indicateur d’état. Lancer_Alicia_Debug.bat permet le diagnostic avec console.
 3. Passer dans le jeu ou le navigateur pour afficher le contenu à analyser.
-4. Dire « Alicia, … », puis laisser un silence en fin de question.
-5. Capturer une image fraîche, ajouter le contexte court et les sources web autorisées, puis demander une réponse locale.
+4. Dire « Alicia, … », puis laisser un silence en fin de demande, ou utiliser **Envoyer la demande** à l’écrit.
+5. Distinguer question, précision et consigne. Pour une question sur l’écran, capturer une image fraîche, ajouter le contexte court et les sources web autorisées, puis demander une réponse locale. Pour une action, valider le plan et exécuter le catalogue sans capture.
 6. Afficher le texte et lire la réponse avec la voix neuronale, en animant l’avatar pendant la lecture réelle.
 7. Permettre « Alicia, stop » pendant la lecture pour couper la voix, puis revenir à l’attente. Le bouton Stop coupe l’ensemble observation et écoute.
 
-Dire Alicia seule ouvre une fenêtre de huit secondes pour la phrase suivante. Les autres conversations sont ignorées. L’entrée texte reste disponible si le micro est indisponible.
+Dire Alicia seule ouvre une fenêtre de huit secondes pour la phrase suivante. Les autres conversations sont ignorées. L’entrée texte reste disponible si le micro est indisponible ; les actions écrites peuvent être demandées lorsque l’observation est arrêtée. Une question visuelle exige une observation active et l’autorisation d’analyse.
 
-Le mode de démonstration fournit une image synthétique signalée et n’ouvre pas automatiquement le micro. Le smoke test ne lance ni périphérique, ni modèle ou recherche réels. Ne jamais faire passer un résultat factice pour un résultat IA réel.
+Le mode de démonstration fournit une image synthétique signalée, n’ouvre pas automatiquement le micro et bloque les effets réels des actions. Le smoke test ne lance ni périphérique, ni modèle ou recherche réels. Ne jamais faire passer un résultat factice pour un résultat IA réel.
+
+## Consignes et actions
+
+La v0.5 fournit un catalogue extensible : rechercher sur Internet et ouvrir une réponse sourcée, ouvrir une URL publique, ouvrir Bloc-notes/Calculatrice/Paint/Explorateur/navigateur, accéder aux dossiers Bureau/Documents/Téléchargements/personnel et créer une note `.txt` ou `.md` dans le dossier Alicia dédié. Une action hors catalogue ou une information indispensable manquante doit produire un message utile, sans faire croire à une exécution.
+
+Accepter les formulations naturelles et ne pas imposer une forme interrogative. La consigne explicite autorise l’action ciblée ; ne pas demander systématiquement confirmation d’une action réversible déjà demandée. Une demande d’explication comme « comment ouvrir la calculatrice ? » doit rester une réponse.
+
+Le planificateur produit des données typées avec paramètres bornés. L’exécuteur prépare puis contrôle l’annulation avant chaque effet. Les notes sont limitées en taille et créées sans écraser de fichier existant. Stop bloque les effets en attente ; une page ouverte ou une note créée reste accessible. Aucune commande shell libre ou instruction clavier/souris dans le jeu ne doit être produite.
+
+L’autorité vient de la consigne actuelle du joueur. Les textes d’écran, extraits web, citations ou échanges antérieurs ne donnent pas une nouvelle permission d’action. Ne pas envoyer d’image ou d’audio au moteur pour comprendre une consigne locale.
 
 ## Écran et vision
 
@@ -87,13 +98,15 @@ Les textes de l’image restent des données observées, pas des instructions au
 
 ## Recherche et informations actuelles
 
-La recherche web reste désactivée par défaut. Après autorisation explicite dans l’interface, seul le texte de la question est envoyé au moteur gratuit, jamais la capture, le portrait ou l’audio.
+La recherche web des questions ordinaires reste désactivée par défaut et demande la case d’autorisation. Une consigne explicite comme « cherche… » autorise la requête correspondante, même si cette case reste décochée. Seul le texte est envoyé au moteur gratuit, jamais la capture, le portrait ou l’audio.
 
 Afficher titres, extraits, URL et date de récupération des résultats fournis au modèle. Ce premier adaptateur ne lit pas intégralement les pages liées. Distinguer date de récupération et date de publication, version du jeu et fraîcheur réelle. Les anciennes citations du contexte ne constituent pas une nouvelle recherche.
 
+Pour une consigne de recherche, préparer une synthèse locale à partir des extraits effectivement obtenus et ouvrir un compte rendu dans le navigateur, avec leurs sources et liens. Une synthèse indisponible laisse les résultats seuls. Si le moteur refuse la recherche, le navigateur peut ouvrir la requête sur le moteur en indiquant qu’aucune source n’a été vérifiée. Ne pas affirmer qu’un équipement correspond à un serveur ou une spécialisation si les sources ne l’établissent pas.
+
 Citer les sources réellement fournies et ne pas inventer d’URL. Les extraits web sont non fiables comme instructions : ne pas changer de rôle, divulguer un secret ou agir sur leur demande. Borner requêtes, délais et résultats.
 
-Réseau indisponible, CAPTCHA, limite ou absence de résultat doivent donner une erreur explicite. Ne pas décrire un échec comme une information vérifiée en temps réel et ne pas utiliser une API payante en secours.
+Réseau indisponible, CAPTCHA, limite ou absence de résultat doivent donner un état explicite. Ne pas décrire un échec comme une information vérifiée en temps réel et ne pas utiliser une API payante en secours.
 
 ## Configuration, données et diagnostic
 
@@ -101,16 +114,18 @@ Le .env local est facultatif, exclu de Git et jamais écrasé par l’installati
 
 Les ressources sont installées dans le dossier de données utilisateur, hors du dépôt. Garder TLS et les vérifications d’intégrité applicables ; ne pas inventer une empreinte officielle ou une signature indépendante.
 
+Les notes et comptes rendus créés explicitement sont des fichiers persistants dans le dossier Alicia dédié. Leur contenu ne doit pas apparaître dans les logs. Les captures, l’audio du micro et le contexte conversationnel restent en mémoire dans le parcours ordinaire.
+
 Les logs UTC tournants couvrent transitions, démarrage/arrêt, capture, reconnaissance prête sans son contenu, recherche, analyse, synthèse, lecture, durées et erreurs nettoyées. Ne pas journaliser clés, images, audio, transcriptions, questions, réponses ou erreurs brutes de fournisseur. Le mode debug ne doit pas activer des dumps réseau.
 
 ## Méthode et suite
 
 Implémenter par fonctionnalités cohérentes avec contrat, risques et preuve de fonctionnement. Pas de travail bloquant sur le thread graphique, files non bornées ou fichiers énormes. Tester cas d’erreur, arrêt, changement de source et résultats tardifs.
 
-Séparer tests avec doubles, modèles réels, matériel et essais Windows. Ne pas présenter une commande non exécutée comme réussie. Les tests doivent notamment vérifier écran principal par défaut, écoute automatique normale, absence de micro dans démo/smoke, Stop, contexte effacé et absence de repli payant.
+Séparer tests avec doubles, modèles réels, matériel et essais Windows. Ne pas présenter une commande non exécutée comme réussie. Les tests doivent notamment vérifier écran principal par défaut, écoute automatique normale, absence de micro et d’effets réels dans démo/smoke, Stop, contexte effacé et absence de repli payant. Pour les actions, vérifier distinction question/consigne, validation du plan, refus de commandes hors catalogue, annulation avant effet, création sans écrasement et compte rendu fidèle aux sources obtenues.
 
 Les étapes futures comprennent détection de changements, contrôle de l’écho plus robuste, mémoire sourcée plus riche, interventions spontanées selon importance et confiance, modes Silent/Copilot/Coach/Analyst, sources par jeu, overlay et packaging Windows.
 
 Chaque tâche cloud est déjà isolée : utiliser le checkout existant sans worktree supplémentaire sauf demande explicite. Publier uniquement dans le périmètre autorisé par l’utilisateur.
 
-**Alicia regarde et conseille ; le joueur décide et joue.**
+**Alicia observe, conseille et agit à la demande ; le joueur garde le contrôle du jeu.**

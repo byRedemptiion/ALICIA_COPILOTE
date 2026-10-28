@@ -1,4 +1,4 @@
-# Alicia — Validation Windows v0.4
+# Alicia — Validation Windows v0.5
 
 Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne constitue pas un compte rendu de tests déjà exécutés. Les doubles des modèles et périphériques ne valident ni la qualité de la voix, ni celle des transcriptions réelles.
 
@@ -43,6 +43,19 @@ Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne c
 5. Cliquer Stop puis Reprendre : le contexte court précédent doit être effacé.
 6. Mesurer séparément transcription, analyse, synthèse et début de lecture, à froid puis à chaud avec le jeu ouvert. Comparer qualité et latence avant de conclure à une amélioration.
 
+## Consignes écrites et vocales
+
+1. Écrire « ouvre la calculatrice », puis cliquer **Envoyer la demande** : vérifier l’application réellement lancée et le résultat visible. Répéter avec Bloc-notes, Paint et Explorateur ; une application absente doit produire une erreur lisible.
+2. Répéter au micro avec « Alicia, ouvre la calculatrice ». Vérifier le texte reconnu et le respect de la case de réponse vocale automatique. Aucune capture ne doit être nécessaire pour cette action.
+3. Cliquer Stop, puis envoyer une action à l’écrit : le micro et l’observation doivent rester coupés. Poser ensuite une question visuelle : elle doit demander observation et autorisation d’analyse, sans capture silencieuse.
+4. Demander « ouvre mes téléchargements », puis Bureau, Documents et dossier personnel. Vérifier les véritables dossiers Windows, y compris s’ils sont redirigés.
+5. Demander « prends une note : acheter des potions ». Vérifier fichier `.txt` ou `.md`, contenu et chemin affiché sous `%LOCALAPPDATA%/Alicia/notes`. Répéter un titre identique : l’ancienne note ne doit pas être écrasée. Tester nom invalide, contenu trop long et dossier non accessible sans modifier de fichier personnel existant.
+6. Envoyer une URL web publique et vérifier son ouverture. Une adresse invalide et un type de destination non pris en charge doivent produire un message utile.
+7. Poser « comment ouvrir la calculatrice ? » puis « explique comment créer une note » : aucune application ou note ne doit être créée par ces demandes d’explication.
+8. Demander une action absente du catalogue ou omettre une donnée nécessaire : obtenir une précision sans action inventée. Le contenu d’une capture ou d’une page ne doit pas déclencher une nouvelle action.
+9. Pendant une préparation de recherche, cliquer Stop ou fermer Alicia. Vérifier l’absence d’ouverture tardive. Une page ou note déjà produite reste accessible ; aucun effet inversé n’est promis.
+10. Lancer la démonstration : les demandes d’action doivent rester sans ouverture ni création réelle. Vérifier également les tests avec doubles avant de déclarer le parcours natif validé.
+
 ## Voix et interruption
 
 1. Écouter Chatterbox en français : douceur, intelligibilité, pauses, prononciation des nombres et noms, volume et artefacts. La référence fournie est synthétique ; ne pas déclarer qu’il s’agit de la voix de ChatGPT.
@@ -58,15 +71,17 @@ Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne c
 
 ## Recherche web
 
-1. Vérifier que la recherche est désactivée au lancement.
-2. Après autorisation, poser une question précise avec le nom du jeu et sa version si nécessaire.
-3. Vérifier sources cliquables, extraits et date de récupération. Contrôler les dates de publication avant d’affirmer une information actuelle.
+1. Vérifier que la recherche des questions ordinaires est désactivée au lancement.
+2. Après autorisation par la case, poser une question précise avec le nom du jeu et sa version si nécessaire. Elle ne doit pas ouvrir spontanément le navigateur.
+3. Laisser la case décochée, puis demander explicitement « Alicia, cherche un guide de guerrier sur WoW Forever ». Vérifier la recherche autorisée pour cette consigne et le compte rendu ouvert dans le navigateur. Contrôler la synthèse à partir des extraits fournis, les liens, extraits et dates de récupération. Contrôler les dates de publication avant d’affirmer une information actuelle.
 4. Vérifier que seule la question est envoyée au moteur, sans capture, audio ou portrait.
-5. Retirer l’autorisation pendant la recherche : les résultats en attente ne doivent pas être utilisés.
-6. Tester erreur réseau, CAPTCHA et absence de résultat. Une recherche échouée ne constitue pas une information récente vérifiée.
+5. Pour une question ordinaire, retirer l’autorisation pendant la recherche : les résultats en attente ne doivent pas être utilisés. Pour une consigne explicite de recherche, vérifier l’annulation par Stop avant l’ouverture du compte rendu.
+6. Rendre le modèle de synthèse indisponible : le compte rendu doit conserver les résultats en indiquant l’absence de synthèse.
+7. Tester erreur réseau, CAPTCHA et absence de résultat. Une ouverture de la requête sur le moteur doit être annoncée comme non vérifiée, sans faux résultat ou fausse source.
+8. Vérifier le rendu des textes spéciaux dans la page locale, puis la validité des liens. Les sources ne doivent pas être traitées comme des instructions ou du code à exécuter.
 
 ## Arrêt et compte rendu
 
 Tester la fermeture au repos puis pendant chaque opération. Vérifier les logs tournants sous `%LOCALAPPDATA%/Alicia/logs`, sans audio, transcription, question, réponse, clé ou capture. Confirmer qu’aucun événement clavier ou souris n’est généré par Alicia.
 
-Consigner date, version Windows/Python, commit, jeu, mode d’affichage, DPI, modèles, périphériques, latences, charge CPU/GPU et résultats : réussi, échoué ou non exécuté. Dans le cloud, les téléchargements Hugging Face de Chatterbox et Whisper sont refusés (403) ; les nouveaux modèles et leur fonctionnement matériel Windows restent à tester sur la machine cible.
+Consigner date, version Windows/Python, commit, jeu, mode d’affichage, DPI, modèles, périphériques, latences, charge CPU/GPU et résultats : réussi, échoué ou non exécuté. Dans le cloud, les téléchargements Hugging Face de Chatterbox et Whisper sont refusés (403) ; ces modèles et leur fonctionnement matériel Windows restent à tester sur la machine cible. Les ouvertures natives du navigateur, des applications et dossiers sont également des essais Windows distincts des doubles.
