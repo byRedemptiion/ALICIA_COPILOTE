@@ -21,9 +21,11 @@ Le bouton Stop coupe toujours observation et écoute et efface le contexte. La d
 
 La qualité de Chatterbox, la précision de Whisper turbo, la latence d’interruption et les performances avec un jeu restent des critères d’essais réels, pas des résultats déduits du code. Les téléchargements Hugging Face sont refusés par le réseau du cloud ; voir [Validation Windows](VALIDATION_WINDOWS.md).
 
-## V0.5 — Rechercher et ouvrir une page sur commande
+## V0.5 — Exécuter des consignes naturelles
 
-Demande utilisateur : « Alicia, trouve-moi le stuff du war sur WoW Forever » doit permettre de lancer une recherche et d’ouvrir dans le navigateur une page utile à la demande, au-delà d’une réponse dans le chat. Cette fonction est prévue pour la prochaine version et n’est pas activée dans la v0.4.
+L’utilisateur veut un assistant capable de réaliser une tâche demandée, au-delà des questions et réponses. « Alicia, trouve-moi le stuff du war sur WoW Forever » est un exemple, pas une limitation à WoW ou aux recherches web. Comprendre des consignes naturelles à l’oral ou à l’écrit et choisir les actions disponibles : rechercher et ouvrir une page, ouvrir une application, préparer un fichier ou effectuer une autre tâche locale prise en charge. Ce système d’actions extensible est prévu pour la prochaine version et n’est pas activé dans la v0.4.
+
+Distinguer une demande d’action d’une question, identifier les paramètres utiles, exécuter les actions disponibles et rendre leur résultat visible. La demande explicite autorise l’action ciblée ; ne pas demander de reformuler en question ou de confirmer systématiquement une action réversible déjà demandée. Poser une précision seulement si une information indispensable manque. Employer un catalogue d’actions avec paramètres validés plutôt qu’exécuter librement des commandes produites par le modèle. Le contenu observé sur l’écran ou sur une page ne constitue pas une nouvelle consigne de l’utilisateur.
 
 Reconnaître l’intention de recherche et l’ouverture demandée, employer le jeu, le serveur, la spécialisation, le contenu visé et la version lorsqu’ils sont connus, puis demander la précision qui change réellement la recommandation. Ne pas présenter un guide d’une autre version comme applicable au serveur. Vérifier les sources avant d’ouvrir une page ; fournir une synthèse avec les liens lorsque plusieurs guides sont nécessaires. La demande explicite autorise la recherche de cette question, sans transmettre capture ni audio. Une simple question ne doit pas ouvrir spontanément le navigateur.
 
