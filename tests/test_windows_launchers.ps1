@@ -24,6 +24,8 @@ $global:aliciaHarnessPrepareVoiceFails = $false
 $global:aliciaHarnessProcessExitCode = 0
 $global:aliciaHarnessProcesses = [Collections.Generic.List[object]]::new()
 $global:aliciaHarnessShortcuts = [Collections.Generic.List[object]]::new()
+$global:aliciaHarnessServerReady = $true
+$global:aliciaHarnessServerStarts = [Collections.Generic.List[object]]::new()
 
 function Assert-That([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "Assertion failed: $Message" }
@@ -39,6 +41,8 @@ function Reset-Fixture {
     $global:aliciaHarnessProcessExitCode = 0
     $global:aliciaHarnessProcesses.Clear()
     $global:aliciaHarnessShortcuts.Clear()
+    $global:aliciaHarnessServerReady = $true
+    $global:aliciaHarnessServerStarts.Clear()
     foreach ($name in $trackedVariables) {
         [Environment]::SetEnvironmentVariable($name, "before-test-$name", 'Process')
     }
@@ -66,6 +70,7 @@ function Invoke-RestMethod {
     param([string]$Uri, [string]$Method, [int]$TimeoutSec)
     $global:aliciaHarnessRequests.Add($Uri)
     if ($Uri -eq 'http://127.0.0.1:11434/api/version') {
+        if (-not $global:aliciaHarnessServerReady) { throw 'Local test server is not ready yet.' }
         return [pscustomobject]@{ version = 'test-local-server' }
     }
     if ($Uri -eq 'http://127.0.0.1:11434/api/tags') {
@@ -79,6 +84,12 @@ function Invoke-RestMethod {
 function Start-Process {
     [CmdletBinding()]
     param([string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory, [string]$WindowStyle, [switch]$Wait, [switch]$PassThru)
+    if ($FilePath -eq $global:aliciaHarnessOllama -and ($ArgumentList -join ' ') -eq 'serve') {
+        if ($global:aliciaHarnessServerReady) { throw 'A ready local server must not be started again.' }
+        $global:aliciaHarnessServerStarts.Add([pscustomobject]@{ WindowStyle = $WindowStyle })
+        $global:aliciaHarnessServerReady = $true
+        return
+    }
     if ((Split-Path -Leaf $FilePath) -ne 'pythonw.exe') {
         throw 'A ready local server must not be started again.'
     }
@@ -255,8 +266,16 @@ if ($global:aliciaHarnessPrepareVoiceFails -and $args -contains '--prepare-audio
     Assert-That ($process.FilePath -eq $pythonExecutable) 'Windowless launch uses the installed pythonw executable'
     Assert-That (($process.Arguments -join ' ') -eq '-m alicia') 'Windowless process launches the application module'
     Assert-That ($process.WorkingDirectory -eq $fixtureRoot) 'Windowless process preserves project paths with spaces and accents'
-    Assert-That ($process.WindowStyle -eq 'Hidden' -and $process.Wait -and $process.PassThru) 'Windowless launch waits for application exit without a terminal'
+    Assert-That ($process.WindowStyle -eq 'Normal' -and $process.Wait -and $process.PassThru) 'pythonw receives a normal GUI startup style while retaining no console'
     Assert-That ($process.TtsProvider -eq 'chatterbox' -and $process.WhisperDevice -eq 'auto') 'Windowless process inherits the free updated audio settings'
+    Assert-EnvironmentRestored
+
+    Reset-Fixture
+    $global:aliciaHarnessServerReady = $false
+    & (Join-Path $fixtureScripts 'start_alicia.ps1') -Windowless 3>$null 6>$null
+    Assert-That ($global:aliciaHarnessServerStarts.Count -eq 1) 'A missing local server is started once'
+    Assert-That ($global:aliciaHarnessServerStarts[0].WindowStyle -eq 'Hidden') 'The Ollama background server keeps its hidden window style'
+    Assert-That ($global:aliciaHarnessProcesses[0].WindowStyle -eq 'Normal') 'The GUI stays visible when launched after a hidden Ollama server'
     Assert-EnvironmentRestored
 
     Reset-Fixture
@@ -287,12 +306,12 @@ if ($global:aliciaHarnessPrepareVoiceFails -and $args -contains '--prepare-audio
     Assert-That ($global:aliciaHarnessProcesses.Count -eq 0 -and $global:aliciaHarnessCalls.Count -eq 0) 'Missing interpreter never triggers a download'
     Assert-EnvironmentRestored
 
-    Write-Host "Launcher harness passed: 10 scenarios, $script:assertions assertions; no network, native speech or installed tools used."
+    Write-Host "Launcher harness passed: 11 scenarios, $script:assertions assertions; no network, native speech or installed tools used."
 } finally {
     $env:Path = $originalCommandPath
     foreach ($name in $trackedVariables) {
         [Environment]::SetEnvironmentVariable($name, $originalVariables[$name], 'Process')
     }
     if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
-    Remove-Variable -Name aliciaHarnessCalls, aliciaHarnessRequests, aliciaHarnessModelPresent, aliciaHarnessPrepareVoiceFails, aliciaHarnessUv, aliciaHarnessOllama, aliciaHarnessProcessExitCode, aliciaHarnessProcesses, aliciaHarnessShortcuts, aliciaHarnessDesktop, aliciaHarnessShell -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name aliciaHarnessCalls, aliciaHarnessRequests, aliciaHarnessModelPresent, aliciaHarnessPrepareVoiceFails, aliciaHarnessUv, aliciaHarnessOllama, aliciaHarnessProcessExitCode, aliciaHarnessProcesses, aliciaHarnessShortcuts, aliciaHarnessDesktop, aliciaHarnessShell, aliciaHarnessServerReady, aliciaHarnessServerStarts -Scope Global -ErrorAction SilentlyContinue
 }

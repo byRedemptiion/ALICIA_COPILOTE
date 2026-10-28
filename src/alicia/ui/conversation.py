@@ -4,7 +4,7 @@ import math
 import time
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QProgressBar, QPushButton
 
 from alicia.audio.listening import list_input_devices
 from alicia.audio.ports import SpeechError
@@ -18,6 +18,8 @@ class ConversationController(QObject):
     partial_received = Signal(int, int, str)
     failed = Signal(int, str)
     activity_changed = Signal(int, bool)
+    diagnostic_received = Signal(int, str)
+    level_received = Signal(int, float)
 
     def __init__(self, window):
         super().__init__(window)
@@ -34,6 +36,7 @@ class ConversationController(QObject):
         self.resume_not_before = 0.0
         self.interrupting = False
         self.speech_can_be_interrupted = False
+        self.ready_serial = None
         self.cooldown_timer = QTimer(self)
         self.cooldown_timer.setSingleShot(True)
         self.cooldown_timer.setTimerType(Qt.PreciseTimer)
@@ -42,6 +45,8 @@ class ConversationController(QObject):
         self.partial_received.connect(self._partial)
         self.failed.connect(self._failed)
         self.activity_changed.connect(self._activity)
+        self.diagnostic_received.connect(self._diagnostic)
+        self.level_received.connect(self._level)
         self.timer = QTimer(self)
         self.timer.setInterval(window.settings.capture_interval_ms)
         self.timer.timeout.connect(self._refresh_screen)
@@ -79,6 +84,13 @@ class ConversationController(QObject):
         )
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        self.level = QProgressBar()
+        self.level.setRange(0, 100)
+        self.level.setValue(0)
+        self.level.setFormat("Entrée du microphone")
+        self.level.setMaximumHeight(18)
+        self.level.setVisible(self.window.settings.stt_provider == "whisper")
+        layout.addWidget(self.level)
 
     def refresh_controls(self):
         if not hasattr(self, "toggle"):
@@ -90,11 +102,11 @@ class ConversationController(QObject):
             or (
                 self.window.session.active
                 and self.window.consent.isChecked()
-                and not self.window.jobs
+                and not self.window.foreground_busy
             )
         )
-        self.devices.setEnabled(not active and not self.window.jobs)
-        self.device_refresh.setEnabled(not active and not self.window.jobs)
+        self.devices.setEnabled(not active and not self.window.foreground_busy)
+        self.device_refresh.setEnabled(not active and not self.window.foreground_busy)
 
     def observation_changed(self):
         if self.window.session.active and self.continuous.isChecked():
@@ -112,6 +124,8 @@ class ConversationController(QObject):
             self.window.capture(background=True)
 
     def refresh_devices(self):
+        if self.window.queue_after_preview("devices"):
+            return
         if not self.window.jobs:
             self.window._job("devices", list_input_devices, self._devices_ready)
 
@@ -124,6 +138,8 @@ class ConversationController(QObject):
     def toggle_listening(self):
         if self.listener is not None and self.listener.active:
             self.stop_listening()
+            return
+        if self.window.queue_after_preview("listen"):
             return
         if (
             not self.window.session.active
@@ -139,6 +155,10 @@ class ConversationController(QObject):
             return
         self.serial += 1
         serial = self.serial
+        self.status.setText("Initialisation du micro et du modèle de reconnaissance…")
+        self.window._event(
+            "Initialisation de l’écoute locale demandée. Aucun audio envoyé sur Internet."
+        )
         try:
             self.listener = self.listener_factory(
                 self.window.settings.whisper_model_path
@@ -149,14 +169,17 @@ class ConversationController(QObject):
                 on_error=lambda message: self.failed.emit(serial, message),
                 on_activity=lambda active: self.activity_changed.emit(serial, active),
             )
+            if hasattr(self.listener, "on_status"):
+                self.listener.on_status = lambda status: self.diagnostic_received.emit(
+                    serial, status
+                )
+            if hasattr(self.listener, "on_level"):
+                self.listener.on_level = lambda level: self.level_received.emit(serial, level)
             self.listener.start(self.devices.currentData())
         except SpeechError as error:
             self.window._error(str(error), stop_microphone=True)
+            self.status.setText("Micro indisponible · " + str(error))
             return
-        self.status.setText("Initialisation du micro local…")
-        self.window._event(
-            "Écoute locale activée. Mot d’activation : Alicia. Aucun audio envoyé sur Internet."
-        )
         self.refresh_controls()
 
     def stop_listening(self):
@@ -180,6 +203,7 @@ class ConversationController(QObject):
         self.generation = None
         if hasattr(self, "status"):
             self.status.setText("Micro coupé · aucune écoute en cours.")
+            self.level.setValue(0)
             self.refresh_controls()
 
     def _valid(self, serial, epoch):
@@ -198,7 +222,37 @@ class ConversationController(QObject):
             return
         if active:
             self.status.setText("En attente de « Alicia » · reconnaissance française locale.")
+            if self.ready_serial != serial:
+                self.ready_serial = serial
+                self.window._event("Microphone prêt · dites « Alicia » pour donner une consigne.")
+        elif self.listener is not None and not self.listener.active:
+            self.status.setText("Micro arrêté · utilisez Reprendre pour relancer l’écoute.")
+            self.level.setValue(0)
         self.refresh_controls()
+
+    def _diagnostic(self, serial, state):
+        if serial != self.serial or self.listener is None:
+            return
+        messages = {
+            "waiting_model": "Modèle occupé · attente du chargement précédent…",
+            "loading_model": "Chargement du modèle de reconnaissance local…",
+            "cuda_probe": "Vérification de la carte graphique pour la reconnaissance…",
+            "opening_microphone": "Ouverture du microphone…",
+            "ready": "En attente de « Alicia » · reconnaissance française locale.",
+            "transcribing": "Parole détectée · reconnaissance de votre demande…",
+            "unrecognized": "Parole peu claire · dites « Alicia » puis votre demande.",
+        }
+        if state in {"ready", "transcribing", "unrecognized"} and self.phase != "idle":
+            return
+        if state == "ready" and self.gate.armed:
+            return
+        if state in messages:
+            self.status.setText(messages[state])
+
+    def _level(self, serial, value):
+        if serial == self.serial and self.listener is not None and math.isfinite(value):
+            # A visual input indicator, not a stored waveform or a dB reading.
+            self.level.setValue(round(max(0.0, min(1.0, value * 4)) * 100))
 
     def _partial(self, serial, epoch, text):
         if (
@@ -238,6 +292,7 @@ class ConversationController(QObject):
 
     def pause(self):
         self.input_epoch += 1
+        self.level.setValue(0)
         if self.listener is not None:
             self.listener.pause()
 
@@ -391,6 +446,7 @@ class ConversationController(QObject):
 
     def permission_changed(self):
         if not self.window.consent.isChecked():
+            self.window.clear_pending_requests()
             self.window.actions.cancel()
             if {"research", "analysis"}.intersection(self.window.jobs):
                 self.window.cancel_pending_analysis()
@@ -413,3 +469,4 @@ class ConversationController(QObject):
     def _failed(self, serial, message):
         if serial == self.serial:
             self.window._error(message, stop_microphone=True)
+            self.status.setText("Micro indisponible · " + message)

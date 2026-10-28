@@ -8,7 +8,7 @@ Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne c
 2. Vérifier la préparation d’Ollama, de Qwen3-VL, des dépendances verrouillées, de Whisper turbo et du moteur Chatterbox séparé. La console reste visible pendant les téléchargements, puis se ferme après réussite.
 3. Provoquer une erreur de préparation sans détruire de fichiers existants : la console doit rester lisible. Relancer ensuite l’installation et vérifier la réutilisation des ressources complètes.
 4. Vérifier qu’un ancien `.env` est conservé, qu’aucune clé API n’est demandée et qu’aucun moteur payant n’est activé dans le parcours gratuit.
-5. Utiliser le raccourci Alicia du Bureau ou Lancer_Alicia.vbs : aucune console ne doit rester visible pendant l’utilisation. Vérifier l’icône arrondie, la transparence des coins et le portrait par défaut. L’ancien Lancer_Alicia.bat peut afficher brièvement sa console avant de déléguer au VBS.
+5. Utiliser le raccourci Alicia du Bureau ou Lancer_Alicia.vbs : la fenêtre graphique doit être visible et aucune console ne doit rester visible pendant l’utilisation. Comparer avec le lancement Debug ; le mode normal ne doit pas conserver seulement un processus en arrière-plan sans fenêtre. Vérifier l’icône arrondie, la transparence des coins et le portrait par défaut. L’ancien Lancer_Alicia.bat peut afficher brièvement sa console avant de déléguer au VBS.
 6. Tester un chemin de lancement indisponible ou un code de sortie en erreur : obtenir une boîte de dialogue explicite. Utiliser Lancer_Alicia_Debug.bat et vérifier que sa console reste disponible pour le diagnostic.
 7. Déconnecter Internet après une installation complète : capture, reconnaissance, analyse et voix doivent rester locales. Un modèle manquant doit produire une erreur, sans téléchargement ou repli automatique.
 8. Lancer la démonstration et le smoke test : ils ne doivent ouvrir aucun micro ou lancer de modèle réel sans action prévue.
@@ -21,17 +21,18 @@ Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne c
 4. Tester un second moniteur, une autre mise à l’échelle et un jeu fenêtré ou sans bordure. Noter les cas noirs, figés ou incomplets.
 5. Choisir une source avancée, puis Stop et Reprendre ; aucun résultat d’une ancienne source ne doit remplacer la nouvelle session.
 6. Vérifier que l’actualisation de l’aperçu ne demande aucune analyse IA à chaque image.
+7. Observer plusieurs actualisations : Capturer et Envoyer la demande ne doivent pas alterner périodiquement entre actif et désactivé. Cliquer pendant une capture d’aperçu ; la demande doit attendre sa fin et être exécutée une seule fois avec son texte initial. Tester Stop et changement de source pendant cette attente : aucune demande tardive ne doit partir.
 
 ## Reconnaissance et réveil
 
-1. Vérifier l’état visible du micro au lancement normal. Autoriser les applications de bureau dans les paramètres Windows si nécessaire.
+1. Vérifier l’état visible du micro au lancement normal. Distinguer la demande d’initialisation, le chargement du modèle, sa vérification GPU éventuelle, l’ouverture du micro et l’état prêt. Le message **En attente de « Alicia »** et l’événement de journal **Microphone prêt** ne doivent apparaître qu’après l’ouverture réussie du flux. Autoriser les applications de bureau dans les paramètres Windows si nécessaire.
 2. Parler sans dire Alicia : aucune question ne doit partir au modèle.
 3. Dire « Alicia, décris cet écran », puis laisser un silence. Vérifier texte reconnu, capture fraîche et réponse.
 4. Dire « Alicia » seule, puis une question avant huit secondes, avec des pauses courtes puis longues. Vérifier qu’aucun début de question n’est perdu. Attendre plus de huit secondes et vérifier l’expiration du réveil.
-5. Répéter un ensemble de phrases connues en français, avec accent, noms d’objets et bruit du jeu, en comparant les mots prononcés au texte affiché. Ne pas qualifier la reconnaissance de meilleure à partir d’un seul exemple.
+5. Répéter un ensemble de phrases connues en français, à volume normal puis plus faible, avec accent, noms d’objets et bruit du jeu, en comparant les mots prononcés au texte affiché. Vérifier que la jauge **Entrée du microphone** réagit au son, sans confondre niveau reçu et transcription réussie. Ne pas qualifier la reconnaissance de meilleure à partir d’un seul exemple.
 6. Tester silence, musique, sons du jeu et parole indistincte : ils ne doivent pas produire de question inventée. Une phrase peu fiable doit être rejetée ; le modèle de réponse ne doit pas la réinterpréter comme une autre intention.
 7. Tester le mode automatique avec et sans CUDA utilisable. Consigner le moteur réellement utilisé, les erreurs éventuelles et la latence ; une présence de carte NVIDIA ne suffit pas à prouver son utilisation.
-8. Cliquer Stop pendant écoute ou traitement : observation, écoute et résultats tardifs doivent être coupés. Reprendre relance le parcours sans réutiliser une ancienne transcription.
+8. Cliquer Stop pendant écoute ou traitement : observation, écoute et résultats tardifs doivent être coupés. Reprendre relance le parcours sans réutiliser une ancienne transcription. Répéter rapidement Stop/Reprendre pendant le chargement initial : vérifier qu’un nouveau chargement attend le précédent, sans multiplication des modèles en mémoire ni état prêt provenant d’une ancienne session.
 9. Débrancher le micro ou rendre le modèle indisponible : obtenir une erreur nettoyée sans crash, boucle ni repli payant.
 
 ## Réponses et contexte
@@ -82,6 +83,8 @@ Cette procédure décrit les essais à effectuer sur la machine cible. Elle ne c
 
 ## Arrêt et compte rendu
 
-Tester la fermeture au repos puis pendant chaque opération. Vérifier les logs tournants sous `%LOCALAPPDATA%/Alicia/logs`, sans audio, transcription, question, réponse, clé ou capture. Confirmer qu’aucun événement clavier ou souris n’est généré par Alicia.
+Tester la fermeture au repos puis pendant chaque opération. Vérifier les logs tournants sous `%LOCALAPPDATA%/Alicia/logs`, sans audio, transcription, question, réponse, clé ou capture. Les états de chargement et de disponibilité doivent suffire à distinguer une écoute demandée d’un flux réellement ouvert. Confirmer qu’aucun événement clavier ou souris n’est généré par Alicia.
+
+Vérifier les notes et comptes rendus HTML créés sur demande sous `%LOCALAPPDATA%/Alicia/notes`. Les comptes rendus peuvent contenir la requête, la synthèse et les extraits. Stop efface le contexte en mémoire mais doit conserver ces fichiers ; leur conservation se termine par une suppression manuelle.
 
 Consigner date, version Windows/Python, commit, jeu, mode d’affichage, DPI, modèles, périphériques, latences, charge CPU/GPU et résultats : réussi, échoué ou non exécuté. Dans le cloud, les téléchargements Hugging Face de Chatterbox et Whisper sont refusés (403) ; ces modèles et leur fonctionnement matériel Windows restent à tester sur la machine cible. Les ouvertures natives du navigateur, des applications et dossiers sont également des essais Windows distincts des doubles.

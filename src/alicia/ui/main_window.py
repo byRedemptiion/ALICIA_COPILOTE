@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         self.startup_timer.setSingleShot(True)
         self.startup_timer.timeout.connect(self._begin_automatic)
         self.background_capture_active = False
+        self._pending_foreground = None
         self.conversation = ConversationController(self)
         self.playback = SpeechPlayback(self)
         self.playback.speaking_changed.connect(self._speaking)
@@ -351,6 +352,7 @@ class MainWindow(QMainWindow):
         if kind == "capture":
             self.background_capture_active = False
         self._update_controls()
+        self._run_pending_foreground()
         self.actions.job_finished()
         self.conversation.job_finished(kind)
         if kind == "windows" and self.autostart_pending and not self.close_pending:
@@ -361,7 +363,7 @@ class MainWindow(QMainWindow):
     def _update_controls(self):
         if not hasattr(self, "analyze_button"):
             return
-        busy = bool(self.jobs)
+        busy = self.foreground_busy
         self.refresh_button.setEnabled(not busy)
         self.windows.setEnabled(not busy)
         self.start_button.setEnabled(
@@ -386,7 +388,52 @@ class MainWindow(QMainWindow):
         )
         self.conversation.refresh_controls()
 
+    @property
+    def preview_busy(self):
+        return self.background_capture_active and self.jobs == {"capture"}
+
+    @property
+    def foreground_busy(self):
+        return bool(self.jobs) and not self.preview_busy
+
+    def queue_after_preview(self, kind, **parameters):
+        """Keep one frozen user operation while a periodic preview finishes."""
+        if not self.preview_busy or self.close_pending:
+            return False
+        self._pending_foreground = (self.session.generation, kind, parameters)
+        return True
+
+    def clear_pending_requests(self):
+        self._pending_foreground = None
+
+    def _run_pending_foreground(self):
+        if self.jobs or self._pending_foreground is None:
+            return
+        generation, kind, parameters = self._pending_foreground
+        self._pending_foreground = None
+        if generation != self.session.generation or self.close_pending:
+            return
+        if kind == "request":
+            self.dispatch_request(**parameters)
+        elif kind == "capture":
+            self.capture(**parameters)
+        elif kind == "analyze":
+            self.question.setPlainText(parameters["question"])
+            self.analyze()
+        elif kind == "speak":
+            self.speak()
+        elif kind == "refresh":
+            self.refresh_windows()
+        elif kind == "devices":
+            self.conversation.refresh_devices()
+        elif kind == "listen":
+            self.conversation.toggle_listening()
+        elif kind == "start":
+            self.start()
+
     def refresh_windows(self):
+        if self.queue_after_preview("refresh"):
+            return
         if self.jobs:
             return
         self.stop()
@@ -416,6 +463,8 @@ class MainWindow(QMainWindow):
             self.start()
 
     def start(self):
+        if self.queue_after_preview("start"):
+            return
         window = self.windows.currentData()
         if window is None or self.jobs:
             return
@@ -433,6 +482,7 @@ class MainWindow(QMainWindow):
                 self.conversation.toggle_listening()
 
     def stop(self):
+        self.clear_pending_requests()
         self.actions.cancel()
         self.startup_timer.stop()
         self.autostart_pending = False
@@ -455,6 +505,8 @@ class MainWindow(QMainWindow):
         self._update_controls()
 
     def capture(self, vocal=False, *, background=False):
+        if not background and self.queue_after_preview("capture", vocal=vocal):
+            return
         if self.jobs or not self.session.active:
             return
         self.background_capture_active = background
@@ -508,6 +560,8 @@ class MainWindow(QMainWindow):
         )
 
     def analyze(self):
+        if self.queue_after_preview("analyze", question=self.question.toPlainText()):
+            return
         if (
             self.jobs
             or not self.session.active
@@ -605,9 +659,13 @@ class MainWindow(QMainWindow):
         # QPushButton.clicked supplies a boolean; it is not request text.
         if not isinstance(text, str):
             text = self.question.toPlainText()
+        if self.queue_after_preview("request", text=text, vocal=vocal):
+            return True
         return self.actions.submit(text, vocal=vocal)
 
     def speak(self):
+        if self.queue_after_preview("speak"):
+            return
         text = self.response_text or (
             self.session.result.text if self.session.result is not None else ""
         )
@@ -667,6 +725,7 @@ class MainWindow(QMainWindow):
             close_speech()
 
     def cancel_pending_analysis(self):
+        self.clear_pending_requests()
         self.actions.cancel()
         self.session.generation += 1
         self.session.result = None

@@ -31,6 +31,8 @@ Si winget manque, mettre à jour **App Installer** depuis Microsoft Store. Les s
 
 Utiliser le raccourci **Alicia** ou double-cliquer sur **Lancer_Alicia.vbs**. **Lancer_Alicia.bat** appelle le même lancement masqué, mais peut afficher brièvement une console. Les fournisseurs gratuits sont imposés pour ce processus, sans réécrire le `.env`. Ollama est démarré si nécessaire et le modèle est vérifié sans téléchargement caché.
 
+La fenêtre graphique d’Alicia reste visible ; le masquage concerne la console du lanceur et celle d’Ollama. Si le lancement normal ne montre aucune fenêtre alors que le lanceur Debug fonctionne, vérifier que la nouvelle archive a été entièrement extraite et que le raccourci vise ce nouveau dossier.
+
 Une boîte de dialogue signale un échec du lancement masqué. Pour garder la console et diagnostiquer l’installation, utiliser **Lancer_Alicia_Debug.bat**. Les états, erreurs et contrôles restent visibles dans l’interface d’Alicia.
 
 Au lancement normal, **l’écran principal et le microphone sont actifs**. Dire « Alicia » suivi d’une question ou d’une consigne, puis laisser un silence. Pour une question visuelle, passer dans le jeu ou le navigateur sur cet écran et minimiser Alicia pour montrer le contenu. La sélection d’une autre source reste une option avancée.
@@ -74,14 +76,19 @@ Whisper large-v3-turbo remplace le petit modèle précédent. Il traite le fran�
 
 Vérifier le texte affiché : une référence ambiguë et une mauvaise transcription sont deux problèmes différents. Le contexte court aide le suivi d’une question ; il ne corrige pas silencieusement les mots du joueur.
 
+Une demande d’activation ne signifie pas que le micro est déjà prêt. L’interface affiche le chargement du modèle, sa vérification GPU éventuelle, puis l’ouverture du micro. Attendre **En attente de « Alicia » · reconnaissance française locale.** La jauge **Entrée du microphone** indique ensuite le niveau reçu ; elle ne conserve pas le son. Stop puis Reprendre attend la fin d’un éventuel chargement précédent, au lieu de charger plusieurs modèles en parallèle.
+
 L’écoute ordinaire est suspendue pendant le traitement. Pendant la lecture réelle, la détection reste limitée à la commande d’interruption. Dire clairement **« Alicia, stop »**, puis laisser un bref silence. Le délai dépend du micro et de la reconnaissance. Un casque réduit l’écho ; une annulation d’écho complète et l’interruption instantanée ne sont pas garanties.
 
 ## Diagnostic
 
-- **L’application ne s’ouvre pas** : lire la boîte de dialogue, puis lancer `Lancer_Alicia_Debug.bat`.
+- **L’application ne s’ouvre pas** : lire la boîte de dialogue, puis lancer `Lancer_Alicia_Debug.bat`. Si Debug fonctionne mais pas le raccourci, utiliser les lanceurs de la nouvelle archive : la fenêtre graphique doit rester visible, même sans terminal.
 - **Modèle audio absent** : relancer l’installateur ou la commande de préparation correspondante. Aucun service payant ne prend le relais.
 - **Reconnaissance incorrecte** : vérifier le micro, réduire le bruit du jeu et comparer les mots affichés avec la phrase dite.
 - **Micro indisponible** : autoriser les applications de bureau dans Windows, corriger le périphérique puis utiliser Reprendre.
+- **Micro sans réponse et sans erreur** : attendre l’état **En attente de « Alicia »**, puis vérifier la jauge **Entrée du microphone**. Si elle reste immobile quand vous parlez, cliquer Stop, lister les micros, sélectionner l’entrée voulue et Reprendre. Si le niveau bouge, dire clairement « Alicia, ouvre la calculatrice », puis laisser un silence et vérifier le texte reconnu.
+- **Chargement prolongé** : le premier démarrage du modèle peut prendre du temps. Lire son état affiché ; des clics Stop/Reprendre répétés ne lancent pas d’autres chargements en parallèle. Le journal distingue la demande d’écoute et le micro réellement prêt, sans enregistrer les paroles.
+- **Capturer semblait clignoter** : l’aperçu automatique conserve désormais l’état des boutons. Une demande manuelle envoyée pendant la capture d’aperçu est mise en attente, puis exécutée après celle-ci ; Stop annule cette attente.
 - **Écran incorrect** : vérifier quel écran est principal dans Windows, y afficher le jeu ou choisir une autre source.
 - **Réponse ou voix lente** : mesurer à chaud avec le jeu ouvert ; vérifier si les moteurs utilisent CPU ou GPU. Kokoro reste disponible explicitement pour une synthèse plus légère.
 - **Interruption manquée** : dire la commande complète, utiliser un casque et vérifier le micro ; le bouton Arrêter la voix reste accessible.
@@ -89,6 +96,6 @@ L’écoute ordinaire est suspendue pendant le traitement. Pendant la lecture r�
 - **Application ou dossier introuvable** : utiliser un nom du catalogue et vérifier sa présence sur Windows. Une erreur n’est pas annoncée comme une ouverture réussie.
 - **Note indisponible** : vérifier le dossier indiqué et ses droits d’écriture. Les fichiers existants sont préservés.
 
-La recherche des questions ordinaires reste désactivée par défaut. Une consigne explicite de recherche autorise la requête correspondante. Captures, audio et contexte restent locaux dans le parcours gratuit ; les logs ne contiennent pas leur contenu.
+La recherche des questions ordinaires reste désactivée par défaut. Une consigne explicite de recherche autorise la requête correspondante. Captures, audio et contexte restent locaux dans le parcours gratuit ; les logs ne contiennent pas leur contenu. Les notes et comptes rendus HTML demandés persistent sous `%LOCALAPPDATA%/Alicia/notes` jusqu’à leur suppression manuelle. Les comptes rendus peuvent contenir requête, synthèse et extraits ; Stop efface la conversation en mémoire et conserve ces fichiers.
 
 Les tests cloud utilisent des doubles pour les modèles et périphériques. Les téléchargements Hugging Face y sont bloqués (403) ; suivre [Validation Windows](VALIDATION_WINDOWS.md) pour les essais réels sur le PC cible.

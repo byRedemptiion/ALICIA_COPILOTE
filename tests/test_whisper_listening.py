@@ -1,6 +1,7 @@
 import array
 import threading
 import time
+import wave
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -9,6 +10,7 @@ import pytest
 from alicia.audio import whisper_listening as module
 from alicia.audio.ports import SpeechError
 from alicia.audio.whisper_listening import WhisperListener, _PhraseBuffer, _rms, _transcribe
+from alicia.resources import VOICE_REFERENCE
 
 
 def pcm(amplitude=0, seconds=0.05, rate=16000):
@@ -447,3 +449,154 @@ def test_mode_switch_during_inference_discards_late_command(listener, monkeypatc
     release.set()
     wait_until(lambda: not fixture.listener._decoding.is_set())
     assert fixture.texts == []
+
+
+def test_low_volume_real_synthetic_french_speech_reaches_neural_decoder():
+    """The former .006 floor discarded this whole utterance before Whisper."""
+    import numpy as np
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    with wave.open(str(VOICE_REFERENCE)) as reference:
+        speech = (
+            module._resample_audio(
+                reference.readframes(reference.getnframes()), reference.getframerate()
+            )
+            * 0.03
+        )
+    samples = np.concatenate([np.zeros(16000, np.float32), speech, np.zeros(16000, np.float32)])
+    neural_speech = get_speech_timestamps(
+        samples,
+        VadOptions(min_speech_duration_ms=250, min_silence_duration_ms=300, speech_pad_ms=200),
+    )
+    assert sum(part["end"] - part["start"] for part in neural_speech) > 7 * 16000
+    buffer = _PhraseBuffer(16000)
+    phrases = []
+    for start in range(0, len(samples), 800):
+        data = (np.clip(samples[start : start + 800], -1, 1) * 32767).astype("<i2").tobytes()
+        phrase = buffer.push(data)
+        if phrase is not None:
+            phrases.append(phrase)
+    assert len(phrases) == 1
+    assert len(phrases[0]) > 7 * 16000 * 2
+
+
+def test_low_noise_is_not_mistaken_for_a_phrase():
+    buffer = _PhraseBuffer(16000)
+    assert all(buffer.push(pcm(0.0005)) is None for _ in range(500))
+
+
+def test_diagnostics_distinguish_model_loading_from_open_microphone(listener):
+    fixture = listener
+    started, release = threading.Event(), threading.Event()
+    statuses = []
+
+    def slow_load(*_args, **_kwargs):
+        started.set()
+        assert release.wait(3)
+        return fixture.engine
+
+    fixture.factory.side_effect = slow_load
+    fixture.listener.on_status = statuses.append
+    fixture.listener.start()
+    try:
+        assert started.wait(2)
+        assert statuses == ["waiting_model", "loading_model"]
+        assert fixture.activity == []
+        assert not fixture.device.opened.is_set()
+    finally:
+        release.set()
+    assert fixture.device.opened.wait(2)
+    wait_until(lambda: fixture.activity == [True])
+    assert statuses[-2:] == ["opening_microphone", "ready"]
+
+
+def test_level_and_transcription_diagnostics_contain_no_recording(listener, monkeypatch):
+    fixture = listener
+    statuses, levels = [], []
+    fixture.listener.on_status = statuses.append
+    fixture.listener.on_level = levels.append
+    monkeypatch.setattr(module, "_transcribe", lambda *_: "")
+    fixture.listener.start()
+    assert fixture.device.opened.wait(2)
+    push_phrase(fixture.device)
+    wait_until(lambda: "unrecognized" in statuses)
+    assert "transcribing" in statuses
+    assert levels and all(isinstance(level, float) and 0 <= level <= 1 for level in levels)
+    assert fixture.texts == []
+
+
+def test_stopped_model_initialization_cannot_emit_ready_or_open_microphone(listener):
+    fixture = listener
+    started, release = threading.Event(), threading.Event()
+    statuses = []
+
+    def slow_load(*_args, **_kwargs):
+        started.set()
+        assert release.wait(3)
+        return fixture.engine
+
+    fixture.factory.side_effect = slow_load
+    fixture.listener.on_status = statuses.append
+    fixture.listener.start()
+    assert started.wait(2)
+    fixture.listener.stop()
+    release.set()
+    wait_until(lambda: fixture.listener._thread is None)
+    assert "ready" not in statuses
+    assert not fixture.device.opened.is_set()
+
+
+def test_repeated_new_listeners_cannot_load_large_models_in_parallel(tmp_path):
+    model_files(tmp_path)
+    first_started, release_first = threading.Event(), threading.Event()
+    second_started = threading.Event()
+    first_device, second_device = FakeSoundDevice(), FakeSoundDevice()
+
+    def first_factory(*_args, **_kwargs):
+        first_started.set()
+        assert release_first.wait(3)
+        return object()
+
+    def second_factory(*_args, **_kwargs):
+        second_started.set()
+        return object()
+
+    first = WhisperListener(
+        tmp_path, Mock(), Mock(), Mock(), backend=(first_factory, first_device), device="cpu"
+    )
+    second = WhisperListener(
+        tmp_path, Mock(), Mock(), Mock(), backend=(second_factory, second_device), device="cpu"
+    )
+    first.start()
+    try:
+        assert first_started.wait(2)
+        first.stop()
+        second.start()
+        assert not second_started.wait(0.2)
+        assert not second_device.opened.is_set()
+        release_first.set()
+        assert second_started.wait(2)
+        assert second_device.opened.wait(2)
+        assert not first_device.opened.is_set()
+    finally:
+        release_first.set()
+        first.stop()
+        second.stop()
+
+
+def test_waiting_for_previous_load_remains_cancellable(listener):
+    fixture = listener
+    statuses = []
+    fixture.listener.on_status = statuses.append
+    assert module._MODEL_INITIALIZATION_LOCK.acquire(timeout=1)
+    try:
+        fixture.listener.start()
+        wait_until(lambda: "waiting_model" in statuses)
+        before = time.monotonic()
+        fixture.listener.stop()
+        wait_until(lambda: fixture.listener._thread is None)
+        assert time.monotonic() - before < 0.4
+        fixture.factory.assert_not_called()
+        assert not fixture.device.opened.is_set()
+    finally:
+        module._MODEL_INITIALIZATION_LOCK.release()

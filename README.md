@@ -14,6 +14,8 @@ La v0.5 ajoute un premier catalogue d’actions aux moteurs locaux existants : *
 
 **Lancer_Alicia.bat** reste compatible et appelle le lancement masqué ; il peut afficher brièvement une console. Une boîte de dialogue signale les erreurs du lanceur masqué. **Lancer_Alicia_Debug.bat** garde une console pour le diagnostic.
 
+Le lancement masqué garde la fenêtre d’Alicia visible : seuls ses processus de console sont cachés. L’aperçu automatique laisse les boutons stables ; une demande envoyée pendant sa capture attend sa fin avant d’être traitée.
+
 L’installateur conserve votre `.env`, prépare les dépendances verrouillées et télécharge explicitement les modèles. Chatterbox dispose d’un environnement Python séparé. Prévoir plusieurs Go pour les modèles et leurs dépendances, et un premier chargement plus lent. Le lancement et les questions ne téléchargent aucun modèle. Voir [Installation gratuite](docs/INSTALLATION_GRATUITE.md), notamment pour choisir explicitement la voix Kokoro plus légère.
 
 ## Donner une consigne à Alicia
@@ -57,13 +59,15 @@ L’[extrait audio fourni](examples/voix-francaise.wav) est un **exemple Kokoro*
 
 Whisper large-v3-turbo remplace les poids small précédents. Le français reste imposé et les transcriptions peu fiables doivent être rejetées plutôt que transformées en mots inventés. Les noms propres, accents et bruits du jeu restent à tester. La carte graphique est utilisée si l’initialisation CUDA réussit ; le mode automatique peut revenir au CPU, plus lent.
 
+Au démarrage, l’interface distingue le chargement du modèle de l’écoute réellement prête. Attendre **En attente de « Alicia »** avant de parler ; la jauge **Entrée du microphone** permet ensuite de vérifier que le son arrive. Stop puis Reprendre n’empilent pas plusieurs chargements de reconnaissance. La détection des phrases peu fortes a été ajustée ; sa précision doit encore être vérifiée avec votre micro.
+
 Les réponses privilégient les faits visibles, un conseil court et sa justification utile. L’historique aide les questions de suivi, mais l’écran actuel prime. Si « celui-là » reste ambigu ou qu’un texte est illisible, Alicia doit demander une précision. Le modèle visuel reste chargé quinze minutes après utilisation pour limiter les rechargements ; aucun gain de vitesse mesuré n’est promis.
 
 ## Recherche web et données
 
 La case **Autoriser la recherche web** est désactivée par défaut pour les questions ordinaires. Une consigne explicite comme « cherche… » autorise la recherche de cette demande. Seule la requête est envoyée au moteur, sans capture ni audio. Les extraits, liens et dates de récupération sont affichés ; les pages complètes ne sont pas lues par ce premier adaptateur. Une date de récupération n’est pas une date de publication.
 
-Les captures, le contexte court et l’audio du micro restent locaux dans le parcours gratuit. Les notes créées sur demande sont conservées sous `%LOCALAPPDATA%/Alicia/notes`, sans écraser une note existante. Les logs tournants, sous `%LOCALAPPDATA%/Alicia/logs`, ne contiennent ni capture, ni demande, ni transcription, ni réponse, ni audio. Stop ou un changement de source efface le contexte. Aucun service payant ne remplace silencieusement un moteur local absent.
+Les captures, le contexte court et l’audio du micro restent locaux dans le parcours gratuit. Les notes et comptes rendus HTML créés sur demande sont conservés sous `%LOCALAPPDATA%/Alicia/notes`, sans écraser de fichier existant. Un compte rendu contient la requête, la réponse éventuelle et les extraits des sources ; ces fichiers restent jusqu’à leur suppression manuelle. Les logs tournants, sous `%LOCALAPPDATA%/Alicia/logs`, ne contiennent ni capture, ni demande, ni transcription, ni réponse, ni audio. Stop ou un changement de source efface le contexte en mémoire et conserve les fichiers déjà créés. Aucun service payant ne remplace silencieusement un moteur local absent.
 
 ## Vérifier le développement
 
@@ -79,7 +83,7 @@ uv run --frozen alicia --smoke-test
 
 La démonstration `uv run --frozen alicia --demo` utilise une image fictive, ne démarre pas automatiquement le microphone et bloque les ouvertures ou créations réelles. Le smoke test n’exécute ni périphérique, ni modèle ou recherche réels. Les tests avec doubles ne remplacent pas les essais Windows décrits dans [Validation Windows](docs/VALIDATION_WINDOWS.md).
 
-Vérifications v0.5 : **734 tests Python réussis**, smoke test graphique sans appel IA, paquet construit avec ses ressources et **10 scénarios/141 assertions PowerShell**. Les tests d’intégration créent réellement une note et un compte rendu HTML dans des répertoires temporaires ; le navigateur, les applications et le modèle sont remplacés par des doubles. Le test web réel du cloud a préparé le repli vers le navigateur, sans ouvrir celui-ci.
+Vérifications v0.5 : **751 tests Python réussis**, smoke test graphique sans appel IA, paquet construit avec ses ressources et **11 scénarios/154 assertions PowerShell**. Les tests d’intégration créent réellement une note et un compte rendu HTML dans des répertoires temporaires ; le navigateur, les applications et le modèle sont remplacés par des doubles. Le test web réel du cloud a préparé le repli vers le navigateur, sans ouvrir celui-ci.
 
 Le moteur CPU Chatterbox a été installé et importé réellement ; son tokenizer français et le watermark fourni ont été vérifiés avec les accès réseau interdits. Ces vérifications ne produisent pas de parole Chatterbox.
 

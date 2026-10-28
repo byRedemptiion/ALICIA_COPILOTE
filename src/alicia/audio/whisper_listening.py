@@ -12,6 +12,7 @@ import math
 import queue
 import sys
 import threading
+import time
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from alicia.audio.ports import SpeechError
 
 logger = logging.getLogger("alicia.audio.whisper")
 _MAX_BUFFERED_BLOCKS = 120  # Six seconds of 50 ms mono PCM; discarded on pause/Stop.
+_MODEL_INITIALIZATION_LOCK = threading.Lock()
 
 
 def _rms(pcm: bytes) -> float:
@@ -42,7 +44,10 @@ class _PhraseBuffer:
         self.pre_roll_limit = round(sample_rate * 0.25)
         self.maximum = sample_rate * (4 if interruption else 20)
         self.minimum_speech = round(sample_rate * (0.15 if interruption else 0.25))
-        self.noise_floor = 0.002
+        # This is a coarse endpoint gate, not the speech classifier. The neural
+        # VAD below can understand quiet speech well below the old 0.006 RMS
+        # floor; rejecting it here prevented Whisper from ever receiving it.
+        self.noise_floor = 0.0002
         self.reset()
 
     def reset(self) -> None:
@@ -59,7 +64,7 @@ class _PhraseBuffer:
             return None
         data = data[: count * 2]
         rms = _rms(data)
-        voiced = rms >= max(0.006, self.noise_floor * 3)
+        voiced = rms >= max(0.001, self.noise_floor * 2.5)
         self.pre_roll.append(data)
         self.pre_roll_samples += count
         while self.pre_roll and self.pre_roll_samples > self.pre_roll_limit:
@@ -71,7 +76,7 @@ class _PhraseBuffer:
             self.pre_roll_samples -= removed
         if not self.frames:
             if not voiced:
-                self.noise_floor = max(0.0005, min(0.02, self.noise_floor * 0.98 + rms * 0.02))
+                self.noise_floor = max(0.0001, min(0.02, self.noise_floor * 0.98 + rms * 0.02))
                 return None
             self.frames = list(self.pre_roll)
             self.total = self.pre_roll_samples
@@ -205,7 +210,7 @@ def _probe_cuda_engine(engine) -> None:
         pass
 
 
-def _create_engine(factory, model_path: Path, device: str):
+def _create_engine(factory, model_path: Path, device: str, on_status=None):
     options = {
         "local_files_only": True,
         "cpu_threads": 4,
@@ -214,6 +219,8 @@ def _create_engine(factory, model_path: Path, device: str):
     if device == "auto" and _cuda_is_available():
         try:
             engine = factory(str(model_path), device="cuda", compute_type="float16", **options)
+            if on_status is not None:
+                on_status("cuda_probe")
             _probe_cuda_engine(engine)
             return engine
         except Exception as error:
@@ -221,6 +228,8 @@ def _create_engine(factory, model_path: Path, device: str):
             # missing cuDNN library must not make automatic listening unusable.
             logger.info("recognition_gpu_unavailable kind=%s", type(error).__name__)
             engine = None
+            if on_status is not None:
+                on_status("loading_model")
     selected = "cpu" if device == "auto" else device
     return factory(
         str(model_path),
@@ -255,6 +264,12 @@ class WhisperListener(LocalListener):
         self._decoding = threading.Event()
         self._interruption_mode = False
         self._audio = queue.Queue(maxsize=_MAX_BUFFERED_BLOCKS)
+        # Optional diagnostics contain only a fixed stage code or scalar level,
+        # never recorded samples or recognized text. UI can assign them before
+        # start() without changing alternative listener-factory constructors.
+        self.on_status = None
+        self.on_level = None
+        self._last_level_at = 0.0
 
     def start(self, device_index: int | None = None) -> None:
         from alicia.audio.whisper_setup import whisper_model_is_present
@@ -282,9 +297,10 @@ class WhisperListener(LocalListener):
     def _run(self, generation: int, device_index: int | None) -> None:
         try:
             factory, sounddevice = self._backend or _load_whisper()
-            engine = _create_engine(factory, self.model_path, self.device)
-            if self._stopping.is_set():
+            engine = self._initialize_engine(generation, factory)
+            if engine is None or self._stopping.is_set():
                 return
+            self._status(generation, "opening_microphone")
             device = sounddevice.query_devices(device_index, "input")
             rate = float(device.get("default_samplerate", 0))
             if (
@@ -309,6 +325,7 @@ class WhisperListener(LocalListener):
                 with self._lock:
                     if generation != self._generation or not self._running:
                         return
+                    self._status(generation, "ready")
                     self._callback(self.on_activity, True)
                 self._consume(generation, engine, sample_rate)
         except Exception as error:
@@ -333,6 +350,37 @@ class WhisperListener(LocalListener):
                 if self._thread is threading.current_thread():
                     self._thread = None
 
+    def _status(self, generation: int, stage: str) -> None:
+        with self._lock:
+            if generation == self._generation and self._running and self.on_status is not None:
+                self._callback(self.on_status, stage)
+
+    def _initialize_engine(self, generation, factory):
+        # CTranslate2 initialization cannot be interrupted inside its native
+        # constructor. A process-wide gate prevents repeated Stop/Reprendre from
+        # loading multiple large models concurrently; waiting remains cancellable.
+        self._status(generation, "waiting_model")
+        while not self._stopping.is_set():
+            if not _MODEL_INITIALIZATION_LOCK.acquire(timeout=0.1):
+                continue
+            try:
+                if self._stopping.is_set():
+                    return None
+                self._status(generation, "loading_model")
+                engine = _create_engine(
+                    factory,
+                    self.model_path,
+                    self.device,
+                    on_status=lambda stage: self._status(generation, stage),
+                )
+                if self._stopping.is_set():
+                    del engine
+                    return None
+                return engine
+            finally:
+                _MODEL_INITIALIZATION_LOCK.release()
+        return None
+
     def _consume(self, generation: int, engine, sample_rate: int) -> None:
         segmenter = _PhraseBuffer(sample_rate)
         previous_epoch = None
@@ -350,6 +398,11 @@ class WhisperListener(LocalListener):
                 )
             if not current:
                 continue
+            now = time.monotonic()
+            if now - self._last_level_at >= 0.2:
+                self._last_level_at = now
+                if self.on_level is not None:
+                    self._callback(self.on_level, min(1.0, _rms(data)))
             if epoch != previous_epoch:
                 with self._lock:
                     interruption = self._interruption_mode
@@ -363,9 +416,13 @@ class WhisperListener(LocalListener):
             if phrase is None:
                 continue
             self._decoding.set()
+            self._status(generation, "transcribing")
             try:
                 transcribe = _transcribe_interruption if interruption else _transcribe
                 text = transcribe(engine, phrase, sample_rate)
                 self._emit_text(generation, epoch, text)
+                with self._lock:
+                    if epoch == self._epoch and not self._paused.is_set():
+                        self._status(generation, "ready" if text else "unrecognized")
             finally:
                 self._decoding.clear()

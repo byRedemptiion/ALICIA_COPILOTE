@@ -76,7 +76,9 @@ try {
     if ($Windowless) {
         $pythonArguments = @('-m', 'alicia')
         if ($Demo) { $pythonArguments += '--demo' }
-        $application = Start-Process -FilePath $pythonExecutable -ArgumentList $pythonArguments -WorkingDirectory $projectRoot -WindowStyle Hidden -Wait -PassThru
+        # pythonw has no console. SW_HIDE can also hide Qt's first window, so only
+        # the PowerShell launcher (started by VBS) and Ollama use a hidden style.
+        $application = Start-Process -FilePath $pythonExecutable -ArgumentList $pythonArguments -WorkingDirectory $projectRoot -WindowStyle Normal -Wait -PassThru
         if ($application.ExitCode -ne 0) {
             throw "Alicia s'est terminee avec une erreur ($($application.ExitCode)). Utilisez Lancer_Alicia_Debug.bat."
         }
