@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from alicia.capture import isolated
+from alicia.capture.primary import PRIMARY_SCREEN
 from alicia.core.models import WindowInfo
 from alicia.core.ports import CaptureError, UnsupportedPlatformError
 
@@ -104,3 +105,58 @@ def test_spawned_worker_reports_unsupported_platform_without_qt():
     finally:
         receiver.close()
         isolated._stop_process(process, started=True)
+
+
+def test_desktop_source_lists_primary_before_optional_windows(monkeypatch):
+    monkeypatch.setattr(isolated.sys, "platform", "win32")
+    window = WindowInfo(handle=42, title="Game", process_id=100)
+    monkeypatch.setattr(isolated.IsolatedWindowsCapture, "list_windows", lambda _self: [window])
+    assert isolated.DesktopCaptureSource().list_windows() == [PRIMARY_SCREEN, window]
+
+
+def test_desktop_source_keeps_primary_if_window_enumeration_fails(monkeypatch):
+    monkeypatch.setattr(isolated.sys, "platform", "win32")
+
+    def fail(_self):
+        raise CaptureError("Window enumeration unavailable")
+
+    monkeypatch.setattr(isolated.IsolatedWindowsCapture, "list_windows", fail)
+    assert isolated.DesktopCaptureSource().list_windows() == [PRIMARY_SCREEN]
+
+
+def test_desktop_source_remains_unsupported_off_windows(monkeypatch):
+    monkeypatch.setattr(isolated.sys, "platform", "linux")
+    with pytest.raises(UnsupportedPlatformError):
+        isolated.DesktopCaptureSource().list_windows()
+
+
+def test_desktop_capture_uses_bounded_primary_child_operation(monkeypatch):
+    from alicia.capture.demo import DemoCapture
+
+    frame = DemoCapture().capture(DemoCapture.window)
+    run = Mock(return_value=frame)
+    monkeypatch.setattr(isolated.DesktopCaptureSource, "_run", run)
+    assert isolated.DesktopCaptureSource(capture_timeout=3).capture(PRIMARY_SCREEN) is frame
+    run.assert_called_once_with("primary", PRIMARY_SCREEN, 3)
+
+
+def test_desktop_capture_preserves_explicit_window_requests(monkeypatch):
+    window = WindowInfo(handle=42, title="Game", process_id=100)
+    capture = Mock(return_value="window-result")
+    monkeypatch.setattr(isolated.IsolatedWindowsCapture, "capture", capture)
+    assert isolated.DesktopCaptureSource().capture(window) == "window-result"
+    capture.assert_called_once_with(window)
+
+
+def test_primary_worker_does_not_construct_window_capture_backend(monkeypatch):
+    connection = Mock()
+    primary_backend = Mock()
+    primary_backend.capture.return_value = "primary-frame"
+    monkeypatch.setattr(isolated, "PrimaryScreenCapture", Mock(return_value=primary_backend))
+    windows_backend = Mock(side_effect=AssertionError("No window API for primary capture"))
+    monkeypatch.setattr(isolated, "WindowsCapture", windows_backend)
+    isolated._capture_worker(connection, "primary", PRIMARY_SCREEN)
+    primary_backend.capture.assert_called_once_with(PRIMARY_SCREEN)
+    connection.send.assert_called_once_with(("ok", "primary-frame"))
+    connection.close.assert_called_once()
+    windows_backend.assert_not_called()

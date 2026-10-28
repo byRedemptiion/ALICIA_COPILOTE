@@ -1,117 +1,67 @@
 # Alicia — Installation locale gratuite sous Windows
 
-Alicia utilise par défaut **Ollama et le modèle visuel local `qwen2.5vl:7b`**, Vosk pour comprendre les questions au microphone et une voix féminine française de Windows. Aucun abonnement, crédit API ou compte OpenAI n’est nécessaire. Les calculs utilisent votre PC ; les téléchargements initiaux nécessitent Internet et plusieurs Go d’espace disque. La recherche web facultative utilise Internet après autorisation, sans clé API. La consommation électrique et les ressources de la machine restent à votre charge.
+Le parcours par défaut utilise Ollama (`qwen2.5vl:7b`), faster-whisper français et Kokoro, voix française féminine `ff_siwis`. Aucun abonnement, crédit API ou compte OpenAI n’est requis. Les téléchargements initiaux nécessitent Internet ; l’analyse locale et les voix sont utilisables hors ligne ensuite. La recherche web autorisée nécessite toujours Internet.
 
-## Installation guidée
+## Installation ou mise à jour
 
-Dans le dossier du projet, double-cliquer sur **Installer_Alicia.bat**. Attendre la fin et lire le résultat avant de fermer la fenêtre. Après installation, **Lancer_Alicia.bat** ouvre Alicia. Ces deux fichiers appellent les scripts PowerShell du dossier `scripts` et ne modifient pas la politique d’exécution globale.
+Extraire la nouvelle archive, puis double-cliquer sur **Installer_Alicia.bat**. Attendre le message de fin avant de fermer la fenêtre. Le script conserve le `.env` existant et ne demande aucune clé API.
 
-Pour effectuer l’installation depuis une console, ouvrir PowerShell dans le dossier du projet, puis lancer :
+L’installation prépare :
+
+- uv et Ollama via leurs paquets winget habituels s’ils manquent ; Python 3.12 via uv si nécessaire.
+- Les dépendances Python depuis le verrouillage.
+- Le modèle visuel local `qwen2.5vl:7b`, plusieurs Go une première fois.
+- Les modèles audio par la commande explicite `uv run --frozen alicia --prepare-audio` : Kokoro et ses voix, puis le modèle français de reconnaissance Whisper small.
+
+Kokoro utilise les fichiers de la publication officielle `model-files-v1.1` du projet [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). Les ressources audio représentent plusieurs centaines de Mo supplémentaires. Whisper utilise le modèle [Systran/faster-whisper-small](https://huggingface.co/Systran/faster-whisper-small), environ un demi-Go selon les fichiers publiés. Les tailles sont indicatives ; les résultats du script font foi.
+
+Les modèles se trouvent normalement sous `%LOCALAPPDATA%/Alicia/models/kokoro` et `%LOCALAPPDATA%/Alicia/models/faster-whisper-small`. Le lancement et les questions ne doivent télécharger aucun modèle. Les fichiers officiels sont récupérés avec TLS vérifié ; aucun checksum ou signature indépendante non vérifié ne doit être inventé. Une installation échouée doit être corrigée avant de déclarer les fonctions audio prêtes.
+
+Le même installateur peut être relancé pour compléter une préparation interrompue. L’ancien modèle Vosk ou les voix SAPI peuvent rester présents ; ils ne sont plus les moteurs par défaut. Les retirer manuellement n’est pas nécessaire.
+
+Depuis PowerShell, les commandes correspondantes sont :
 
 ```powershell
 .\scripts\setup_local.ps1
-```
-
-Le script utilise `winget` pour installer les outils manquants `uv` et Ollama depuis leurs paquets habituels, démarre le service Ollama local si nécessaire, télécharge `qwen2.5vl:7b` s’il manque et installe les dépendances Python verrouillées. Il appelle ensuite `uv run --frozen alicia --prepare-voice` pour préparer le modèle français de Vosk. `uv` prépare Python 3.12 si nécessaire. Le script n’écrase ni ne crée de `.env` et conserve les fichiers utilisateur. Un échec de préparation vocale est signalé ; ne pas considérer cette installation comme terminée tant qu’il n’est pas résolu.
-
-Le téléchargement du modèle peut représenter environ 6 Go selon la version ; consulter [sa fiche Ollama](https://ollama.com/library/qwen2.5vl:7b) pour la taille actuelle. Le premier chargement est plus lent que les analyses suivantes. Le script peut être relancé : un modèle déjà présent n’est pas téléchargé à nouveau.
-
-Le modèle [Vosk français léger](https://alphacephei.com/vosk/models) `vosk-model-small-fr-0.22` représente environ 41 Mo. Il est récupéré sur le site officiel en HTTPS avec vérification TLS, puis son archive ZIP est contrôlée avant extraction sous `%LOCALAPPDATA%/Alicia/models/vosk-model-small-fr-0.22`. Le SHA256 calculé à réception est une trace du téléchargement ; il ne constitue pas une vérification contre une empreinte indépendante publiée par l’éditeur. Aucun checksum officiel non vérifié n’est inventé. Le modèle n’est pas téléchargé lorsqu’on active le micro ou pose une question.
-
-Si PowerShell refuse ce script local en raison de sa politique d’exécution, l’inspecter avant de l’autoriser pour ce seul lancement :
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_local.ps1
-```
-
-Cette commande n’altère pas la politique globale de la machine et ne désactive ni TLS, ni la vérification des paquets. Si `winget` est absent, installer ou mettre à jour **App Installer** depuis Microsoft Store puis relancer. Une politique d’entreprise peut nécessiter l’intervention de l’administrateur ; le script ne la contourne pas.
-
-## Lancer Alicia
-
-Double-cliquer sur **Lancer_Alicia.bat**, ou lancer depuis PowerShell :
-
-```powershell
 .\scripts\start_alicia.ps1
 ```
 
-Ou, avec une capture fictive pour découvrir l’interface :
+Si la politique d’exécution refuse le script local, les fichiers `.bat` le lancent avec une autorisation limitée au processus PowerShell. Ils ne changent pas la politique globale et ne désactivent ni TLS, ni les vérifications des paquets. Si winget manque, mettre à jour **App Installer** depuis Microsoft Store. Une politique d’entreprise reste à gérer avec son administrateur.
 
-```powershell
-.\scripts\start_alicia.ps1 -Demo
-```
+## Démarrer et arrêter
 
-Le lanceur redémarre Ollama si nécessaire et vérifie le modèle avant d’ouvrir Alicia. Il ne lance pas de téléchargement volumineux. Il force les fournisseurs gratuits, le modèle `qwen2.5vl:7b` et l’URL locale pour ce lancement, y compris lorsqu’un ancien `.env` contient une sélection OpenAI, et restaure ensuite les variables de la console. Les scripts communiquent uniquement avec `127.0.0.1:11434`. Un serveur Ollama lancé par eux reçoit `OLLAMA_NO_CLOUD=1` ; cette variable ne reconfigure pas un serveur déjà démarré.
+Double-cliquer sur **Lancer_Alicia.bat**. Le script démarre Ollama s’il est nécessaire, vérifie le modèle visuel et force les fournisseurs gratuits `ollama`, `kokoro` et `whisper` pour ce processus. Il restaure ensuite les variables de la console ; le `.env` n’est pas réécrit.
 
-Dans Alicia : sélectionner une fenêtre, **Démarrer**, **Capturer**, saisir une question, autoriser l’analyse puis cliquer sur **Analyser la capture**. L’image et la question sont traitées par Ollama sur votre PC. **Lire la réponse** utilise la synthèse Windows locale, sans envoyer le texte à un service vocal. L’avatar s’anime durant la lecture effective.
+Au lancement normal, Alicia commence avec **l’écran principal et le microphone**, sans sélection de fenêtre ni bouton d’activation initial. L’état d’écoute doit être visible. Passez dans votre jeu ou votre navigateur, puis dites « Alicia » suivi de la question. Le contenu affiché sur l’écran principal est celui qu’elle peut analyser ; minimisez son interface pour laisser apparaître le jeu.
 
-## Parler à Alicia
+**Stop** coupe l’observation et l’écoute et efface le contexte court. **Reprendre** les relance. La sélection d’une fenêtre précise reste une option avancée. Une application masquée n’est pas visible dans une capture du moniteur.
 
-1. Démarrer l’observation d’une fenêtre et autoriser son analyse locale.
-2. Sélectionner le microphone voulu puis cliquer sur **Activer le micro**. Autoriser l’accès aux applications de bureau dans les paramètres de confidentialité Windows si nécessaire.
-3. Dire « Alicia » suivi de la question en français, puis laisser un silence. On peut dire « Alicia » seule, puis poser la question dans les huit secondes suivantes. Les autres phrases sont ignorées. Le texte de la question reconnue apparaît dans Alicia ; une nouvelle capture est prise pour cette question.
-4. Garder **Réponse vocale automatique** activée pour entendre la réponse dès qu’elle est prête. La lecture manuelle reste disponible.
-5. Cliquer sur **Couper le micro** pour terminer l’écoute. **Arrêter** l’observation la coupe aussi.
+Le mode `Lancer_Alicia.bat` fonctionne avec les réglages gratuits recommandés, même si un ancien `.env` désignait une voix Windows ou un autre fournisseur. Pour une configuration avancée, lancer directement `uv run --frozen alicia` après avoir préparé les modèles correspondants.
 
-L’écoute n’est jamais active au lancement. Après activation, l’état indique l’attente du mot « Alicia » ; il n’est plus nécessaire de cliquer avant chaque question. Le micro est suspendu pendant traitement d’une question et lecture pour éviter les boucles et les questions empilées. Après une erreur, vérifier le message et reprendre explicitement ; aucune relance automatique ne doit masquer une panne. Cette première conversation fonctionne en tours, sans interruption par la voix pendant qu’Alicia parle. La qualité de transcription et de détection du nom doit être testée avec le bruit réel du jeu.
+La démonstration est disponible via `scripts/start_alicia.ps1 -Demo` ou `uv run --frozen alicia --demo`. Elle n’ouvre pas automatiquement le micro et utilise une image synthétique identifiée.
 
-**Vision locale en continu** actualise l’aperçu de la seule fenêtre sélectionnée environ une fois par seconde pendant l’observation. Cette option est cochée par défaut et peut être désactivée. Elle ne capture pas silencieusement tout le bureau et ne lance pas une analyse IA pour chaque image. Une question déclenche une capture récente ; l’actualisation, la transcription puis le calcul du modèle ont chacun leur latence.
+## Reconnaissance et voix
 
-Pour préparer seulement le modèle vocal après une mise à jour :
+La reconnaissance Whisper small remplace Vosk par défaut. Elle traite les phrases en français localement après un silence et peut mieux reconnaître les tournures naturelles ; elle ne garantit pas des noms propres ou termes de jeu parfaits. Vérifier le texte reconnu affiché dans Alicia.
 
-```powershell
-uv run --frozen alicia --prepare-voice
-```
+Kokoro remplace la voix Windows robotique par une voix neuronale française féminine. Elle reste synthétique et distincte des voix de ChatGPT. Le volume est réglable ; le rendu exact dépend de l’audio et doit être écouté sur votre PC. Une mémoire courte de session aide le suivi, sans modifier les mots réellement reconnus.
 
-Cette commande peut télécharger le modèle ; elle ne démarre pas l’écoute. L’audio du micro est traité localement et n’est pas sauvegardé ou envoyé au moteur de recherche.
+L’écoute se suspend pendant le traitement d’une question et la réponse orale pour éviter l’écho, puis reprend après un court délai. L’interruption vocale pendant qu’Alicia parle n’est pas encore proposée. Un problème audio donne un message explicite ; aucun appel payant n’est utilisé en secours.
 
-## Rechercher une information actuelle
+## Internet et confidentialité
 
-Cocher **Autoriser la recherche web** avant de poser la question. Seul son texte est envoyé à DuckDuckGo. Les titres, extraits et liens obtenus sont fournis au modèle puis affichés comme sources cliquables. Cette version consulte les résultats du moteur ; elle ne lit pas intégralement les pages liées.
+La recherche web reste désactivée par défaut. Après autorisation, seule la question est envoyée au moteur. Les extraits et liens sont affichés avec leur date de récupération ; ils ne constituent pas des pages intégrales vérifiées ni une garantie d’actualité.
 
-Internet est nécessaire pour cette option. Les moteurs gratuits peuvent limiter les requêtes ou afficher un CAPTCHA. Alicia doit signaler cet échec et ne pas prétendre avoir trouvé une information actuelle. Vérifier les sources, la version du jeu et les dates : la date de récupération n’est pas une date de publication. Décocher l’option évite cette recherche ; l’analyse locale et la voix restent utilisables hors ligne après installation.
+L’écran principal inclut les applications visibles. Les captures, l’audio du micro et le contexte court restent locaux ; ils ne sont pas enregistrés dans les logs par défaut. Stop efface le contexte de session. Aucun compte ChatGPT ni session de navigateur n’est utilisé par Alicia.
 
-## Voix féminine douce
+## Diagnostic
 
-Le premier moteur local utilise les voix SAPI installées dans Windows. Il choisit une voix **française et féminine**, avec un débit légèrement ralenti ; il ne remplace pas silencieusement cette voix par une voix masculine ou anglaise. `Microsoft Hortense Desktop` est préférée lorsqu’elle est présente. Ce premier moteur n’est pas neuronal : la qualité dépend des voix installées et doit être écoutée sur votre PC ; il ne promet pas le naturel d’un service neuronal distant.
+- **Modèle audio absent** : relancer Installer_Alicia.bat ou `uv run --frozen alicia --prepare-audio`.
+- **Reconnaissance approximative** : vérifier le micro choisi et le texte reconnu, réduire le bruit du jeu et poser une question moins ambiguë. Le contexte ne remplace pas une bonne transcription.
+- **Micro indisponible** : autoriser les applications de bureau dans les paramètres Windows et vérifier qu’un autre programme ne bloque pas le périphérique. Lire l’état puis utiliser Reprendre après correction.
+- **Écran incorrect** : vérifier quel écran est principal dans Windows ; afficher le jeu dessus ou choisir une source avancée.
+- **Première réponse lente** : laisser les modèles se charger puis mesurer leur latence avec le jeu ouvert. Ne pas promettre une réponse instantanée.
+- **Voix indisponible** : vérifier les fichiers Kokoro ; aucune voix Windows ou API payante ne remplace silencieusement le moteur demandé.
+- **Recherche refusée** : lire l’erreur ; CAPTCHA et restrictions réseau ne sont pas contournés.
 
-Si aucune voix compatible n’est disponible, ouvrir **Paramètres Windows → Heure et langue → Voix**, ajouter le français et ses composants vocaux, puis relancer Alicia. Le chemin exact varie selon la version de Windows. Certaines voix « naturelles » proposées par Windows ne sont pas exposées à SAPI ; installer une voix disponible pour les applications de bureau.
-
-Options facultatives dans `.env` :
-
-```dotenv
-ALICIA_AI_PROVIDER=ollama
-ALICIA_OLLAMA_MODEL=qwen2.5vl:7b
-ALICIA_OLLAMA_URL=http://127.0.0.1:11434
-ALICIA_TTS_PROVIDER=windows
-ALICIA_WINDOWS_VOICE=
-ALICIA_WINDOWS_RATE=-1
-```
-
-Laisser le nom de voix vide pour la sélection automatique. Pour en imposer une, renseigner son nom exact tel qu’installé. Aucun de ces paramètres n’est une clé secrète. Les valeurs par défaut suffisent ; aucun `.env` n’est obligatoire.
-
-## Installation manuelle
-
-Installer [uv](https://docs.astral.sh/uv/getting-started/installation/) et [Ollama pour Windows](https://ollama.com/download/windows), puis lancer :
-
-```powershell
-ollama pull qwen2.5vl:7b
-uv sync --python 3.12 --frozen --extra dev
-uv run --frozen alicia --prepare-voice
-uv run --frozen alicia
-```
-
-Ollama doit fonctionner en arrière-plan sur le port local 11434. Le modèle téléchargé est utilisable hors ligne ensuite. Le mode gratuit ne bascule jamais automatiquement vers OpenAI si Ollama, le modèle ou la voix manque. Un ancien `OPENAI_API_KEY` peut être retiré de votre `.env` : il n’est pas utilisé par les fournisseurs gratuits.
-
-## Diagnostic et limites
-
-- **Ollama inaccessible** : ouvrir Ollama et relancer le lanceur ; vérifier le service local sur le port 11434.
-- **Modèle absent** : relancer `setup_local.ps1`. Pour utiliser un autre modèle local compatible image, le télécharger explicitement avec `ollama pull`, le choisir dans `.env`, puis lancer directement `uv run --frozen alicia` ; les scripts imposent le modèle par défaut.
-- **Première analyse lente** : laisser finir le chargement du modèle avant de juger sa latence. Mesurer la charge GPU et la fluidité du jeu ensemble.
-- **Voix absente** : installer une voix SAPI française féminine ; l’analyse visuelle reste indépendante de la voix.
-- **Modèle de reconnaissance absent** : relancer `Installer_Alicia.bat` ou `uv run --frozen alicia --prepare-voice`. L’activation du micro ne lance pas de téléchargement caché.
-- **Microphone indisponible** : vérifier le périphérique sélectionné, les autorisations Windows et qu’une autre application ne bloque pas l’entrée. Couper le micro puis le réactiver après correction.
-- **Recherche web indisponible ou limitée** : lire l’erreur et réessayer plus tard ; aucune API payante n’est appelée en secours. Les résultats ne prouvent pas qu’une source est à jour.
-- **Micro coupé après une erreur** : corriger la cause indiquée, puis cliquer à nouveau sur Activer le micro. Aucun appel ni reprise d’écoute n’est relancé en boucle après un échec.
-- **Capture noire ou figée** : essayer le mode fenêtré ou sans bordure, puis suivre [la procédure Windows](VALIDATION_WINDOWS.md). Certains jeux restent incompatibles avec PrintWindow.
-
-Les tests automatisés du cloud vérifient les contrats et erreurs avec des doubles. Ils ne remplacent ni un vrai calcul du modèle sur votre GPU, ni une capture native du jeu, ni une transcription depuis votre micro, ni l’écoute de votre sortie audio. Les scripts PowerShell et l’intégration SAPI doivent être validés sur Windows. Un moteur de recherche bloqué dans le cloud n’établit pas qu’il sera indisponible sur votre PC, et l’inverse est également vrai.
+Les tests avec doubles et le smoke test n’exécutent pas les périphériques ou modèles réels. La capture principale, la transcription, le rendu Kokoro et la fluidité du jeu doivent être validés sur Windows selon [la procédure dédiée](VALIDATION_WINDOWS.md).

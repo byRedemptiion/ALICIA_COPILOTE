@@ -15,6 +15,12 @@ def clear_configuration(monkeypatch):
         "ALICIA_OLLAMA_MODEL",
         "ALICIA_OLLAMA_URL",
         "ALICIA_TTS_PROVIDER",
+        "ALICIA_STT_PROVIDER",
+        "ALICIA_WHISPER_DEVICE",
+        "ALICIA_NEURAL_VOICE",
+        "ALICIA_NEURAL_SPEED",
+        "ALICIA_NEURAL_MODEL_DIR",
+        "ALICIA_WHISPER_MODEL_PATH",
         "ALICIA_WINDOWS_RATE",
         "ALICIA_WINDOWS_VOICE",
         "ALICIA_API_TIMEOUT_SECONDS",
@@ -32,7 +38,10 @@ def test_no_key_uses_free_local_providers():
     assert settings.ai_provider == "ollama"
     assert settings.ai_model == "qwen2.5vl:7b"
     assert settings.api_timeout_seconds == 120
-    assert settings.tts_provider == "windows"
+    assert settings.tts_provider == "kokoro"
+    assert settings.stt_provider == "whisper"
+    assert settings.neural_voice == "ff_siwis"
+    assert settings.neural_speed == 0.95
     assert settings.windows_rate == -1
     assert settings.tts_model == "gpt-4o-mini-tts"
     assert settings.tts_voice == "shimmer"
@@ -65,6 +74,12 @@ def test_dotenv_does_not_override_injected_configuration(tmp_path, monkeypatch):
         ("ALICIA_OLLAMA_MODEL", "  "),
         ("ALICIA_AI_PROVIDER", "unknown"),
         ("ALICIA_TTS_PROVIDER", "unknown"),
+        ("ALICIA_STT_PROVIDER", "unknown"),
+        ("ALICIA_WHISPER_DEVICE", "invalid"),
+        ("ALICIA_NEURAL_VOICE", "voice"),
+        ("ALICIA_NEURAL_SPEED", "NaN"),
+        ("ALICIA_NEURAL_SPEED", "bad"),
+        ("ALICIA_NEURAL_SPEED", "1.9"),
         ("ALICIA_WINDOWS_RATE", "fast"),
         ("ALICIA_WINDOWS_RATE", "11"),
         ("ALICIA_TTS_MODEL", "  "),
@@ -116,7 +131,7 @@ def test_old_openai_settings_do_not_enable_paid_calls(monkeypatch):
     settings = load_settings(env_file=None)
     assert settings.ai_provider == "ollama"
     assert settings.ai_model == "qwen2.5vl:7b"
-    assert settings.tts_provider == "windows"
+    assert settings.tts_provider == "kokoro"
 
 
 def test_openai_requires_explicit_provider_choice(monkeypatch):

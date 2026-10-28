@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from alicia.ai.ollama_provider import OllamaVisionProvider
-from alicia.audio.windows_speech import WindowsSpeechProvider
+from alicia.audio.kokoro_speech import KokoroSpeechProvider
 from alicia.capture.demo import DemoCapture
 from alicia.config import Settings
 from alicia.core.models import AnalysisRequest
@@ -17,7 +17,7 @@ from alicia.providers import create_speech_provider, create_vision_provider
 def test_default_providers_are_local_without_key():
     settings = Settings()
     assert isinstance(create_vision_provider(settings), OllamaVisionProvider)
-    assert isinstance(create_speech_provider(settings), WindowsSpeechProvider)
+    assert isinstance(create_speech_provider(settings), KokoroSpeechProvider)
 
 
 def test_local_import_and_construction_do_not_load_openai_sdk():

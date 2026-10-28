@@ -9,6 +9,7 @@ from math import isfinite
 from multiprocessing.connection import Connection
 from typing import Any
 
+from alicia.capture.primary import PRIMARY_SCREEN, PrimaryScreenCapture
 from alicia.capture.win32 import WindowsCapture
 from alicia.core.models import CapturedFrame, WindowInfo
 from alicia.core.ports import CaptureError, UnsupportedPlatformError
@@ -17,11 +18,12 @@ from alicia.core.ports import CaptureError, UnsupportedPlatformError
 def _capture_worker(connection: Connection, operation: str, window: WindowInfo | None) -> None:
     """Top-level target so the Windows spawn context can import it safely."""
     try:
-        backend = WindowsCapture()
-        if operation == "list":
-            result = backend.list_windows()
+        if operation == "primary" and window is not None:
+            result = PrimaryScreenCapture().capture(window)
+        elif operation == "list":
+            result = WindowsCapture().list_windows()
         elif operation == "capture" and window is not None:
-            result = backend.capture(window)
+            result = WindowsCapture().capture(window)
         else:
             raise CaptureError("Opération de capture invalide.")
         packet = ("ok", result)
@@ -118,3 +120,24 @@ class IsolatedWindowsCapture:
             receiver.close()
             sender.close()
             _stop_process(process, started)
+
+
+class DesktopCaptureSource(IsolatedWindowsCapture):
+    """Offer the primary display first while retaining optional window selection."""
+
+    def list_windows(self) -> list[WindowInfo]:
+        screens = PrimaryScreenCapture().list_windows()
+        try:
+            windows = super().list_windows()
+        except CaptureError:
+            # The primary display does not depend on enumerating individual windows.
+            return screens
+        return screens + [window for window in windows if window != PRIMARY_SCREEN]
+
+    def capture(self, window: WindowInfo) -> CapturedFrame:
+        if window == PRIMARY_SCREEN:
+            result = self._run("primary", window, self.capture_timeout)
+            if not isinstance(result, CapturedFrame):
+                raise CaptureError("Le processus de capture a retourné une image invalide.")
+            return result
+        return super().capture(window)

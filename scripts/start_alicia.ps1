@@ -9,6 +9,7 @@ $previousHost = $env:OLLAMA_HOST
 $previousNoCloud = $env:OLLAMA_NO_CLOUD
 $previousAiProvider = $env:ALICIA_AI_PROVIDER
 $previousTtsProvider = $env:ALICIA_TTS_PROVIDER
+$previousSttProvider = $env:ALICIA_STT_PROVIDER
 $previousModel = $env:ALICIA_OLLAMA_MODEL
 $previousUrl = $env:ALICIA_OLLAMA_URL
 
@@ -34,7 +35,8 @@ try {
     $env:OLLAMA_NO_CLOUD = '1'
     # Explicit process settings also take precedence over old .env files.
     $env:ALICIA_AI_PROVIDER = 'ollama'
-    $env:ALICIA_TTS_PROVIDER = 'windows'
+    $env:ALICIA_TTS_PROVIDER = 'kokoro'
+    $env:ALICIA_STT_PROVIDER = 'whisper'
     $env:ALICIA_OLLAMA_MODEL = $modelName
     $env:ALICIA_OLLAMA_URL = $ollamaApi
     $uvExecutable = Find-Tool 'uv.exe' @(
@@ -72,6 +74,7 @@ try {
     $env:OLLAMA_NO_CLOUD = $previousNoCloud
     $env:ALICIA_AI_PROVIDER = $previousAiProvider
     $env:ALICIA_TTS_PROVIDER = $previousTtsProvider
+    $env:ALICIA_STT_PROVIDER = $previousSttProvider
     $env:ALICIA_OLLAMA_MODEL = $previousModel
     $env:ALICIA_OLLAMA_URL = $previousUrl
     Pop-Location

@@ -18,6 +18,7 @@ from openai import (
 )
 from PIL import Image, UnidentifiedImageError
 
+from alicia.ai.conversation_context import conversation_messages
 from alicia.ai.prompts import SYSTEM_PROMPT
 from alicia.ai.web_context import MAX_WEB_SOURCES, format_web_context
 from alicia.config import Settings
@@ -56,7 +57,7 @@ class OpenAIVisionProvider:
         data_url = _image_data_url(request.frame.png, self.settings.image_max_edge)
         sources = tuple(request.web_sources[:MAX_WEB_SOURCES])
         context = format_web_context(sources)
-        messages = []
+        messages = conversation_messages(request.history)
         if context:
             messages.append(
                 {

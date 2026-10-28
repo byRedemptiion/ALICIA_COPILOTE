@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from alicia.core.context import ConversationMemory
 from alicia.core.models import AnalysisResult, CapturedFrame, WindowInfo
 
 
@@ -10,6 +11,7 @@ class Session:
     window: WindowInfo | None = None
     frame: CapturedFrame | None = None
     result: AnalysisResult | None = None
+    memory: ConversationMemory = field(default_factory=ConversationMemory)
 
     def start(self, window: WindowInfo) -> None:
         self.stop()
@@ -22,6 +24,7 @@ class Session:
         self.window = None
         self.frame = None
         self.result = None
+        self.memory.clear()
 
     def accept_frame(self, generation: int, frame: CapturedFrame) -> bool:
         if not self.active or generation != self.generation or frame.window != self.window:

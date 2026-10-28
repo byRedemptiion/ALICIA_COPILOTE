@@ -21,17 +21,34 @@ def main(argv=None) -> int:
         action="store_true",
         help="Installer explicitement le modèle français hors ligne",
     )
+    parser.add_argument(
+        "--prepare-audio",
+        action="store_true",
+        help="Installer explicitement Kokoro et Whisper pour l’audio local",
+    )
     options = parser.parse_args(argv)
-    if options.prepare_voice:
-        from alicia.audio.model_setup import prepare_voice_model
+    if options.prepare_voice or options.prepare_audio:
         from alicia.audio.ports import SpeechError
         from alicia.config import load_settings
         from alicia.core.ports import ConfigurationError
 
         if options.demo or options.smoke_test or options.screenshot:
-            parser.error("--prepare-voice s’utilise seul.")
+            parser.error("La préparation audio s’utilise seule.")
         try:
-            target = prepare_voice_model(load_settings().voice_model_path)
+            settings = load_settings()
+            if options.prepare_audio:
+                from alicia.audio.neural_setup import prepare_neural_voice
+                from alicia.audio.whisper_setup import prepare_whisper_model
+
+                print("Préparation de la voix neuronale française Kokoro…", flush=True)
+                prepare_neural_voice(settings.neural_model_directory)
+                print("Préparation de la reconnaissance française Whisper…", flush=True)
+                prepare_whisper_model(settings.whisper_model_path)
+                print("Modèles audio locaux prêts.")
+                return 0
+            from alicia.audio.model_setup import prepare_voice_model
+
+            target = prepare_voice_model(settings.voice_model_path)
         except (SpeechError, ConfigurationError, OSError) as error:
             message = (
                 str(error)

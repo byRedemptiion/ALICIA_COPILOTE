@@ -17,6 +17,16 @@ def create_vision_provider(settings: Settings):
 
 
 def create_speech_provider(settings: Settings):
+    if settings.tts_provider == "kokoro":
+        from alicia.audio.kokoro_speech import KokoroSpeechProvider, KokoroSpeechSettings
+
+        return KokoroSpeechProvider(
+            KokoroSpeechSettings(
+                model_directory=settings.neural_model_directory,
+                voice=settings.neural_voice,
+                speed=settings.neural_speed,
+            )
+        )
     if settings.tts_provider == "windows":
         from alicia.audio.windows_speech import WindowsSpeechProvider
 
@@ -37,3 +47,17 @@ def create_speech_provider(settings: Settings):
             )
         )
     raise ConfigurationError("Fournisseur vocal inconnu ; aucune bascule automatique.")
+
+
+def create_listener_factory(settings: Settings):
+    if settings.stt_provider == "whisper":
+        from functools import partial
+
+        from alicia.audio.whisper_listening import WhisperListener
+
+        return partial(WhisperListener, device=settings.whisper_device)
+    if settings.stt_provider == "vosk":
+        from alicia.audio.listening import LocalListener
+
+        return LocalListener
+    raise ConfigurationError("Fournisseur de reconnaissance inconnu ; aucune bascule automatique.")

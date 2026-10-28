@@ -74,7 +74,9 @@ def button(text, action, primary=False):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: Settings, capture_source, vision_provider, demo=False):
+    def __init__(
+        self, settings: Settings, capture_source, vision_provider, demo=False, autostart=False
+    ):
         super().__init__()
         self.settings = settings
         self.capture_source = capture_source
@@ -87,6 +89,11 @@ class MainWindow(QMainWindow):
         self.workers = {}
         self.audio_generation = 0
         self.close_pending = False
+        self.automatic_mode = autostart and not demo
+        self.autostart_pending = False
+        self.startup_timer = QTimer(self)
+        self.startup_timer.setSingleShot(True)
+        self.startup_timer.timeout.connect(self._begin_automatic)
         self.background_capture_active = False
         self.conversation = ConversationController(self)
         self.playback = SpeechPlayback(self)
@@ -99,6 +106,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLE)
         self._build_ui(demo)
         self.refresh_windows()
+        self.autostart_pending = self.automatic_mode
 
     def _build_ui(self, demo):
         root = QWidget()
@@ -109,12 +117,13 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         header.addWidget(label("ALICIA", "title"))
         header.addStretch()
-        header.addWidget(label("V0.2  ·  Copilote visuel & vocal", "muted"))
+        header.addWidget(label("V0.3  ·  Copilote visuel & vocal", "muted"))
         layout.addLayout(header)
         layout.addWidget(
             label(
                 "MODE LOCAL GRATUIT · Aucune clé API ni abonnement"
-                if self.settings.ai_provider == "ollama" and self.settings.tts_provider == "windows"
+                if self.settings.ai_provider == "ollama"
+                and self.settings.tts_provider in {"windows", "kokoro"}
                 else "FOURNISSEUR EXTERNE ACTIVÉ · Des appels peuvent être facturés",
                 "state",
             )
@@ -147,7 +156,7 @@ class MainWindow(QMainWindow):
         left.addWidget(
             label(
                 "Voix synthétique sur votre PC. Lecture gratuite à la demande."
-                if self.settings.tts_provider == "windows"
+                if self.settings.tts_provider in {"windows", "kokoro"}
                 else "Lecture à la demande. La voix est générée par une IA.",
                 "muted",
             )
@@ -162,12 +171,24 @@ class MainWindow(QMainWindow):
         volume.setValue(55)
         volume.valueChanged.connect(self.playback.set_volume)
         left.addWidget(volume)
-        left.addWidget(label("Micro activé à votre demande. Aucun contrôle du jeu.", "muted"))
+        left.addWidget(
+            label(
+                "Écoute locale au lancement. Stop coupe l’écran et le micro. Aucun contrôle du jeu.",
+                "muted",
+            )
+        )
         body.addWidget(companion)
         right_widget = QWidget()
         right = QVBoxLayout(right_widget)
         right.setContentsMargins(0, 0, 10, 0)
         right.setSpacing(6)
+        selection = QHBoxLayout()
+        self.source_label = label("Écran principal" if not demo else "Démonstration", "state")
+        selection.addWidget(self.source_label)
+        self.source_button = QPushButton("Choisir une autre source…")
+        self.source_button.setCheckable(True)
+        selection.addWidget(self.source_button)
+        right.addLayout(selection)
         selection = QHBoxLayout()
         self.windows = QComboBox()
         self.windows.setMinimumWidth(250)
@@ -176,9 +197,15 @@ class MainWindow(QMainWindow):
         self.refresh_button = button("Actualiser", self.refresh_windows)
         selection.addWidget(self.refresh_button)
         right.addLayout(selection)
+        self.windows.setVisible(False)
+        self.refresh_button.setVisible(False)
+        self.source_button.toggled.connect(self.windows.setVisible)
+        self.source_button.toggled.connect(self.refresh_button.setVisible)
         controls = QHBoxLayout()
-        self.start_button = button("Démarrer", self.start, True)
-        self.stop_button = button("Arrêter", self.stop)
+        self.start_button = button(
+            "Reprendre" if self.automatic_mode else "Démarrer", self.start, True
+        )
+        self.stop_button = button("Stop", self.stop)
         self.capture_button = button("Capturer", self.capture)
         for widget in (self.start_button, self.stop_button, self.capture_button):
             controls.addWidget(widget)
@@ -231,7 +258,11 @@ class MainWindow(QMainWindow):
         self.events.setMaximumBlockCount(150)
         self.events.setFixedHeight(90)
         layout.addWidget(self.events)
-        self._event("Alicia démarre. Aucune capture ni transmission automatique.")
+        self._event(
+            "Écran principal et écoute locale au lancement. Stop coupe l’observation et le micro."
+            if self.automatic_mode
+            else "Mode manuel : aucun microphone activé automatiquement."
+        )
         if self.settings.ai_provider == "ollama":
             self._event("Mode gratuit local : Ollama pour les images, aucune clé API nécessaire.")
         elif not self.settings.api_key:
@@ -240,6 +271,8 @@ class MainWindow(QMainWindow):
             )
         if self.settings.tts_provider == "windows":
             self._event("Voix française féminine Windows : synthèse locale gratuite.")
+        elif self.settings.tts_provider == "kokoro":
+            self._event("Voix neuronale française Kokoro : synthèse locale gratuite.")
         self._update_controls()
 
     def _event(self, message):
@@ -250,8 +283,11 @@ class MainWindow(QMainWindow):
         self.state_label.setText(message)
         self.avatar.set_state(avatar)
 
-    def _error(self, message):
-        self.conversation.stop_listening()
+    def _error(self, message, *, stop_microphone=False):
+        if self.automatic_mode and not stop_microphone and self.conversation.listener is not None:
+            self.conversation._finish_question()
+        else:
+            self.conversation.stop_listening()
         if self.background_capture_active:
             self.conversation.continuous.setChecked(False)
         self._event(message)
@@ -291,6 +327,8 @@ class MainWindow(QMainWindow):
             self.background_capture_active = False
         self._update_controls()
         self.conversation.job_finished(kind)
+        if kind == "windows" and self.autostart_pending and not self.close_pending:
+            self.startup_timer.start(0)
         if self.close_pending and not self.jobs:
             QTimer.singleShot(0, self.close)
 
@@ -327,12 +365,22 @@ class MainWindow(QMainWindow):
         for window in windows:
             self.windows.addItem(window.title, window)
         self.windows.blockSignals(False)
+        if windows:
+            self.source_label.setText(windows[0].title)
         self._event(f"{len(windows)} fenêtre(s) disponible(s).")
         if not windows:
             self._event("Aucune fenêtre visible. Ouvrez un jeu en mode fenêtré puis actualisez.")
 
     def _selection_changed(self):
         self.stop()
+        window = self.windows.currentData()
+        if window is not None:
+            self.source_label.setText(window.title)
+
+    def _begin_automatic(self):
+        if self.autostart_pending and not self.close_pending:
+            self.autostart_pending = False
+            self.start()
 
     def start(self):
         window = self.windows.currentData()
@@ -346,8 +394,14 @@ class MainWindow(QMainWindow):
         )
         self.conversation.observation_changed()
         self._update_controls()
+        if self.automatic_mode:
+            self.consent.setChecked(True)
+            if self.conversation.listener is None or not self.conversation.listener.active:
+                self.conversation.toggle_listening()
 
     def stop(self):
+        self.startup_timer.stop()
+        self.autostart_pending = False
         self.conversation.stop_listening()
         self.conversation.timer.stop()
         self.session.stop()
@@ -379,7 +433,7 @@ class MainWindow(QMainWindow):
             self.preview.clear()
             self.preview.setText("Nouvelle capture en cours…")
             self.capture_details.setText("Aucune capture prête.")
-            if not vocal:
+            if not vocal and not self.automatic_mode:
                 self.consent.setChecked(False)
         generation, window = self.session.generation, self.session.window
         if not background:
@@ -404,7 +458,7 @@ class MainWindow(QMainWindow):
         )
         if not background:
             self.answer.clear()
-            if not vocal:
+            if not vocal and not self.automatic_mode:
                 self.consent.setChecked(False)
             self._state("Capture prête à être analysée")
             self._event("Capture locale réussie. Aucune image envoyée.")
@@ -431,7 +485,9 @@ class MainWindow(QMainWindow):
         self.sources.clear()
         self.sources.hide()
         generation = self.session.generation
-        request = AnalysisRequest(self.session.frame, self.question.toPlainText())
+        request = AnalysisRequest(
+            self.session.frame, self.question.toPlainText(), history=self.session.memory.snapshot()
+        )
         self._state("Je regarde votre capture…", "thinking")
         if self.conversation.web.isChecked():
             self._state("Je recherche des sources sur le web…", "thinking")
@@ -467,11 +523,13 @@ class MainWindow(QMainWindow):
         self._job(
             "analysis",
             lambda: self.vision_provider.analyze(request),
-            lambda result: self._analyzed(generation, result),
+            lambda result: self._analyzed(generation, result, question=request.question),
         )
 
-    def _analyzed(self, generation, result):
+    def _analyzed(self, generation, result, *, question=None):
         if self.session.accept_result(generation, result):
+            if question is not None:
+                self.session.memory.append(question, result.text)
             self.answer.setPlainText(result.text)
             self._state("Voici ce que j’observe")
             self._event(
@@ -500,7 +558,7 @@ class MainWindow(QMainWindow):
         self._state("Je prépare ma voix…", "thinking")
         self._event(
             "Lecture demandée : voix Windows locale, aucun texte envoyé sur Internet."
-            if self.settings.tts_provider == "windows"
+            if self.settings.tts_provider in {"windows", "kokoro"}
             else "Lecture demandée : le texte de la réponse est envoyé au service vocal IA."
         )
         self._job(

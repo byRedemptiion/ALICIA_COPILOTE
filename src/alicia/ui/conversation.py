@@ -6,9 +6,10 @@ import time
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QPushButton
 
-from alicia.audio.listening import LocalListener, list_input_devices
+from alicia.audio.listening import list_input_devices
 from alicia.audio.ports import SpeechError
 from alicia.core.wake_word import WakeWordGate
+from alicia.providers import create_listener_factory
 
 
 class ConversationController(QObject):
@@ -21,7 +22,7 @@ class ConversationController(QObject):
         super().__init__(window)
         self.window = window
         self.listener = None
-        self.listener_factory = LocalListener
+        self.listener_factory = create_listener_factory(window.settings)
         self.serial = 0
         self.input_epoch = 0
         self.gate = WakeWordGate()
@@ -61,6 +62,7 @@ class ConversationController(QObject):
         self.device_refresh.clicked.connect(self.refresh_devices)
         self.toggle = QPushButton("Activer le micro")
         self.toggle.clicked.connect(self.toggle_listening)
+        self.toggle.setVisible(not self.window.automatic_mode)
         row.addWidget(self.devices, 1)
         row.addWidget(self.device_refresh)
         row.addWidget(self.toggle)
@@ -127,17 +129,17 @@ class ConversationController(QObject):
             return
         if (
             self.window.settings.ai_provider != "ollama"
-            or self.window.settings.tts_provider != "windows"
+            or self.window.settings.tts_provider not in {"windows", "kokoro"}
         ):
-            self.window._error(
-                "Le mode mains libres gratuit requiert les fournisseurs locaux Ollama et Windows."
-            )
+            self.window._error("Le mode mains libres gratuit requiert l’IA et la voix locales.")
             return
         self.serial += 1
         serial = self.serial
         try:
             self.listener = self.listener_factory(
-                self.window.settings.voice_model_path,
+                self.window.settings.whisper_model_path
+                if self.window.settings.stt_provider == "whisper"
+                else self.window.settings.voice_model_path,
                 on_text=lambda text: self.final_received.emit(serial, self.input_epoch, text),
                 on_partial=lambda text: self.partial_received.emit(serial, self.input_epoch, text),
                 on_error=lambda message: self.failed.emit(serial, message),
@@ -145,7 +147,7 @@ class ConversationController(QObject):
             )
             self.listener.start(self.devices.currentData())
         except SpeechError as error:
-            self.window._error(str(error))
+            self.window._error(str(error), stop_microphone=True)
             return
         self.status.setText("Initialisation du micro local…")
         self.window._event(
@@ -318,4 +320,4 @@ class ConversationController(QObject):
 
     def _failed(self, serial, message):
         if serial == self.serial:
-            self.window._error(message)
+            self.window._error(message, stop_microphone=True)

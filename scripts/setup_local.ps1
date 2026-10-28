@@ -44,7 +44,7 @@ try {
     $env:OLLAMA_HOST = $ollamaApi
     $env:OLLAMA_NO_CLOUD = '1'
     Write-Host 'Alicia : preparation du mode local gratuit, sans cle API.'
-    Write-Host 'Cette installation telecharge les outils et le modele visuel (plusieurs Go).'
+    Write-Host 'Cette installation telecharge les outils, le modele visuel et les modeles audio locaux.'
 
     $uvCandidates = @(
         "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uv.exe",
@@ -98,36 +98,16 @@ try {
     & $uvExecutable sync --python 3.12 --frozen --extra dev
     if ($LASTEXITCODE -ne 0) { throw 'Installation des dependances Alicia impossible.' }
 
-    Write-Host 'Preparation de la reconnaissance vocale francaise locale (Vosk, environ 41 Mo)...'
-    & $uvExecutable run --frozen alicia --prepare-voice
-    if ($LASTEXITCODE -ne 0) { throw 'Preparation du modele vocal impossible. Consultez le message puis relancez Installer_Alicia.bat.' }
-
-    $speechEngine = $null
-    try {
-        Add-Type -AssemblyName System.Speech
-        $speechEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer
-        $femaleFrenchVoices = @($speechEngine.GetInstalledVoices() | Where-Object {
-            $_.Enabled -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq 'fr' -and $_.VoiceInfo.Gender -eq [System.Speech.Synthesis.VoiceGender]::Female
-        })
-        if ($femaleFrenchVoices.Count -eq 0) {
-            Write-Warning 'Aucune voix SAPI feminine francaise disponible. Ajoutez les composants vocaux francais dans les Parametres Windows.'
-        } else {
-            $voiceNames = ($femaleFrenchVoices | ForEach-Object { $_.VoiceInfo.Name }) -join ', '
-            Write-Host "Voix locales compatibles : $voiceNames"
-        }
-    } catch {
-        Write-Warning 'Verification de la voix Windows indisponible. La capture et le modele local restent independants de la synthese.'
-    } finally {
-        if ($speechEngine) { $speechEngine.Dispose() }
-    }
+    Write-Host 'Preparation de Whisper pour la reconnaissance et de Kokoro pour la voix neuronale francaise...'
+    & $uvExecutable run --frozen alicia --prepare-audio
+    if ($LASTEXITCODE -ne 0) { throw 'Preparation des modeles audio impossible. Consultez le message puis relancez Installer_Alicia.bat.' }
 
     # Existing user configuration is intentionally preserved.
     Write-Host ''
     Write-Host 'Installation terminee. Aucun fichier .env existant n a ete modifie.'
-    Write-Host 'La voix utilise une voix feminine francaise installee dans Windows.'
-    Write-Host 'Le microphone reste desactive au lancement. Activez-le explicitement dans Alicia.'
+    Write-Host 'La voix feminine francaise Kokoro et la reconnaissance Whisper restent sur votre PC.'
+    Write-Host 'Alicia observe l ecran principal et active le microphone au lancement. Stop coupe les deux.'
     Write-Host 'La recherche web reste desactivee tant que vous ne l autorisez pas dans Alicia.'
-    Write-Host 'Si elle manque : Parametres Windows > Heure et langue > Voix.'
     Write-Host 'Pour lancer Alicia : .\scripts\start_alicia.ps1'
 } finally {
     $env:OLLAMA_HOST = $previousHost

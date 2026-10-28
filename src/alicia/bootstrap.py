@@ -4,7 +4,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from alicia.capture.demo import DemoCapture
-from alicia.capture.isolated import IsolatedWindowsCapture
+from alicia.capture.isolated import DesktopCaptureSource
 from alicia.config import load_settings
 from alicia.core.ports import ConfigurationError
 from alicia.logging_config import configure_logging
@@ -33,8 +33,9 @@ def run(options) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Alicia")
     app.setOrganizationName("Alicia")
-    source = DemoCapture() if options.demo or options.smoke_test else IsolatedWindowsCapture()
-    window = MainWindow(settings, source, vision_provider, demo=isinstance(source, DemoCapture))
+    demo = options.demo or options.smoke_test
+    source = DemoCapture() if demo else DesktopCaptureSource()
+    window = MainWindow(settings, source, vision_provider, demo=demo, autostart=not demo)
     window.show()
     window._event(f"Journal local : {log_path}")
     if options.smoke_test:

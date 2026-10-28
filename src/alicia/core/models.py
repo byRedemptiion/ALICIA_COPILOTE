@@ -28,10 +28,17 @@ class WebSource:
 
 
 @dataclass(frozen=True)
+class ConversationTurn:
+    user: str
+    assistant: str
+
+
+@dataclass(frozen=True)
 class AnalysisRequest:
     frame: CapturedFrame
     question: str
     web_sources: tuple[WebSource, ...] = ()
+    history: tuple[ConversationTurn, ...] = ()
 
 
 @dataclass(frozen=True)

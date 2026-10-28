@@ -25,6 +25,14 @@ def default_voice_model_path() -> Path:
     return _default_log_directory().parent / "models" / "vosk-model-small-fr-0.22"
 
 
+def default_neural_model_directory() -> Path:
+    return _default_log_directory().parent / "models" / "kokoro"
+
+
+def default_whisper_model_path() -> Path:
+    return _default_log_directory().parent / "models" / "faster-whisper-small"
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     ai_provider: str = "ollama"
@@ -35,7 +43,13 @@ class Settings:
     image_max_edge: int = 1600
     tts_model: str = "gpt-4o-mini-tts"
     tts_voice: str = "shimmer"
-    tts_provider: str = "windows"
+    tts_provider: str = "kokoro"
+    stt_provider: str = "whisper"
+    whisper_device: str = "cpu"
+    neural_model_directory: Path = field(default_factory=default_neural_model_directory)
+    neural_voice: str = "ff_siwis"
+    neural_speed: float = 0.95
+    whisper_model_path: Path = field(default_factory=default_whisper_model_path)
     windows_voice: str = ""
     windows_rate: int = -1
     voice_model_path: Path = field(default_factory=default_voice_model_path)
@@ -55,9 +69,26 @@ def load_settings(env_file: Path | None = Path(".env")) -> Settings:
     model = os.environ.get(model_variable, model_default).strip()
     if not model:
         raise ConfigurationError(f"{model_variable} doit désigner un modèle multimodal.")
-    tts_provider = os.environ.get("ALICIA_TTS_PROVIDER", "windows").strip().lower()
-    if tts_provider not in {"windows", "openai"}:
-        raise ConfigurationError("ALICIA_TTS_PROVIDER doit être windows ou openai.")
+    tts_provider = os.environ.get("ALICIA_TTS_PROVIDER", "kokoro").strip().lower()
+    if tts_provider not in {"kokoro", "windows", "openai"}:
+        raise ConfigurationError("ALICIA_TTS_PROVIDER doit être kokoro, windows ou openai.")
+    stt_provider = os.environ.get("ALICIA_STT_PROVIDER", "whisper").strip().lower()
+    if stt_provider not in {"whisper", "vosk"}:
+        raise ConfigurationError("ALICIA_STT_PROVIDER doit être whisper ou vosk.")
+    whisper_device = os.environ.get("ALICIA_WHISPER_DEVICE", "cpu").strip().lower()
+    if whisper_device not in {"cpu", "cuda"}:
+        raise ConfigurationError("ALICIA_WHISPER_DEVICE doit être cpu ou cuda.")
+    neural_voice = os.environ.get("ALICIA_NEURAL_VOICE", "ff_siwis").strip()
+    if neural_voice != "ff_siwis":
+        raise ConfigurationError(
+            "ALICIA_NEURAL_VOICE doit être ff_siwis pour la voix française féminine."
+        )
+    try:
+        neural_speed = float(os.environ.get("ALICIA_NEURAL_SPEED", "0.95"))
+    except ValueError:
+        raise ConfigurationError("ALICIA_NEURAL_SPEED doit être entre 0.7 et 1.3.") from None
+    if not math.isfinite(neural_speed) or not 0.7 <= neural_speed <= 1.3:
+        raise ConfigurationError("ALICIA_NEURAL_SPEED doit être entre 0.7 et 1.3.")
     try:
         windows_rate = int(os.environ.get("ALICIA_WINDOWS_RATE", "-1"))
     except ValueError:
@@ -109,6 +140,16 @@ def load_settings(env_file: Path | None = Path(".env")) -> Settings:
         tts_model=tts_model,
         tts_voice=tts_voice,
         tts_provider=tts_provider,
+        stt_provider=stt_provider,
+        whisper_device=whisper_device,
+        neural_voice=neural_voice,
+        neural_speed=neural_speed,
+        neural_model_directory=Path(
+            os.environ.get("ALICIA_NEURAL_MODEL_DIR") or default_neural_model_directory()
+        ),
+        whisper_model_path=Path(
+            os.environ.get("ALICIA_WHISPER_MODEL_PATH") or default_whisper_model_path()
+        ),
         windows_voice=os.environ.get("ALICIA_WINDOWS_VOICE", "").strip(),
         windows_rate=windows_rate,
         voice_model_path=Path(
