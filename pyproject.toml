@@ -30,6 +30,10 @@ dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 alicia = "alicia.__main__:main"
 alicia-diag = "alicia.diag:main"
 
+[project.gui-scripts]
+# Même programme, sans fenêtre de terminal (lancé par Lancer_Alicia.bat).
+alicia-gui = "alicia.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/alicia"]
 

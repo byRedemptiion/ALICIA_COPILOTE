@@ -279,6 +279,7 @@ class OrbWindow(QWidget):
     stop_voice = Signal()
     quit_requested = Signal()
     game_chosen = Signal(str)
+    update_requested = Signal()
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -398,6 +399,7 @@ class OrbWindow(QWidget):
             ("Couper la voix", self.stop_voice.emit),
             ("Masquer la bulle", self.bubble.fade_out),
             ("Recoller la bulle au rond", self.bubble.reset_offset),
+            ("Mettre à jour ALICIA", self.update_requested.emit),
             ("Replacer en haut à droite", self._reset_position),
             (None, None),
             ("Quitter ALICIA", self.quit_requested.emit),

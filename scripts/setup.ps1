@@ -27,6 +27,27 @@ uv run --frozen alicia-diag prepare-voice
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Les modèles vocaux n'ont pas pu être téléchargés : la voix locale sera indisponible." -ForegroundColor Yellow
 }
+if (-not (Test-Path ".venv\Scripts\alicia-gui.exe")) {
+    # Lanceur sans terminal ajouté par une mise à jour : on réinstalle le paquet d'ALICIA.
+    uv sync --python 3.12 --frozen --reinstall-package alicia-copilot
+}
+
+Step "Raccourci ALICIA sur le Bureau"
+try {
+    $root = (Get-Location).Path
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $shell = New-Object -ComObject WScript.Shell
+    $link = $shell.CreateShortcut((Join-Path $desktop "ALICIA.lnk"))
+    $link.TargetPath = Join-Path $root "Lancer_Alicia.bat"
+    $link.WorkingDirectory = $root
+    $link.WindowStyle = 7   # réduit : aucun terminal visible au lancement
+    $link.IconLocation = (Join-Path $root "src\alicia\assets\alicia.ico") + ",0"
+    $link.Description = "ALICIA, copilote de jeu"
+    $link.Save()
+    Write-Host "Raccourci ALICIA créé sur le Bureau."
+} catch {
+    Write-Host "Raccourci non créé : $($_.Exception.Message)" -ForegroundColor Yellow
+}
 Copy-Item "uv.lock" ".venv\uv.lock.installed" -Force
 if ($Update) {
     Write-Host "`nDépendances à jour." -ForegroundColor Green

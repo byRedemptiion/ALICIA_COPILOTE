@@ -29,4 +29,17 @@ def qt_app():
     from PySide6.QtWidgets import QApplication
 
     _QT_APP = QApplication.instance() or QApplication([])
-    return _QT_APP
+    yield _QT_APP
+    # Détruire toutes les fenêtres pendant que Qt est encore là : sinon le ramasse-miettes
+    # de Python les libère après la QApplication et le processus plante à la sortie.
+    import gc
+
+    from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
+
+    QThreadPool.globalInstance().waitForDone(5000)
+    for widget in QApplication.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QCoreApplication.processEvents()
+    gc.collect()

@@ -1,13 +1,17 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+rem Lance ALICIA sans terminal. Pour la lancer avec un terminal (diagnostic) :
+rem   Lancer_Alicia.bat --console
 
 if not exist ".venv\Scripts\alicia.exe" goto install
 
-rem Nouvelle version avec de nouvelles dependances ? (uv.lock different de celui installe)
-fc /b "uv.lock" ".venv\uv.lock.installed" >nul 2>nul
-if errorlevel 1 (
-  echo Mise a jour des dependances d'Alicia...
+rem Nouvelle version : dependances changees (uv.lock) ou lanceur sans terminal absent ?
+set "NEED="
+fc /b "uv.lock" ".venv\uv.lock.installed" >nul 2>nul || set "NEED=1"
+if not exist ".venv\Scripts\alicia-gui.exe" set "NEED=1"
+if defined NEED (
+  echo Mise a jour des composants d'ALICIA...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\setup.ps1" -Update
   if errorlevel 1 (
     echo.
@@ -19,7 +23,7 @@ if errorlevel 1 (
 goto run
 
 :install
-echo Alicia n'est pas encore installee sur ce PC : lancement de l'installation...
+echo ALICIA n'est pas encore installee sur ce PC : lancement de l'installation...
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\setup.ps1"
 if errorlevel 1 (
@@ -35,9 +39,14 @@ if not exist ".venv\Scripts\alicia.exe" (
 )
 
 :run
-".venv\Scripts\alicia.exe" %*
-if errorlevel 1 (
-  echo.
-  echo Alicia s'est arretee avec une erreur. Le journal est dans %LOCALAPPDATA%\Alicia\logs
-  pause
+if /i "%~1"=="--console" (
+  ".venv\Scripts\alicia.exe" %2 %3 %4
+  if errorlevel 1 pause
+  exit /b
 )
+if exist ".venv\Scripts\alicia-gui.exe" (
+  start "" ".venv\Scripts\alicia-gui.exe" %*
+) else (
+  start "" ".venv\Scripts\alicia.exe" %*
+)
+exit /b 0

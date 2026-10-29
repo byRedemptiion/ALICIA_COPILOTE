@@ -47,6 +47,13 @@ level = "INFO"               # INFO | DEBUG
 mode = "orb"
 orb_size = 210               # diamètre du rond, en pixels (120 à 600)
 
+[update]
+# Bouton « MAJ » : ALICIA se met à jour depuis ce dépôt GitHub et cette branche.
+# Dépôt privé : ajoute ALICIA_GITHUB_TOKEN=... (jeton en lecture seule) dans .env.
+repo = "byRedemptiion/ALICIA_COPILOTE"
+branch = "alice-v0.3"
+check_on_start = true        # vérifie au lancement (discret) et signale une nouvelle version
+
 [hotkeys]
 # Raccourci global : pressé EN JEU, il capture la fenêtre active et lance l'analyse
 # (avec la question tapée dans Alicia, sinon une question générale). Vide = désactivé.

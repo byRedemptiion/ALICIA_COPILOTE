@@ -158,6 +158,14 @@ class ActionSettings:
 
 
 @dataclass(frozen=True)
+class UpdateSettings:
+    repo: str = "byRedemptiion/ALICIA_COPILOTE"
+    branch: str = "alice-v0.3"
+    check_on_start: bool = True
+    token: Secret = field(default_factory=lambda: Secret(None))
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
@@ -167,6 +175,7 @@ class Settings:
     hotkey_talk: str = ""
     voice: VoiceSettings = field(default_factory=VoiceSettings)
     actions: ActionSettings = field(default_factory=ActionSettings)
+    update: UpdateSettings = field(default_factory=UpdateSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
     sources: tuple[str, ...] = field(default_factory=tuple)
@@ -331,6 +340,12 @@ def load_settings(
         hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
         actions=_actions(_section(data, "actions")),
         ui_mode=_choice(_section(data, "ui"), "mode", "orb", ("orb", "full")),
+        update=UpdateSettings(
+            repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),
+            branch=str(_section(data, "update").get("branch", UpdateSettings.branch)).strip(),
+            check_on_start=bool(_section(data, "update").get("check_on_start", True)),
+            token=Secret(env.get("ALICIA_GITHUB_TOKEN") or env.get("GITHUB_TOKEN")),
+        ),
         orb_size=min(
             _number({"orb_size": _section(data, "ui").get("orb_size", 210)}, "orb_size", int, 120),
             600,

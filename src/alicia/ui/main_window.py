@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -39,6 +40,7 @@ from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.config import state_dir
 from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import make_filter, make_formatter, set_level
+from alicia.core.update import UpdateInfo, Updater, install_root
 from alicia.games.store import GameStore
 from alicia.ui.core_widget import AliciaCore
 from alicia.ui.games_page import GamesPage
@@ -144,6 +146,9 @@ class MainWindow(QMainWindow):
         self.resize(1360, 840)
         self.setMinimumSize(1000, 640)
         self._build_ui()
+        self.update_info: UpdateInfo | None = None
+        self._updating = False
+        self.updater = self._make_updater()
         self._build_orb()
         if self.core.portrait is not None:
             self.setWindowIcon(QIcon(self.core.portrait))
@@ -197,6 +202,10 @@ class MainWindow(QMainWindow):
             "Ne garder que le rond d'ALICIA à l'écran (ses réponses s'affichent à côté)"
         )
         self.orb_button.clicked.connect(self.show_orb)
+        self.update_button = QPushButton("⟳  MAJ")
+        self.update_button.setToolTip("Vérifier et installer la dernière version d'ALICIA")
+        self.update_button.clicked.connect(self.update_now)
+        header.addWidget(self.update_button)
         header.addWidget(self.orb_button)
 
         # --- Colonne gauche : cible + vision -----------------------------------------------------
@@ -447,6 +456,7 @@ class MainWindow(QMainWindow):
         self.orb.quit_requested.connect(self.quit_app)
         self._sync_orb_games()
         self.orb.game_chosen.connect(self._select_game)
+        self.orb.update_requested.connect(self.update_now)
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
@@ -455,6 +465,158 @@ class MainWindow(QMainWindow):
             self.show_orb()
         else:
             self.show_panel()
+        if self.updater is not None and self.services.settings.update.check_on_start:
+            if not self.services.demo:
+                QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
+
+    # --- mise à jour ----------------------------------------------------------------------------
+
+    def _make_updater(self) -> Updater | None:
+        root = install_root()
+        update = self.services.settings.update
+        if root is None or not update.repo or not update.branch:
+            self.update_button.setEnabled(False)
+            self.update_button.setToolTip(
+                "Mise à jour automatique indisponible pour cette installation"
+            )
+            return None
+        return Updater(root, update.repo, update.branch, update.token)
+
+    def _background(self, fn, on_done, on_fail) -> None:  # type: ignore[no-untyped-def]
+        task = Task(0, lambda _emit: fn())
+        task.signals.finished.connect(
+            lambda _g, value: (self._live_tasks.discard(task), on_done(value))
+        )
+        task.signals.failed.connect(lambda _g, exc: (self._live_tasks.discard(task), on_fail(exc)))
+        self._live_tasks.add(task)
+        self.pool.start(task)
+
+    def _notify(self, text: str) -> None:
+        """Message court : barre d'état du panneau, ou bulle en mode bulle."""
+        self.status.setText(text)
+        if self._bubble_active():
+            self.bubble.notice(text)
+
+    def update_now(self) -> None:
+        if self.updater is None or self._updating:
+            return
+        if self.update_info is not None:
+            self._confirm_update(self.update_info)
+        else:
+            self.check_update(interactive=True)
+
+    def check_update(self, interactive: bool = True) -> None:
+        if self.updater is None or self._updating:
+            return
+        self._updating = True
+        self.update_button.setText("⟳  Vérification…")
+        if interactive:
+            self._notify("Je regarde s'il y a une nouvelle version…")
+        updater = self.updater
+
+        def done(info: UpdateInfo | None) -> None:
+            self._updating = False
+            self.update_info = info
+            if info is None:
+                self._set_update_button(False)
+                if interactive:
+                    self._notify("ALICIA est déjà à jour ✓")
+                return
+            self._set_update_button(True)
+            if interactive:
+                self._confirm_update(info)
+            else:
+                self._notify(
+                    "Une nouvelle version d'ALICIA est prête : bouton MAJ (ou clic droit sur le rond)."
+                )
+
+        def failed(exc: Exception) -> None:
+            self._updating = False
+            self._set_update_button(False)
+            detail = exc.detail if isinstance(exc, AliciaError) else repr(exc)
+            log.warning("Vérification de mise à jour impossible : %s", detail)
+            if interactive:
+                message = exc.user_message if isinstance(exc, AliciaError) else str(exc)
+                self._notify("⚠ " + message)
+
+        self._background(updater.check, done, failed)
+
+    def _set_update_button(self, available: bool) -> None:
+        self.update_button.setText("⟳  MAJ dispo" if available else "⟳  MAJ")
+        self.update_button.setObjectName("primary" if available else "")
+        self.update_button.style().unpolish(self.update_button)
+        self.update_button.style().polish(self.update_button)
+
+    def _confirm_update(self, info: UpdateInfo) -> None:
+        when = info.date[:10] if info.date else ""
+        answer = QMessageBox.question(
+            self if self.isVisible() else None,
+            "Mise à jour d'ALICIA",
+            f"Nouvelle version disponible ({info.short}{', ' + when if when else ''}) :\n\n"
+            f"« {info.title} »\n\nL'installer maintenant ? ALICIA redémarrera toute seule.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.install_update(info)
+
+    def install_update(self, info: UpdateInfo) -> None:
+        if self.updater is None or self._updating:
+            return
+        self._updating = True
+        self.update_button.setText("⟳  Installation…")
+        self._notify("Je télécharge ma nouvelle version…")
+        updater = self.updater
+
+        def done(result) -> None:  # type: ignore[no-untyped-def]
+            self._updating = False
+            self.update_info = None
+            self._set_update_button(False)
+            extra = (
+                "\nLes composants Python seront mis à jour au redémarrage (fenêtre de progression)."
+                if result.dependencies_changed
+                else ""
+            )
+            log.info("Redémarrage après mise à jour (%d fichiers)", len(result.changed))
+            QMessageBox.information(
+                self if self.isVisible() else None,
+                "Mise à jour installée",
+                f"Version {info.short} installée ({len(result.changed)} fichier(s) modifié(s)).{extra}\n\n"
+                "ALICIA redémarre.",
+            )
+            self.restart(show_console=result.dependencies_changed)
+
+        def failed(exc: Exception) -> None:
+            self._updating = False
+            self._set_update_button(True)
+            detail = exc.detail if isinstance(exc, AliciaError) else repr(exc)
+            log.error("Mise à jour échouée : %s", detail)
+            message = exc.user_message if isinstance(exc, AliciaError) else str(exc)
+            self._notify("⚠ Mise à jour échouée : " + message)
+
+        self._background(lambda: updater.apply(info), done, failed)
+
+    def restart(self, show_console: bool = False) -> None:
+        """Relance ALICIA par Lancer_Alicia.bat (qui met à jour les dépendances au besoin)."""
+        import subprocess
+        import sys
+
+        root = self.updater.root if self.updater is not None else None
+        launcher = root / "Lancer_Alicia.bat" if root is not None else None
+        if sys.platform == "win32" and launcher is not None and launcher.is_file():
+            # Petite pause (ping) : les raccourcis F9/F10 doivent être libérés avant la relance.
+            # Terminal visible seulement si des composants Python sont à mettre à jour.
+            flags = (
+                subprocess.CREATE_NEW_CONSOLE  # type: ignore[attr-defined]
+                if show_console
+                else subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+            )
+            subprocess.Popen(
+                f'cmd /c "ping -n 3 127.0.0.1 >nul & call "{launcher}""',
+                cwd=str(root),
+                creationflags=flags,
+            )
+        else:
+            log.warning("Redémarrage automatique indisponible : relance ALICIA à la main.")
+        self.quit_app()
 
     def show_orb(self) -> None:
         self.orb_mode = True

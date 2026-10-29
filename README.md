@@ -17,13 +17,19 @@ Alicia regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle 
 
 ## Lancer
 
-Double-cliquer sur **`Lancer_Alicia.bat`**.
+Double-clique sur le raccourci **ALICIA** du Bureau (créé à l'installation ou à la première mise à jour), ou sur **`Lancer_Alicia.bat`**. **Aucun terminal ne reste ouvert** : seule ALICIA apparaît. Une fenêtre de progression ne s'affiche que si des composants doivent être installés.
 
-1. Dans **Fenêtre du jeu**, choisir le jeu (ex. `Overwatch — Overwatch.exe [plein écran]`), puis **Démarrer**.
-2. Taper une question, puis **Entrée** ou **Analyser** : Alicia capture l'écran et répond. **Capturer** permet de vérifier l'aperçu sans appeler l'IA.
-3. Le **Journal** en bas affiche chaque étape : backend de capture, durée, temps avant le premier mot, erreurs.
+- En jeu : **F10** maintenu pour lui parler, **F9** pour une analyse rapide.
+- Pour une question écrite depuis le panneau : choisis la fenêtre du jeu dans l'onglet **JEUX**, tape ta question, puis **Entrée** ou **Analyser**.
+- Le **Journal** (en bas du panneau) affiche chaque étape ; le fichier est dans `%LOCALAPPDATA%\Alicia\logs`.
+- Diagnostic avec terminal : `Lancer_Alicia.bat --console`. Essai sans jeu : `Lancer_Alicia.bat --demo`.
 
-Pour essayer sans jeu : `Lancer_Alicia.bat --demo` (inventaire fictif, clairement signalé).
+### Mise à jour : bouton MAJ
+
+Le bouton **⟳ MAJ** (en haut du panneau, ou **clic droit sur le rond → Mettre à jour ALICIA**) télécharge la dernière version depuis GitHub, remplace les fichiers d'ALICIA et la redémarre. Ta clé (`.env`), tes jeux et tes réglages ne sont jamais touchés. Au lancement, ALICIA vérifie discrètement s'il y a du nouveau : le bouton devient **MAJ dispo**.
+
+- Branche suivie : `[update] branch` dans la config (aujourd'hui `alice-v0.3`).
+- Si le dépôt devient **privé** : crée un jeton GitHub *fine-grained* en lecture seule (Repository access : ce dépôt ; Permissions : Contents → Read-only) et colle-le dans `.env` : `ALICIA_GITHUB_TOKEN=...`.
 
 ### Mode bulle : seule ALICIA à l'écran
 

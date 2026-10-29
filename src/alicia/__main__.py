@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = load_settings()
     except AliciaError as exc:
-        print(f"Configuration invalide : {exc.user_message}", file=sys.stderr)
+        _fatal(f"Configuration invalide : {exc.user_message}")
         return 2
     log_file = setup_logging(settings.log_dir, settings.log_level)
     for line in moved:
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         services = build_services(settings, demo=args.demo or args.smoke_test)
     except AliciaError as exc:
         log.critical("Démarrage impossible : %s", exc.detail)
-        print(exc.user_message, file=sys.stderr)
+        _fatal(f"{exc.user_message}\n\nDétails dans le journal : {log_file}")
         return 1
     window = MainWindow(services, str(log_file))
 
@@ -75,6 +75,23 @@ def main(argv: list[str] | None = None) -> int:
     code = app.exec()
     log.info("Arrêt d'Alicia (code %d)", code)
     return code
+
+
+def _fatal(message: str) -> None:
+    """Erreur au démarrage : dans le terminal s'il y en a un, sinon dans une fenêtre
+    (ALICIA est lancée sans terminal par Lancer_Alicia.bat)."""
+    if sys.stderr is not None:
+        print(message, file=sys.stderr)
+    if sys.stderr is None or sys.platform == "win32":
+        try:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+
+            if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+                return
+            _app = QApplication.instance() or QApplication(sys.argv[:1])
+            QMessageBox.critical(None, "ALICIA ne peut pas démarrer", message)
+        except Exception:  # noqa: BLE001 - dernier recours : le message est déjà au journal
+            pass
 
 
 def _smoke(app, window) -> int:  # type: ignore[no-untyped-def]

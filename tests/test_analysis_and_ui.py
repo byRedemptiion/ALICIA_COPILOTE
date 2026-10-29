@@ -457,3 +457,43 @@ def test_games_tab_updates_the_game_menus(qt_app, settings):
     window.games_page.use_game.emit("hades-ii")
     assert window.services.analysis.game_profile == "hades-ii"
     window.close()
+
+
+def test_update_button_reports_up_to_date_and_new_version(qt_app, settings):
+    from alicia.core.update import UpdateInfo
+    from alicia.ui.main_window import MainWindow
+
+    class StubUpdater:
+        root = None
+
+        def __init__(self, info):
+            self.info = info
+
+        def check(self):
+            return self.info
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    asked = []
+    window._confirm_update = asked.append
+    window.updater = StubUpdater(None)
+    window.check_update(interactive=True)
+    for _ in range(50):
+        qt_app.processEvents()
+        if not window._updating:
+            break
+        import time
+
+        time.sleep(0.02)
+    assert "à jour" in window.status.text()
+    window.updater = StubUpdater(UpdateInfo("b" * 40, "Nouvelle version", ""))
+    window.check_update(interactive=False)
+    for _ in range(50):
+        qt_app.processEvents()
+        if not window._updating:
+            break
+        time.sleep(0.02)
+    assert window.update_button.text().endswith("MAJ dispo")
+    assert not asked  # vérification discrète : on ne dérange pas le joueur
+    window.update_now()
+    assert asked and asked[0].short == "bbbbbbb"
+    window.close()
