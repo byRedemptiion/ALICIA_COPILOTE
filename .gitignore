@@ -1,28 +1,18 @@
-# Configuration et clés locales
+# Secrets et réglages locaux
 .env
-.env.*
-!.env.example
+alice.toml
 
-# Python et outils
-.venv/
+# Python / uv
 __pycache__/
 *.py[cod]
+.venv/
 .pytest_cache/
 .ruff_cache/
-.local-state/
-artifacts/
-.coverage
-htmlcov/
-*.egg-info/
-
-# Génération et diagnostic locaux
 build/
 dist/
-*.log
-*.log.*
+*.egg-info/
 
-# Éditeurs et système
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
+# Sorties de diagnostic
+captures/
+logs/
+*.log

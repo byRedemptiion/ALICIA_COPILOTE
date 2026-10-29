@@ -3,29 +3,29 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "alicia-copilot"
-version = "0.2.0"
-description = "Copilote visuel pour jeux vidéo sous Windows"
+name = "alice-copilot"
+version = "0.1.0"
+description = "Alice : copilote IA qui observe une fenêtre de jeu sous Windows et conseille le joueur"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "PySide6>=6.8,<7",
   "Pillow>=11,<13",
-  "openai>=2,<3",
-  "python-dotenv>=1,<2",
+  "numpy>=2,<3",
   "httpx>=0.28,<1",
-  "vosk>=0.3.45,<0.4",
-  "sounddevice>=0.5,<0.6",
+  "python-dotenv>=1,<2",
+  "windows-capture>=2.0,<3; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 
 [project.scripts]
-alicia = "alicia.__main__:main"
+alice = "alice.__main__:main"
+alice-diag = "alice.diag:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/alicia"]
+packages = ["src/alice"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -35,4 +35,5 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]

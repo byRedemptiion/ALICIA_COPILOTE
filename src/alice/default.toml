@@ -1,0 +1,39 @@
+# Réglages par défaut d'Alice (non secrets).
+# Pour les modifier sans toucher à ce fichier : créer "alice.toml" à la racine du projet
+# (ou dans %APPDATA%\Alice\) avec seulement les clés à changer.
+
+[ai]
+provider = "gemini"          # gemini | ollama | fake
+timeout_s = 30
+max_output_tokens = 1024
+temperature = 0.4
+history_turns = 3            # derniers échanges question/réponse renvoyés au modèle
+
+[ai.gemini]
+# Alias maintenu par Google vers le dernier modèle Flash. "gemini-flash-lite-latest" = plus rapide.
+# Liste des modèles accessibles avec ta clé : alice-diag models
+model = "gemini-flash-latest"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+# Facultatif : réduire la réflexion interne du modèle pour répondre plus vite.
+# thinking_budget = 0        # modèles 2.5
+# thinking_level = "low"     # modèles 3.x
+
+[ai.ollama]
+model = "qwen2.5vl:7b"
+base_url = "http://127.0.0.1:11434"
+keep_alive = "10m"
+
+[capture]
+backend = "auto"             # auto | wgc | printwindow
+monitor_fallback = true      # plein écran : capture de l'écran du jeu si la fenêtre sort noire
+max_image_side = 1568        # px, grand côté de l'image envoyée à l'IA
+jpeg_quality = 88
+keep_last_frames = 5
+save_captures = false        # true = copie de chaque capture analysée dans le dossier captures/
+timeout_s = 2.0
+
+[logging]
+level = "INFO"               # INFO | DEBUG
+
+[game]
+profile = "auto"             # auto | generic | overwatch
