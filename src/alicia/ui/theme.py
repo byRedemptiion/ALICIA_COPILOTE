@@ -213,6 +213,22 @@ QCheckBox::indicator:checked {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {RED}, stop:1 {PINK});
     border-color: {PINK};
 }}
+QRadioButton {{
+    spacing: 10px;
+    color: {TEXT};
+}}
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border-radius: 8px;
+    border: 2px solid {BORDER};
+    background: rgba(2, 10, 16, 0.85);
+}}
+QRadioButton::indicator:checked {{
+    border-color: {PINK};
+    background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+        stop:0 {PINK}, stop:0.55 {PINK}, stop:0.6 rgba(2, 10, 16, 0.85));
+}}
 QComboBox {{
     background: rgba(2, 10, 16, 0.85);
     border: 1px solid {BORDER};

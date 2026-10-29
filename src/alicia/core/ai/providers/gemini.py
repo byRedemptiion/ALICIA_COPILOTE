@@ -14,15 +14,16 @@ import httpx
 
 from alicia.core.ai.base import AnalysisRequest, Source
 from alicia.core.ai.providers.http_base import Chunk, HttpVisionModel, error_message, json_lines
-from alicia.core.config import GeminiSettings
+from alicia.core.config import GeminiSettings, Secret
 from alicia.core.errors import ProviderError, ProviderErrorKind
 
 log = logging.getLogger("alicia.ai")
 OVERLOAD_PAUSE_S = 120  # un modèle saturé est évité pendant ce délai
 
+KEY_URL = "https://aistudio.google.com/apikey"
 KEY_HELP = (
-    "Crée une clé gratuite sur https://aistudio.google.com (« Get API key »), "
-    "puis colle-la dans le fichier .env : GEMINI_API_KEY=ta_clé"
+    "Clique sur « IA » en haut du panneau (ou clic droit sur le rond → Choisir l'IA) : "
+    f"crée ta clé gratuite sur {KEY_URL} et colle-la."
 )
 
 
@@ -358,3 +359,26 @@ class GeminiModel(HttpVisionModel):
             if "generateContent" in item.get("supportedGenerationMethods", []):
                 names.append(str(item.get("name", "")).removeprefix("models/"))
         return sorted(names)
+
+
+DEFAULT_GEMINI = GeminiSettings(
+    "gemini-flash-latest", "https://generativelanguage.googleapis.com/v1beta", Secret(None)
+)
+
+
+def check_gemini_key(key: str, base: GeminiSettings | None = None) -> str | None:
+    """None si la clé fonctionne, sinon un message clair."""
+    from dataclasses import replace
+
+    from alicia.core.errors import AliciaError
+
+    settings = replace(base or DEFAULT_GEMINI, api_key=Secret(key))
+    if not settings.base_url:
+        settings = replace(settings, base_url=DEFAULT_GEMINI.base_url)
+    try:
+        models = GeminiModel(settings, 15).list_models()
+    except AliciaError as exc:
+        return exc.user_message
+    except Exception as exc:  # noqa: BLE001 - réseau, réponse inattendue
+        return f"Vérification impossible : {exc!r}"
+    return None if models else "La clé fonctionne, mais aucun modèle Gemini n'est accessible."

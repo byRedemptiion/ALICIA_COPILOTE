@@ -6,14 +6,20 @@ Alicia regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle 
 
 **Version 0.3** : capture d'une fenêtre (même en plein écran), question écrite (F9) ou orale (F10 maintenu), recherche web, réponse affichée mot par mot et lue à voix haute, logs détaillés. La capture automatique, la mémoire de session et les interventions spontanées arrivent dans les versions suivantes ([feuille de route](docs/architecture.md#feuille-de-route)).
 
-## Installer (une seule fois)
+## Installer
 
-1. Récupérer le projet : `git clone https://github.com/byRedemptiion/ALICIA_COPILOTE` (ou **Code → Download ZIP** sur GitHub, puis décompresser).
-2. Créer une **clé Gemini gratuite** : <https://aistudio.google.com> → **Get API key** → **Create API key**. Aucune carte bancaire n'est demandée.
-3. Double-cliquer sur **`Installer_Alicia.bat`**. Le script :
-   - installe uv (gestionnaire Python), Python 3.12 et les dépendances ;
-   - te demande la clé et l'enregistre dans `.env` (fichier exclu de Git) ;
-   - vérifie la clé et teste l'interface.
+**Télécharge [ALICIA-Setup.exe](https://github.com/byRedemptiion/ALICIA_COPILOTE/releases/download/installer-latest/ALICIA-Setup.exe)** et double-clique dessus. C'est ce fichier qu'on partage.
+
+1. Choisis ton IA : **Gemini** (recommandé, gratuit pour commencer), **Ollama** (IA locale, avancé) ou « plus tard ».
+2. Pour Gemini, le bouton **« Ouvrir la page Gemini pour créer ma clé »** ouvre la page Google : *Create API key*, copie, colle. La clé reste sur ton PC (`%APPDATA%\Alicia\.env`).
+3. L'installateur télécharge Python, les composants et les voix (environ 2 Go la première fois, quelques minutes), crée l'icône **ALICIA** sur le Bureau et dans le menu Démarrer.
+
+- Aucun droit administrateur : ALICIA s'installe dans `%LOCALAPPDATA%\Programs\ALICIA`.
+- Désinstallation : Paramètres Windows → Applications → ALICIA. Tes clés, tes jeux et tes réglages (`%APPDATA%\Alicia`) sont gardés.
+- Windows peut afficher « Windows a protégé votre ordinateur » (installateur non signé) : **Informations complémentaires → Exécuter quand même**.
+- Pas de clé pendant l'installation ? ALICIA te la demande au premier lancement (et le bouton **IA** du panneau permet d'en changer).
+
+Depuis les sources (développement) : `git clone`, puis `Installer_Alicia.bat`.
 
 ## Lancer
 

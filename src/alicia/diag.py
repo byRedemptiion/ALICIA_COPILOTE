@@ -53,6 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     rec = sub.add_parser("record", help="teste le micro : enregistre N secondes en WAV")
     rec.add_argument("--seconds", type=float, default=4.0)
     rec.add_argument("--out", default="micro.wav")
+    sub.add_parser(
+        "setup-ai",
+        help="installateur : enregistre l'IA choisie (ALICIA_SETUP_PROVIDER, ALICIA_SETUP_KEY)",
+    )
     sub.add_parser("games", help="profils de jeu et sites de référence ; crée ton games.toml")
     sub.add_parser("ping", help="question texte minimale à l'IA (sans image) : teste clé et réseau")
     args = parser.parse_args(argv)
@@ -63,6 +67,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "games":
         return _games_command()
+    if args.command == "setup-ai":
+        return _setup_ai_command()
 
     try:
         if args.command in ("devices", "voices", "say", "record", "prepare-voice", "transcribe"):
@@ -147,6 +153,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERREUR : {exc.user_message}", file=sys.stderr)
         print(f"Détail : {exc.detail}", file=sys.stderr)
         return 1
+
+
+def _setup_ai_command() -> int:
+    """Appelé par l'installateur. La clé arrive par variable d'environnement (jamais sur la
+    ligne de commande, visible des autres programmes) et n'est jamais affichée."""
+    import os
+
+    from alicia.core.ai.providers.gemini import check_gemini_key
+    from alicia.core.user_config import set_env, set_value
+
+    provider = os.environ.get("ALICIA_SETUP_PROVIDER", "").strip().lower()
+    key = os.environ.get("ALICIA_SETUP_KEY", "").strip()
+    if provider not in ("gemini", "ollama"):
+        print("IA : à choisir au premier lancement d'ALICIA.")
+        return 0
+    set_value("ai", "provider", provider)
+    if provider == "ollama":
+        print(
+            "IA : Ollama (locale). Installe un modèle qui voit les images, ex. : ollama pull gemma3"
+        )
+        return 0
+    if not key:
+        print("IA : Gemini, clé à coller au premier lancement d'ALICIA.")
+        return 0
+    path = set_env("GEMINI_API_KEY", key)
+    print(f"Clé Gemini enregistrée sur ce PC ({path}).")
+    problem = check_gemini_key(key)
+    print("Clé vérifiée auprès de Google : OK." if problem is None else f"Attention : {problem}")
+    return 0
 
 
 def _games_command() -> int:

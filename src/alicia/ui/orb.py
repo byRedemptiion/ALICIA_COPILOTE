@@ -281,6 +281,7 @@ class OrbWindow(QWidget):
     game_chosen = Signal(str)
     update_requested = Signal()
     wake_toggled = Signal(bool)
+    setup_requested = Signal()
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -405,6 +406,7 @@ class OrbWindow(QWidget):
                 "Réveil « Alicia » : activé ✓" if self.wake_on else "Réveil « Alicia » : coupé",
                 lambda: self.wake_toggled.emit(not self.wake_on),
             ),
+            ("Choisir l'IA / la clé", self.setup_requested.emit),
             ("Mettre à jour ALICIA", self.update_requested.emit),
             ("Replacer en haut à droite", self._reset_position),
             (None, None),

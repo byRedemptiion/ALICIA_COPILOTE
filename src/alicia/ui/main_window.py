@@ -178,8 +178,9 @@ class MainWindow(QMainWindow):
         tagline = QLabel("copilote de jeu")
         tagline.setObjectName("muted")
         model = self.services.model
-        self.provider_label = QLabel(f"IA · {model.provider} / {model.model}")
-        self.provider_label.setObjectName("chip")
+        self.provider_label = QPushButton(f"IA · {model.provider} / {model.model}")
+        self.provider_label.setToolTip("Choisir l'IA d'ALICIA et coller sa clé")
+        self.provider_label.clicked.connect(self.open_setup)
         self.hotkey_label = QLabel("")
         self.hotkey_label.setObjectName("chip")
         self.nav_console = QPushButton("◈  ALICIA")
@@ -481,6 +482,7 @@ class MainWindow(QMainWindow):
         self._sync_orb_games()
         self.orb.game_chosen.connect(self._select_game)
         self.orb.update_requested.connect(self.update_now)
+        self.orb.setup_requested.connect(self.open_setup)
         self.orb.wake_toggled.connect(self.wake_box.setChecked)
         self.orb_mode = settings.ui_mode == "orb"
 
@@ -492,9 +494,55 @@ class MainWindow(QMainWindow):
             self.show_panel()
         if self.wake_box.isChecked() and not self.services.demo:
             self.set_wake(True)
+        if not self.services.demo and self._needs_key():
+            QTimer.singleShot(600, self.open_setup)  # premier lancement : choisir son IA
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
                 QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
+
+    # --- choix de l'IA et de la clé -------------------------------------------------------------
+
+    def _needs_key(self) -> bool:
+        ai = self.services.settings.ai
+        return ai.provider == "gemini" and not ai.gemini.api_key
+
+    def open_setup(self) -> None:
+        from alicia.ui.setup_dialog import SetupDialog
+
+        ai = self.services.settings.ai
+        dialog = SetupDialog(
+            ai.provider,
+            bool(ai.gemini.api_key),
+            self if self.isVisible() else None,
+            gemini=ai.gemini,
+        )
+        if dialog.exec() and dialog.choice is not None:
+            self.apply_ai_choice(*dialog.choice)
+
+    def apply_ai_choice(self, provider: str, key: str) -> None:
+        """Enregistre le choix (clé dans %APPDATA%\\Alicia\\.env) et change d'IA sans redémarrer."""
+        from alicia.core.ai.factory import create_model
+        from alicia.core.config import load_settings
+        from alicia.core.user_config import set_env, set_value
+
+        try:
+            if key:
+                set_env("GEMINI_API_KEY", key)
+            set_value("ai", "provider", provider)
+            settings = load_settings()
+        except (OSError, ValueError, AliciaError) as exc:
+            log.error("Choix de l'IA non enregistré : %r", exc)
+            self._notify("⚠ Impossible d'enregistrer ce choix : voir le journal.")
+            return
+        model = create_model(settings.ai)
+        self.services.settings = settings
+        self.services.model = model
+        self.services.analysis.model = model
+        self.provider_label.setText(f"IA · {model.provider} / {model.model}")
+        log.info("IA choisie : %s/%s", model.provider, model.model)
+        problem = model.check()
+        self._notify("⚠ " + problem if problem else "IA prête ✓ Maintiens F10 ou dis « Alicia… »")
+        self._update_state()
 
     # --- réveil vocal « Alicia » ----------------------------------------------------------------
 

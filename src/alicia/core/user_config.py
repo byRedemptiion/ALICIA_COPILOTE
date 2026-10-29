@@ -68,3 +68,25 @@ def set_value(section: str, key: str, value: object, path: Path | None = None) -
     tmp.replace(path)
     log.info("Réglage enregistré : [%s] %s = %s", section, key, _value(value))
     return path
+
+
+def user_env_file() -> Path:
+    return data_dir() / ".env"
+
+
+def set_env(key: str, value: str, path: Path | None = None) -> Path:
+    """Écrit `KEY=valeur` dans le .env du joueur (clés d'API). La valeur n'est jamais journalisée."""
+    path = path or user_env_file()
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
+        raise ValueError(f"Nom de variable invalide : {key}")
+    if any(c in value for c in "\r\n"):
+        raise ValueError("La valeur ne doit pas contenir de retour à la ligne.")
+    lines = path.read_text("utf-8").splitlines() if path.is_file() else []
+    lines = [line for line in lines if not re.match(rf"^\s*{key}\s*=", line)]
+    lines.append(f"{key}={value.strip()}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    log.info("%s enregistré dans %s (valeur masquée)", key, path)
+    return path
