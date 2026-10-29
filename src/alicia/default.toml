@@ -52,6 +52,15 @@ cursor_box = "1280x800"      # taille de la zone autour du curseur
 # sans question). Quand tu parles, l'IA voit l'écran du moment où tu as commencé.
 live = true
 live_interval_s = 1.0
+# Mémoire de partie : une petite image toutes les 30 s (pendant la vision en direct), pour
+# répondre à « il y a une heure… ». Effacées après 20 h, 10 000 images au plus.
+memory = true
+memory_interval_s = 30
+memory_hours = 20
+memory_max_images = 10000
+memory_clear_on_exit = false
+memory_folder = ""           # vide = dossier d'ALICIA ; sinon par ex. "D:/ALICIA-memoire"
+memory_max_gb = 5            # place maximale sur le disque
 
 [logging]
 level = "INFO"               # INFO | DEBUG

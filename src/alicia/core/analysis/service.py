@@ -53,6 +53,7 @@ class AnalysisService:
         self.transcriber = transcriber
         self.game_profile = settings.game_profile  # « auto » ou un profil choisi dans l'interface
         self.vision_mode = settings.capture.mode  # window | cursor | screen (modifiable en direct)
+        self.timeline = None  # Timeline (mémoire de partie), branchée par l'interface
         self.settings = settings
         self.capture = capture
         self.model = model
@@ -147,11 +148,13 @@ class AnalysisService:
                 self.settings.capture.jpeg_quality,
             )
             profile = resolve_profile(frame.window, self.game_profile)
+            past_images, past_note = self._past_images(question if audio is None else "")
             request = AnalysisRequest(
                 question=question,
-                images=(image,),
+                images=(image, *past_images),
                 system_prompt=build_system_prompt(
-                    profile.prompt_context(web_search) + vision_note(frame), spoken=spoken
+                    profile.prompt_context(web_search) + vision_note(frame) + past_note,
+                    spoken=spoken,
                 ),
                 history=self.session.history(),
                 max_output_tokens=self.settings.ai.max_output_tokens,
@@ -225,6 +228,53 @@ class AnalysisService:
             return AnalysisOutcome(
                 op_id, frame, result, profile.key, total, transcript or local_transcript
             )
+
+    def _past_images(self, question: str) -> tuple[tuple, str]:  # type: ignore[type-arg]
+        """Question sur le passé (« il y a une heure ») : images de ce moment, si gardées."""
+        if self.timeline is None or not question:
+            return (), ""
+        from datetime import datetime
+
+        from PIL import Image
+
+        from alicia.core.capture.timeline import find_past_moment
+
+        when = find_past_moment(question)
+        if when is None:
+            return (), ""
+        found = self.timeline.near(when, count=3)
+        label = when.astimezone().strftime("%H:%M")
+        if not found:
+            log.info("Mémoire de partie : aucune image vers %s", label)
+            return (), (
+                f"\n\nLe joueur parle d'un moment passé (vers {label}), mais aucune capture de "
+                "ce moment n'est gardée : dis-le simplement."
+            )
+        images, times = [], []
+        for moment, path in found:
+            try:
+                with Image.open(path) as picture:
+                    images.append(
+                        prepare_image(
+                            picture.convert("RGB"),
+                            self.settings.capture.max_image_side,
+                            self.settings.capture.jpeg_quality,
+                        )
+                    )
+                times.append(moment.astimezone().strftime("%H:%M:%S"))
+            except OSError as exc:
+                log.warning("Mémoire de partie : image illisible %s (%r)", path.name, exc)
+        if not images:
+            return (), ""
+        now = datetime.now().astimezone().strftime("%H:%M")
+        log.info(
+            "Mémoire de partie : %d image(s) vers %s jointes à la question", len(images), label
+        )
+        return tuple(images), (
+            f"\n\nLa 1re image est l'écran actuel ({now}). Les suivantes viennent de la mémoire "
+            f"de partie, prises à {', '.join(times)}, parce que le joueur parle de ce moment "
+            "passé : appuie-toi sur elles pour répondre."
+        )
 
     def _maybe_save(self, frame: Frame, op_id: str) -> None:
         if not self.settings.capture.save_captures:

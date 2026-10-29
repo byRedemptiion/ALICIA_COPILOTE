@@ -607,3 +607,26 @@ def test_speech_uses_the_screen_from_when_you_started_talking(qt_app, settings):
     outcome = run_until(qt_app, window)
     assert outcome.frame is before  # pas de nouvelle capture : l'image du début de la phrase
     window.close()
+
+
+def test_question_about_the_past_sends_remembered_images(settings, tmp_path):
+    from dataclasses import replace
+    from datetime import UTC, datetime, timedelta
+
+    from alicia.core.capture.timeline import Timeline
+
+    model = FakeModel()
+    services = build_services(settings, demo=True, model=model)
+    timeline = Timeline(tmp_path / "memoire")
+    frame = services.capture.capture(DEMO_WINDOW)
+    for minutes in (58, 60, 62, 5):
+        timeline.add(
+            replace(frame, captured_at=datetime.now(UTC) - timedelta(minutes=minutes)), force=True
+        )
+    services.analysis.timeline = timeline
+    services.analysis.analyze(DEMO_WINDOW, "Il y a une heure, c'était quoi mon objet ?")
+    request = model.requests[-1]
+    assert len(request.images) == 4  # écran actuel + 3 images d'il y a une heure
+    assert "mémoire de partie" in request.system_prompt
+    services.analysis.analyze(DEMO_WINDOW, "Quel objet maintenant ?")
+    assert len(model.requests[-1].images) == 1

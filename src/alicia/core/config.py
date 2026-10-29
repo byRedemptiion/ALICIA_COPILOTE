@@ -142,6 +142,13 @@ class CaptureSettings:
     cursor_box: tuple[int, int] = (1280, 800)  # taille de la zone autour du curseur (px)
     live: bool = True  # vision en direct : capture récente toujours prête (en mémoire)
     live_interval_s: float = 1.0
+    memory: bool = True  # mémoire de partie : petites captures datées sur le disque
+    memory_interval_s: float = 30.0
+    memory_hours: float = 20.0
+    memory_max_images: int = 10_000
+    memory_clear_on_exit: bool = False
+    memory_folder: str = ""  # vide = %LOCALAPPDATA%\Alicia\memoire ; sinon un disque dédié
+    memory_max_gb: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -372,6 +379,13 @@ def load_settings(
             cursor_box=_box(capture.get("cursor_box", "1280x800")),
             live=bool(capture.get("live", True)),
             live_interval_s=max(0.3, min(10.0, float(capture.get("live_interval_s", 1.0)))),
+            memory=bool(capture.get("memory", True)),
+            memory_interval_s=max(5.0, float(capture.get("memory_interval_s", 30.0))),
+            memory_hours=max(0.5, min(720.0, float(capture.get("memory_hours", 20.0)))),
+            memory_folder=str(capture.get("memory_folder", "")).strip(),
+            memory_max_gb=max(0.1, min(10_000.0, float(capture.get("memory_max_gb", 5.0)))),
+            memory_max_images=max(10, int(capture.get("memory_max_images", 10_000))),
+            memory_clear_on_exit=bool(capture.get("memory_clear_on_exit", False)),
         ),
         log_level=level,
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),

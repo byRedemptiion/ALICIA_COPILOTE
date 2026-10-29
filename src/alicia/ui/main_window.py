@@ -502,12 +502,95 @@ class MainWindow(QMainWindow):
                 window = self.services.capture.foreground_window() or self.observed
                 return window, self._vision(), self.services.settings.capture.cursor_box
 
-            self.live = LiveCapture(self.services.capture.capture, target, capture.live_interval_s)
+            self.live = LiveCapture(
+                self.services.capture.capture,
+                target,
+                capture.live_interval_s,
+                on_frame=self._remember_frame,
+            )
             self._live_timer = QTimer(self)
             self._live_timer.timeout.connect(self._show_live_frame)
             self._live_timer.start(1000)
         self.live.interval_s = max(0.3, capture.live_interval_s)
         self.live.start()
+
+    # --- mémoire de partie ------------------------------------------------------------------
+
+    def _remember_frame(self, frame: Frame) -> None:
+        timeline = self.services.analysis.timeline
+        if timeline is not None:
+            timeline.add(frame)
+
+    def set_memory(self, on: bool, save: bool = True) -> None:
+        """Mémoire de partie : petites captures datées, nettoyées automatiquement."""
+        from dataclasses import replace
+
+        from alicia.core.capture.timeline import Timeline
+
+        capture = replace(self.services.settings.capture, memory=on)
+        self.services.settings = replace(self.services.settings, capture=capture)
+        if save:
+            self._save("capture", "memory", on)
+        if not on:
+            self.services.analysis.timeline = None
+            return
+        timeline = self.services.analysis.timeline
+        folder = self._memory_folder()
+        if timeline is not None and timeline.folder != folder:
+            timeline = None  # nouveau dossier : les anciennes images restent dans l'ancien
+        if timeline is None:
+            timeline = Timeline(
+                folder,
+                interval_s=capture.memory_interval_s,
+                retention_h=capture.memory_hours,
+                max_images=capture.memory_max_images,
+            )
+            log.info("Mémoire de partie : %s", folder)
+            self.services.analysis.timeline = timeline
+            self._background(timeline.cleanup, lambda _n: None, lambda _e: None)
+            if not hasattr(self, "_memory_timer"):
+                self._memory_timer = QTimer(self)
+                self._memory_timer.timeout.connect(self._cleanup_memory)
+                self._memory_timer.start(3600 * 1000)  # nettoyage toutes les heures
+        timeline.interval_s = capture.memory_interval_s
+        timeline.retention_h = capture.memory_hours
+        timeline.max_images = capture.memory_max_images
+        timeline.max_bytes = int(capture.memory_max_gb * 1024**3)
+
+    def _memory_folder(self):  # type: ignore[no-untyped-def]
+        from pathlib import Path
+
+        folder = self.services.settings.capture.memory_folder
+        return Path(folder) / "ALICIA-memoire" if folder else state_dir() / "memoire"
+
+    def choose_memory_folder(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        folder = QFileDialog.getExistingDirectory(
+            self, "Disque ou dossier pour la mémoire d'ALICIA", ""
+        )
+        if folder:
+            self.change_setting("memory_folder", folder)
+
+    def _cleanup_memory(self) -> None:
+        timeline = self.services.analysis.timeline
+        if timeline is not None:
+            self._background(timeline.cleanup, lambda _n: None, lambda _e: None)
+
+    def clear_memory(self) -> None:
+        from alicia.core.capture.timeline import Timeline
+
+        timeline = self.services.analysis.timeline or Timeline(self._memory_folder())
+        removed = timeline.clear()
+        self._notify(f"Mémoire de partie effacée ({removed} image(s)).")
+        self._load_settings_page()
+
+    def memory_usage_text(self) -> str:
+        timeline = self.services.analysis.timeline
+        if timeline is None:
+            return "Mémoire de partie coupée."
+        count, size = timeline.usage()
+        return f"{count} image(s) gardée(s), {size / 1_048_576:.0f} Mo — {timeline.folder}"
 
     def _live_frame(self, max_age_s: float = 3.0) -> Frame | None:
         return self.live.fresh(max_age_s) if self.live is not None else None
@@ -563,6 +646,7 @@ class MainWindow(QMainWindow):
         self.settings_page.load_vision(
             capture.mode, capture.cursor_box, capture.live, capture.live_interval_s
         )
+        self.settings_page.load_memory(capture, self.memory_usage_text())
         self.settings_page.load(
             self.services.settings.voice,
             self.wake_box.isChecked(),
@@ -636,6 +720,34 @@ class MainWindow(QMainWindow):
             self.set_vision(str(value))
         elif key == "live":
             self.set_live(bool(value))
+        elif key == "memory":
+            self.set_memory(bool(value))
+        elif key == "memory_folder_pick":
+            self.choose_memory_folder()
+        elif key in (
+            "memory_interval_s",
+            "memory_hours",
+            "memory_clear_on_exit",
+            "memory_folder",
+            "memory_max_gb",
+        ):
+            from dataclasses import replace
+
+            if key == "memory_clear_on_exit":
+                value = bool(value)
+            elif key == "memory_folder":
+                value = str(value or "")
+            else:
+                value = float(value)  # type: ignore[arg-type]
+            capture = replace(self.services.settings.capture, **{key: value})
+            self.services.settings = replace(self.services.settings, capture=capture)
+            self._save("capture", key, value)
+            if capture.memory:
+                self.set_memory(True, save=False)
+            if key == "memory_folder":
+                self._load_settings_page()
+        elif key == "memory_clear":
+            self.clear_memory()
         elif key == "live_interval_s":
             from dataclasses import replace
 
@@ -773,6 +885,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(600, self.open_setup)  # premier lancement : choisir son IA
         if not self.services.demo:
             self.prepare_ollama()
+            self.set_memory(self.services.settings.capture.memory, save=False)
             self.set_live(self.services.settings.capture.live, save=False)
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
@@ -1197,6 +1310,9 @@ class MainWindow(QMainWindow):
             self.wake.stop()
         if self.live is not None:
             self.live.stop()
+        timeline = self.services.analysis.timeline
+        if timeline is not None and self.services.settings.capture.memory_clear_on_exit:
+            timeline.clear()
         if self.ollama_runtime is not None:
             self.ollama_runtime.stop()
         for hotkey in (self.hotkey, self.talk_hotkey):

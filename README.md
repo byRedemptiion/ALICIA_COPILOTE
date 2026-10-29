@@ -97,6 +97,14 @@ Menu **Vision** (panneau, clic droit sur le rond, ou Réglages) :
 - **L'écran entier** : tout l'écran du jeu (pratique avec un guide ou une carte à côté).
 - **Vision en direct** (activée par défaut, Réglages → Vision) : ALICIA garde en mémoire une capture récente (toutes les secondes). Quand tu commences à parler (F10 ou « Alicia… »), l'image de cet instant est déjà prête : pas besoin de F9, et l'IA voit l'écran du moment où tu as parlé. Rien n'est envoyé tant que tu ne poses pas de question.
 
+### Mémoire de partie : « il y a une heure… »
+
+Pendant la vision en direct, ALICIA garde une petite image datée toutes les 30 s. Demande « il y a une heure, c'était quoi mon objet ? », « tout à l'heure, tu as vu le boss ? » ou « à 21h30, j'étais où ? » : les images de ce moment partent avec ta question.
+
+- Nettoyage automatique au lancement et toutes les heures : images de plus de 20 h effacées, 10 000 images et 5 Go au plus (réglables).
+- **Réglages → Mémoire de partie** : fréquence, durée (jusqu'à 30 jours), place maximale (jusqu'à 500 Go), **disque ou dossier dédié**, effacement à la fermeture, bouton « Effacer maintenant ».
+- Les images restent sur ton PC et ne partent à l'IA que si ta question parle du passé.
+
 ### Tes jeux et tes sites de référence
 
 ALICIA a un **profil par jeu** : elle sait à quel jeu tu joues (sans le deviner sur l'image), quoi regarder à l'écran, et **sur quels sites chercher en premier** quand la recherche web est active. Profils fournis : **Overwatch** et **World of Warcraft: Forever** (Icy Veins, Method, Mobalytics, Warcraft Tavern, Warcraft Wiki).

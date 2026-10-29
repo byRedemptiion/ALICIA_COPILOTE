@@ -148,3 +148,63 @@ def test_live_capture_waits_for_a_window_in_application_mode():
 
     live = LiveCapture(CaptureService.demo().capture, lambda: (None, "window", (800, 500)))
     assert live.grab_once() is None and live.latest is None
+
+
+def test_game_memory_keeps_dated_images_and_cleans_up(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from alicia.core.capture.timeline import Timeline
+
+    svc = CaptureService.demo()
+    timeline = Timeline(tmp_path / "memoire", interval_s=30, retention_h=20, max_images=3)
+    frame = svc.capture(DEMO_WINDOW)
+    assert timeline.add(frame) is not None
+    assert timeline.add(frame) is None  # moins de 30 s : pas de nouvelle image
+    now = datetime.now(UTC)
+    for hours in (1, 2, 25):  # une image trop vieille (25 h)
+        old = replace_time(frame, now - timedelta(hours=hours))
+        timeline.add(old, force=True)
+    assert timeline.usage()[0] == 4
+    assert timeline.cleanup(now) == 1  # la plus vieille (25 h), qui dépassait aussi 3 images
+    times = [when for when, _ in timeline.entries()]
+    assert len(times) == 3 and min(times) > now - timedelta(hours=20)
+    near = timeline.near(now - timedelta(hours=1), count=1)
+    assert abs((near[0][0] - (now - timedelta(hours=1))).total_seconds()) < 5
+    timeline.max_bytes = 1  # place maximale dépassée : on efface les plus anciennes
+    assert timeline.cleanup(now) >= 1
+
+
+def replace_time(frame, when):
+    from dataclasses import replace
+
+    return replace(frame, captured_at=when)
+
+
+@pytest.mark.parametrize(
+    ("question", "minutes"),
+    [
+        ("Il y a une heure, j'avais quel objet ?", 60),
+        ("c'était quoi le boss il y a 20 minutes", 20),
+        ("il y a 2h on était où", 120),
+        ("tout à l'heure tu as vu ma barre de sorts ?", 20),
+        ("il y a une heure et demie", 90),
+    ],
+)
+def test_past_moments_are_understood(question, minutes):
+    from datetime import datetime, timedelta
+
+    from alicia.core.capture.timeline import find_past_moment
+
+    now = datetime(2026, 10, 30, 0, 40).astimezone()
+    assert find_past_moment(question, now) == now - timedelta(minutes=minutes)
+
+
+def test_clock_time_and_no_past():
+    from datetime import datetime
+
+    from alicia.core.capture.timeline import find_past_moment
+
+    now = datetime(2026, 10, 30, 0, 40).astimezone()
+    moment = find_past_moment("qu'est-ce que j'avais à 23h15 ?", now)
+    assert (moment.day, moment.hour, moment.minute) == (29, 23, 15)
+    assert find_past_moment("quel objet je prends ?", now) is None

@@ -29,8 +29,10 @@ class LiveCapture:
         capture: Callable[[WindowInfo | None, str, tuple[int, int]], Frame],
         target: Target,
         interval_s: float = 1.0,
+        on_frame: Callable[[Frame], object] | None = None,
     ) -> None:
         self._capture = capture
+        self.on_frame = on_frame  # ex. mémoire de partie
         self._target = target
         self.interval_s = max(0.3, interval_s)
         self.latest: Frame | None = None
@@ -79,6 +81,11 @@ class LiveCapture:
         self._errors = 0
         self.latest, self.latest_at = frame, time.monotonic()
         self.frames += 1
+        if self.on_frame is not None:
+            try:
+                self.on_frame(frame)
+            except Exception:  # noqa: BLE001
+                log.exception("Vision en direct : traitement de l'image impossible")
         return frame
 
     def _loop(self) -> None:

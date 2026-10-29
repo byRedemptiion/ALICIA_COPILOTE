@@ -158,6 +158,74 @@ class SettingsPage(QScrollArea):
         )
         layout.addWidget(vision)
 
+        # --- Mémoire de partie ---------------------------------------------------------------
+        memory, grid = _panel()
+        grid.addWidget(_title("MÉMOIRE DE PARTIE"), 0, 0, 1, 3)
+        self.memory_box = QCheckBox(
+            "Garder de petites captures datées pour « il y a une heure… », « tout à l'heure… »"
+        )
+        grid.addWidget(self.memory_box, 1, 0, 1, 3)
+        self.memory_interval = QComboBox()
+        for seconds, label in (
+            (15.0, "Toutes les 15 s"),
+            (30.0, "Toutes les 30 s"),
+            (60.0, "Toutes les minutes"),
+        ):
+            self.memory_interval.addItem(label, seconds)
+        self.memory_hours = QComboBox()
+        for hours, label in (
+            (2.0, "2 heures"),
+            (8.0, "8 heures"),
+            (20.0, "20 heures"),
+            (48.0, "2 jours"),
+            (168.0, "7 jours"),
+            (720.0, "30 jours"),
+        ):
+            self.memory_hours.addItem(label, hours)
+        self.memory_size = QComboBox()
+        for size, label in (
+            (2.0, "2 Go"),
+            (5.0, "5 Go"),
+            (20.0, "20 Go"),
+            (100.0, "100 Go"),
+            (500.0, "500 Go"),
+        ):
+            self.memory_size.addItem(label, size)
+        pick = QPushButton("Choisir un disque / dossier…")
+        pick.clicked.connect(lambda: self.setting_changed.emit("memory_folder_pick", True))
+        default_folder = QPushButton("Dossier par défaut")
+        default_folder.setObjectName("ghost")
+        default_folder.clicked.connect(lambda: self.setting_changed.emit("memory_folder", ""))
+        grid.addWidget(QLabel("Une image"), 2, 0)
+        grid.addWidget(self.memory_interval, 2, 1, 1, 2)
+        grid.addWidget(QLabel("Gardées pendant"), 3, 0)
+        grid.addWidget(self.memory_hours, 3, 1, 1, 2)
+        self.memory_clear_exit = QCheckBox("Tout effacer à la fermeture d'ALICIA")
+        grid.addWidget(QLabel("Place maximale"), 4, 0)
+        grid.addWidget(self.memory_size, 4, 1, 1, 2)
+        grid.addWidget(QLabel("Emplacement"), 5, 0)
+        grid.addWidget(pick, 5, 1)
+        grid.addWidget(default_folder, 5, 2)
+        grid.addWidget(self.memory_clear_exit, 7, 0, 1, 3)
+        self.memory_usage = _muted("")
+        clear_now = QPushButton("Effacer maintenant")
+        clear_now.clicked.connect(lambda: self.setting_changed.emit("memory_clear", True))
+        grid.addWidget(self.memory_usage, 8, 0, 1, 2)
+        grid.addWidget(clear_now, 8, 2)
+        grid.addWidget(
+            _muted(
+                "Images réduites (environ 100 Ko), sur ton PC seulement, prises pendant la vision "
+                "en direct. Nettoyage automatique au lancement et toutes les heures, et jamais "
+                "plus de 10 000 images. Elles ne partent à l'IA que si ta question parle du passé. "
+                "Avec un disque dédié, choisis-le dans « Emplacement » et monte la durée et la place."
+            ),
+            9,
+            0,
+            1,
+            3,
+        )
+        layout.addWidget(memory)
+
         # --- Micro -------------------------------------------------------------------------------
         mic, grid = _panel()
         grid.addWidget(_title("MICRO"), 0, 0, 1, 3)
@@ -272,6 +340,17 @@ class SettingsPage(QScrollArea):
             lambda _i: self._emit("cursor_box", self.box_size.currentData())
         )
         self.live_box.toggled.connect(lambda on: self._emit("live", on))
+        self.memory_box.toggled.connect(lambda on: self._emit("memory", on))
+        self.memory_interval.currentIndexChanged.connect(
+            lambda _i: self._emit("memory_interval_s", self.memory_interval.currentData())
+        )
+        self.memory_hours.currentIndexChanged.connect(
+            lambda _i: self._emit("memory_hours", self.memory_hours.currentData())
+        )
+        self.memory_clear_exit.toggled.connect(lambda on: self._emit("memory_clear_on_exit", on))
+        self.memory_size.currentIndexChanged.connect(
+            lambda _i: self._emit("memory_max_gb", self.memory_size.currentData())
+        )
         self.live_interval.currentIndexChanged.connect(
             lambda _i: self._emit("live_interval_s", self.live_interval.currentData())
         )
@@ -335,6 +414,23 @@ class SettingsPage(QScrollArea):
             self.speed_label.setText(f"{percent:+d} %")
             self.mode_box.setCurrentIndex(max(0, self.mode_box.findData(ui_mode)))
             self.ai_label.setText(ai_text)
+        finally:
+            self._loading = False
+
+    def load_memory(self, capture, usage: str) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            self.memory_box.setChecked(capture.memory)
+            for box, value, unit in (
+                (self.memory_interval, capture.memory_interval_s, "s"),
+                (self.memory_size, capture.memory_max_gb, "Go"),
+                (self.memory_hours, capture.memory_hours, "h"),
+            ):
+                if box.findData(value) < 0:
+                    box.addItem(f"{value:g} {unit}", value)
+                box.setCurrentIndex(box.findData(value))
+            self.memory_clear_exit.setChecked(capture.memory_clear_on_exit)
+            self.memory_usage.setText(usage)
         finally:
             self._loading = False
 
