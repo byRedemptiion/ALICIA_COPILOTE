@@ -507,7 +507,9 @@ class MainWindow(QMainWindow):
 
     def _needs_key(self) -> bool:
         ai = self.services.settings.ai
-        return ai.provider == "gemini" and not ai.gemini.api_key
+        return (ai.provider == "gemini" and not ai.gemini.api_key) or (
+            ai.provider == "openai" and not ai.openai.api_key
+        )
 
     def open_setup(self) -> None:
         from alicia.ui.setup_dialog import SetupDialog
@@ -515,9 +517,10 @@ class MainWindow(QMainWindow):
         ai = self.services.settings.ai
         dialog = SetupDialog(
             ai.provider,
-            bool(ai.gemini.api_key),
+            {"gemini": bool(ai.gemini.api_key), "openai": bool(ai.openai.api_key)},
             self if self.isVisible() else None,
             gemini=ai.gemini,
+            openai=ai.openai,
         )
         if dialog.exec() and dialog.choice is not None:
             self.apply_ai_choice(*dialog.choice)
@@ -530,7 +533,9 @@ class MainWindow(QMainWindow):
 
         try:
             if key:
-                set_env("GEMINI_API_KEY", key)
+                from alicia.ui.setup_dialog import KEY_PROVIDERS
+
+                set_env(KEY_PROVIDERS[provider].env, key)
             set_value("ai", "provider", provider)
             settings = load_settings()
         except (OSError, ValueError, AliciaError) as exc:

@@ -51,7 +51,7 @@ def test_secret_is_never_printed():
 
 @pytest.mark.parametrize(
     "content",
-    ['[ai]\nprovider = "openai"\n', '[capture]\nbackend = "magic"\n', "[ai\nbroken"],
+    ['[ai]\nprovider = "chatgpt"\n', '[capture]\nbackend = "magic"\n', "[ai\nbroken"],
 )
 def test_invalid_config_is_reported(tmp_path, content):
     (tmp_path / "alicia.toml").write_text(content)

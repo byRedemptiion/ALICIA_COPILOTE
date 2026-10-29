@@ -165,7 +165,7 @@ def _setup_ai_command() -> int:
 
     provider = os.environ.get("ALICIA_SETUP_PROVIDER", "").strip().lower()
     key = os.environ.get("ALICIA_SETUP_KEY", "").strip()
-    if provider not in ("gemini", "ollama"):
+    if provider not in ("gemini", "openai", "ollama"):
         print("IA : à choisir au premier lancement d'ALICIA.")
         return 0
     set_value("ai", "provider", provider)
@@ -175,13 +175,19 @@ def _setup_ai_command() -> int:
             "au premier lancement (installe Ollama : https://ollama.com/download)."
         )
         return 0
+    name = "OpenAI" if provider == "openai" else "Gemini"
     if not key:
-        print("IA : Gemini, clé à coller au premier lancement d'ALICIA.")
+        print(f"IA : {name}, clé à coller au premier lancement d'ALICIA.")
         return 0
-    path = set_env("GEMINI_API_KEY", key)
-    print(f"Clé Gemini enregistrée sur ce PC ({path}).")
-    problem = check_gemini_key(key)
-    print("Clé vérifiée auprès de Google : OK." if problem is None else f"Attention : {problem}")
+    path = set_env("OPENAI_API_KEY" if provider == "openai" else "GEMINI_API_KEY", key)
+    print(f"Clé {name} enregistrée sur ce PC ({path}).")
+    if provider == "openai":
+        from alicia.core.ai.providers.openai import check_openai_key
+
+        problem = check_openai_key(key)
+    else:
+        problem = check_gemini_key(key)
+    print("Clé vérifiée : OK." if problem is None else f"Attention : {problem}")
     return 0
 
 

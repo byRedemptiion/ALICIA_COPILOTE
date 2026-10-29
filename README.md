@@ -10,7 +10,7 @@ Alicia regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle 
 
 **Télécharge [ALICIA-Setup.exe](https://github.com/byRedemptiion/ALICIA_COPILOTE/releases/download/installer-latest/ALICIA-Setup.exe)** et double-clique dessus. C'est ce fichier qu'on partage.
 
-1. Choisis ton IA : **Gemini** (recommandé, gratuit pour commencer), **Ollama** (IA locale, avancé) ou « plus tard ».
+1. Choisis ton IA : **Gemini** (recommandé, gratuit pour commencer), **ChatGPT** (API OpenAI, payante à l'usage : crédit prépayé, l'abonnement ChatGPT ne compte pas), **Ollama** (IA locale, avancé : ALICIA le démarre et télécharge son modèle toute seule) ou « plus tard ».
 2. Pour Gemini, le bouton **« Ouvrir la page Gemini pour créer ma clé »** ouvre la page Google : *Create API key*, copie, colle. La clé reste sur ton PC (`%APPDATA%\Alicia\.env`).
 3. L'installateur télécharge Python, les composants et les voix (environ 2 Go la première fois, quelques minutes), crée l'icône **ALICIA** sur le Bureau et dans le menu Démarrer.
 

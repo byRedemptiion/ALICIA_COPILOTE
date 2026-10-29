@@ -78,11 +78,29 @@ var
 function SetEnvironmentVariable(lpName: String; lpValue: String): BOOL;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
+function IsOpenAI(): Boolean;
+begin
+  Result := AiPage.SelectedValueIndex = 1;
+end;
+
 procedure OpenKeyPage(Sender: TObject);
 var
   ErrorCode: Integer;
+  Url: String;
 begin
-  ShellExec('open', 'https://aistudio.google.com/apikey', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+  if IsOpenAI() then
+    Url := 'https://platform.openai.com/api-keys'
+  else
+    Url := 'https://aistudio.google.com/apikey';
+  ShellExec('open', Url, '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+end;
+
+function KeyName(): String;
+begin
+  if IsOpenAI() then
+    Result := 'OPENAI_API_KEY='
+  else
+    Result := 'GEMINI_API_KEY=';
 end;
 
 function ExistingKey(): Boolean;
@@ -90,7 +108,7 @@ var
   Text: AnsiString;
 begin
   Result := LoadStringFromFile(ExpandConstant('{userappdata}\Alicia\.env'), Text)
-    and (Pos('GEMINI_API_KEY=', String(Text)) > 0);
+    and (Pos(KeyName(), String(Text)) > 0);
 end;
 
 procedure InitializeWizard;
@@ -101,6 +119,7 @@ begin
     'Tu pourras changer d''avis plus tard (bouton IA dans ALICIA).',
     True, False);
   AiPage.Add('Gemini (Google) — recommandé, gratuit pour commencer');
+  AiPage.Add('ChatGPT (OpenAI) — payant à l''usage (clé API avec crédit)');
   AiPage.Add('Ollama — IA locale sur ton PC (avancé, demande une bonne carte graphique)');
   AiPage.Add('Je choisirai plus tard, au premier lancement d''ALICIA');
   AiPage.SelectedValueIndex := 0;
@@ -126,7 +145,7 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := (PageID = KeyPage.ID) and (AiPage.SelectedValueIndex <> 0);
+  Result := (PageID = KeyPage.ID) and (AiPage.SelectedValueIndex > 1);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -145,7 +164,8 @@ function Provider(): String;
 begin
   case AiPage.SelectedValueIndex of
     0: Result := 'gemini';
-    1: Result := 'ollama';
+    1: Result := 'openai';
+    2: Result := 'ollama';
   else
     Result := 'later';
   end;
@@ -160,7 +180,7 @@ begin
     Exit;
   { La clé passe par une variable d'environnement (jamais sur la ligne de commande). }
   SetEnvironmentVariable('ALICIA_SETUP_PROVIDER', Provider());
-  if Provider() = 'gemini' then
+  if (Provider() = 'gemini') or (Provider() = 'openai') then
     SetEnvironmentVariable('ALICIA_SETUP_KEY', Trim(KeyPage.Values[0]))
   else
     SetEnvironmentVariable('ALICIA_SETUP_KEY', '');
@@ -180,6 +200,31 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
+  if CurPageID = KeyPage.ID then
+  begin
+    if IsOpenAI() then
+    begin
+      WizardForm.PageNameLabel.Caption := 'Ta clé OpenAI (ChatGPT)';
+      WizardForm.PageDescriptionLabel.Caption := 'Clé API payante à l''usage (l''abonnement ChatGPT ne compte pas).';
+      KeyPage.SubCaptionLabel.Caption :=
+        '1. Clique sur le bouton : la plateforme OpenAI s''ouvre (ajoute du crédit si besoin).' + #13#10 +
+        '2. Clique sur « Create new secret key », puis copie la clé.' + #13#10 +
+        '3. Colle-la ci-dessous. Elle reste sur ce PC, jamais partagée.';
+      KeyButton.Caption := 'Ouvrir la page OpenAI pour créer ma clé';
+      KeyPage.PromptLabels[0].Caption := 'Clé OpenAI :';
+    end
+    else
+    begin
+      WizardForm.PageNameLabel.Caption := 'Ta clé Gemini';
+      WizardForm.PageDescriptionLabel.Caption := 'Gratuite, 1 minute avec ton compte Google.';
+      KeyPage.SubCaptionLabel.Caption :=
+        '1. Clique sur le bouton : la page Gemini s''ouvre dans ton navigateur.' + #13#10 +
+        '2. Clique sur « Create API key », puis copie la clé.' + #13#10 +
+        '3. Colle-la ci-dessous. Elle reste sur ce PC, jamais partagée.';
+      KeyButton.Caption := 'Ouvrir la page Gemini pour créer ma clé';
+      KeyPage.PromptLabels[0].Caption := 'Clé Gemini :';
+    end;
+  end;
   if (CurPageID = wpFinished) and SetupFailed then
     WizardForm.FinishedLabel.Caption :=
       'Les fichiers sont installés, mais pas tous les composants. Relance l''installateur une fois connecté à Internet.';

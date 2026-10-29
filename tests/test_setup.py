@@ -48,3 +48,27 @@ def test_dialog_asks_for_a_key_before_saving(qt_app):
     assert not other.gemini_box.isVisibleTo(other) and other.ollama_box.isVisibleTo(other)
     other.save()
     assert other.choice == ("ollama", "")
+
+
+def test_chatgpt_key_is_saved_under_its_own_name(qt_app, tmp_path, monkeypatch):
+    from alicia.app import build_services
+    from alicia.core.ai.providers.fake import FakeModel
+    from alicia.ui.main_window import MainWindow
+    from alicia.ui.setup_dialog import SetupDialog
+
+    dialog = SetupDialog("gemini", {"gemini": True, "openai": False})
+    dialog.openai.setChecked(True)
+    assert "OpenAI" in dialog.open_page.text()
+    dialog.save()
+    assert dialog.choice is None and "OpenAI" in dialog.status.text()
+    dialog.key_input.setText("sk-test")
+    dialog.save()
+    assert dialog.choice == ("openai", "sk-test")
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow(build_services(load_settings(environ={}), demo=True, model=FakeModel()))
+    window.apply_ai_choice("openai", "sk-test")
+    settings = load_settings()
+    assert settings.ai.provider == "openai" and settings.ai.openai.api_key.get() == "sk-test"
+    assert window.services.model.provider == "openai" and not window._needs_key()
+    window.close()

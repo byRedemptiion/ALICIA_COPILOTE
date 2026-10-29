@@ -11,6 +11,10 @@ def create_model(settings: AISettings) -> VisionModel:
         from alicia.core.ai.providers.gemini import GeminiModel
 
         return GeminiModel(settings.gemini, settings.timeout_s)
+    if settings.provider == "openai":
+        from alicia.core.ai.providers.openai import OpenAIModel
+
+        return OpenAIModel(settings.openai, settings.timeout_s)
     if settings.provider == "ollama":
         from alicia.core.ai.providers.ollama import OllamaModel
 

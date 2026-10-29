@@ -102,6 +102,15 @@ class OllamaModel(HttpVisionModel):
             if exc.kind is ProviderErrorKind.UNAVAILABLE and isinstance(
                 exc.__cause__, httpx.ConnectError
             ):
+                from alicia.core.ai.providers.ollama_runtime import OllamaRuntime, is_local
+
+                if is_local(self.settings.base_url) and not getattr(self, "_autostarted", False):
+                    # Ollama éteint : ALICIA le démarre, puis repose la question une fois.
+                    self._autostarted = True
+                    runtime = OllamaRuntime(self.settings.base_url, self.model)
+                    runtime.ensure_running()  # message clair si Ollama n'est pas installé
+                    self.runtime = runtime
+                    return super()._run(request, on_delta, cancel, emitted)
                 raise ProviderError(
                     ProviderErrorKind.UNAVAILABLE,
                     "Ollama ne répond pas sur ce PC. Lance l'application Ollama puis réessaie.",

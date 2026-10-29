@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 
 from alicia.core.errors import ConfigError
 
-PROVIDERS = ("gemini", "ollama", "fake")
+PROVIDERS = ("gemini", "openai", "ollama", "fake")
 CAPTURE_BACKENDS = ("auto", "wgc", "printwindow")
 
 
@@ -97,6 +97,14 @@ class OllamaSettings:
 
 
 @dataclass(frozen=True)
+class OpenAISettings:
+    model: str = "gpt-6-luna"
+    base_url: str = "https://api.openai.com/v1"
+    api_key: Secret = field(default_factory=lambda: Secret(None))
+    reasoning_effort: str = "low"  # none | low | medium… (réponse plus rapide si bas)
+
+
+@dataclass(frozen=True)
 class AISettings:
     provider: str
     timeout_s: float
@@ -106,6 +114,7 @@ class AISettings:
     gemini: GeminiSettings
     ollama: OllamaSettings
     web_search: bool = False
+    openai: OpenAISettings = field(default_factory=OpenAISettings)
 
 
 @dataclass(frozen=True)
@@ -284,6 +293,7 @@ def load_settings(
     ai = _section(data, "ai")
     gemini = _section(ai, "gemini")
     ollama = _section(ai, "ollama")
+    openai = _section(ai, "openai")
     capture = _section(data, "capture")
     voice = _section(data, "voice")
 
@@ -326,6 +336,12 @@ def load_settings(
                 keep_alive=str(ollama.get("keep_alive", "10m")),
             ),
             web_search=bool(ai.get("web_search", False)),
+            openai=OpenAISettings(
+                model=str(openai.get("model", OpenAISettings.model)).strip(),
+                base_url=str(openai.get("base_url", OpenAISettings.base_url)).rstrip("/"),
+                api_key=Secret(env.get("OPENAI_API_KEY")),
+                reasoning_effort=str(openai.get("reasoning_effort", "low")).strip().lower(),
+            ),
         ),
         capture=CaptureSettings(
             backend=backend,

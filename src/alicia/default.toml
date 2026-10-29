@@ -3,7 +3,7 @@
 # (ou dans %APPDATA%\Alicia\) avec seulement les clés à changer.
 
 [ai]
-provider = "gemini"          # gemini | ollama | fake
+provider = "gemini"          # gemini | openai | ollama | fake
 timeout_s = 25               # silence maximal (s) avant d'abandonner un modèle
 max_output_tokens = 1024
 temperature = 0.4
@@ -22,6 +22,13 @@ base_url = "https://generativelanguage.googleapis.com/v1beta"
 # Retirée automatiquement (et journalisée) si le modèle ne la prend pas en charge.
 thinking_level = "low"
 # thinking_budget = 0        # équivalent pour les modèles 2.5
+
+[ai.openai]
+# API d'OpenAI (ChatGPT) : clé sur https://platform.openai.com/api-keys, facturée à part de
+# l'abonnement ChatGPT (crédit prépayé). Clé dans .env : OPENAI_API_KEY=...
+model = "gpt-6-luna"         # voit les images, recherche web ; "gpt-6.1-terra" = plus précis
+base_url = "https://api.openai.com/v1"
+reasoning_effort = "low"     # none | low | medium : plus bas = plus rapide
 
 [ai.ollama]
 model = "qwen2.5vl:7b"
