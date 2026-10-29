@@ -1471,4 +1471,7 @@ class MainWindow(QMainWindow):
         self._set_status("⚠ " + message)
         self.answer.setPlainText(message)
         self._flash_error()
+        # Elle le dit aussi à voix haute (première phrase), utile en plein jeu.
+        if isinstance(exc, AliciaError):
+            self._say(message.split(". ")[0].split(" : ")[0] + ".")
         self.analysis_done.emit(exc)
