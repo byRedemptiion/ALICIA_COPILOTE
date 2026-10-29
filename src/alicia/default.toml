@@ -48,6 +48,10 @@ timeout_s = 2.0
 #   "screen" = l'écran entier (celui du jeu, sinon celui du curseur)
 mode = "window"
 cursor_box = "1280x800"      # taille de la zone autour du curseur
+# Vision en direct : une capture récente est toujours prête (en mémoire, jamais envoyée
+# sans question). Quand tu parles, l'IA voit l'écran du moment où tu as commencé.
+live = true
+live_interval_s = 1.0
 
 [logging]
 level = "INFO"               # INFO | DEBUG

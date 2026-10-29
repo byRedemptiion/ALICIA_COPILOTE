@@ -123,6 +123,28 @@ class SettingsPage(QScrollArea):
             self.box_size.addItem(label, size)
         grid.addWidget(QLabel("Zone du curseur"), 2, 0)
         grid.addWidget(self.box_size, 2, 1, 1, 2)
+        self.live_box = QCheckBox(
+            "Vision en direct : l'écran du moment où tu parles est déjà prêt (pas besoin de F9)"
+        )
+        self.live_interval = QComboBox()
+        for seconds, label in (
+            (0.5, "Toutes les 0,5 s"),
+            (1.0, "Toutes les secondes"),
+            (2.0, "Toutes les 2 s"),
+        ):
+            self.live_interval.addItem(label, seconds)
+        grid.addWidget(self.live_box, 4, 0, 1, 2)
+        grid.addWidget(self.live_interval, 4, 2)
+        grid.addWidget(
+            _muted(
+                "Les images restent en mémoire sur ton PC : rien n'est envoyé à l'IA tant que tu "
+                "ne lui parles pas."
+            ),
+            5,
+            0,
+            1,
+            3,
+        )
         grid.addWidget(
             _muted(
                 "Autour du curseur : pointe un objet, un sort ou un texte avec la souris et "
@@ -249,6 +271,10 @@ class SettingsPage(QScrollArea):
         self.box_size.currentIndexChanged.connect(
             lambda _i: self._emit("cursor_box", self.box_size.currentData())
         )
+        self.live_box.toggled.connect(lambda on: self._emit("live", on))
+        self.live_interval.currentIndexChanged.connect(
+            lambda _i: self._emit("live_interval_s", self.live_interval.currentData())
+        )
         self.mode_box.currentIndexChanged.connect(
             lambda _i: self._emit("ui_mode", self.mode_box.currentData())
         )
@@ -312,9 +338,17 @@ class SettingsPage(QScrollArea):
         finally:
             self._loading = False
 
-    def load_vision(self, mode: str, box: tuple[int, int]) -> None:
+    def load_vision(
+        self, mode: str, box: tuple[int, int], live: bool = True, interval: float = 1.0
+    ) -> None:
         self._loading = True
         try:
+            self.live_box.setChecked(live)
+            index = self.live_interval.findData(interval)
+            if index < 0:
+                self.live_interval.addItem(f"Toutes les {interval:g} s", interval)
+                index = self.live_interval.findData(interval)
+            self.live_interval.setCurrentIndex(index)
             self.vision_box.setCurrentIndex(max(0, self.vision_box.findData(mode)))
             key = f"{box[0]}x{box[1]}"
             if self.box_size.findData(key) < 0:

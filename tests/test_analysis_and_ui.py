@@ -589,3 +589,21 @@ def test_vision_mode_can_be_switched_and_is_remembered(qt_app, settings):
     assert window.busy
     run_until(qt_app, window)
     window.close()
+
+
+def test_speech_uses_the_screen_from_when_you_started_talking(qt_app, settings):
+    from alicia.core.ai.base import PreparedAudio
+    from alicia.core.capture.live import LiveCapture
+    from alicia.ui.main_window import MainWindow
+
+    audio = PreparedAudio(b"RIFF", "audio/wav", 1.0)
+    services = build_services(settings, demo=True, model=FakeModel(), recorder=FakeRecorder(audio))
+    window = MainWindow(services)
+    window.live = LiveCapture(services.capture.capture, lambda: (DEMO_WINDOW, "window", (800, 500)))
+    before = window.live.grab_once()
+    window.talk_pressed()
+    assert window._speech_frame is before
+    window.talk_released()
+    outcome = run_until(qt_app, window)
+    assert outcome.frame is before  # pas de nouvelle capture : l'image du début de la phrase
+    window.close()

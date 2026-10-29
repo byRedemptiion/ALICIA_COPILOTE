@@ -124,3 +124,27 @@ def test_screen_and_cursor_vision_modes():
 def test_application_mode_needs_a_window():
     with pytest.raises(CaptureError):
         service(DemoBackend()).capture(None, "window")
+
+
+def test_live_capture_keeps_a_fresh_frame_in_memory():
+    import time
+
+    from alicia.core.capture.live import LiveCapture
+
+    svc = CaptureService.demo()
+    live = LiveCapture(svc.capture, lambda: (DEMO_WINDOW, "window", (800, 500)), interval_s=0.3)
+    assert live.fresh() is None
+    live.start()
+    deadline = time.monotonic() + 3
+    while live.frames < 2 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    live.stop()
+    assert live.frames >= 2 and live.fresh() is not None
+    assert not live.running
+
+
+def test_live_capture_waits_for_a_window_in_application_mode():
+    from alicia.core.capture.live import LiveCapture
+
+    live = LiveCapture(CaptureService.demo().capture, lambda: (None, "window", (800, 500)))
+    assert live.grab_once() is None and live.latest is None

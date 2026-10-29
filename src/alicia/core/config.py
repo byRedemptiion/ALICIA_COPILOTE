@@ -140,6 +140,8 @@ class CaptureSettings:
     timeout_s: float
     mode: str = "window"  # window (application) | cursor (zone autour du curseur) | screen
     cursor_box: tuple[int, int] = (1280, 800)  # taille de la zone autour du curseur (px)
+    live: bool = True  # vision en direct : capture récente toujours prête (en mémoire)
+    live_interval_s: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -368,6 +370,8 @@ def load_settings(
             timeout_s=_number(capture, "timeout_s", float, 0.2),
             mode=_choice(capture, "mode", "window", VISION_MODES),
             cursor_box=_box(capture.get("cursor_box", "1280x800")),
+            live=bool(capture.get("live", True)),
+            live_interval_s=max(0.3, min(10.0, float(capture.get("live_interval_s", 1.0)))),
         ),
         log_level=level,
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),

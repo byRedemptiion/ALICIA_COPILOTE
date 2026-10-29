@@ -154,6 +154,9 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 640)
         self._build_ui()
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
+        self.live = None  # LiveCapture : capture récente toujours prête
+        self._speech_frame: Frame | None = None
+        self._shown_frame: Frame | None = None
         self.ollama_runtime = None  # OllamaRuntime quand l'IA locale est choisie
         self.update_info: UpdateInfo | None = None
         self._updating = False
@@ -478,6 +481,50 @@ class MainWindow(QMainWindow):
 
     # --- vision ---------------------------------------------------------------------------------
 
+    def set_live(self, on: bool, save: bool = True) -> None:
+        """Vision en direct : une capture récente toujours prête, gardée en mémoire."""
+        from dataclasses import replace
+
+        from alicia.core.capture.live import LiveCapture
+
+        capture = replace(self.services.settings.capture, live=on)
+        self.services.settings = replace(self.services.settings, capture=capture)
+        if save:
+            self._save("capture", "live", on)
+        if not on:
+            if self.live is not None:
+                self.live.stop()
+            self.live = None
+            return
+        if self.live is None:
+
+            def target():  # type: ignore[no-untyped-def]
+                window = self.services.capture.foreground_window() or self.observed
+                return window, self._vision(), self.services.settings.capture.cursor_box
+
+            self.live = LiveCapture(self.services.capture.capture, target, capture.live_interval_s)
+            self._live_timer = QTimer(self)
+            self._live_timer.timeout.connect(self._show_live_frame)
+            self._live_timer.start(1000)
+        self.live.interval_s = max(0.3, capture.live_interval_s)
+        self.live.start()
+
+    def _live_frame(self, max_age_s: float = 3.0) -> Frame | None:
+        return self.live.fresh(max_age_s) if self.live is not None else None
+
+    def _take_speech_frame(self) -> Frame | None:
+        frame, self._speech_frame = self._speech_frame, None
+        if frame is not None:
+            log.info("Vision en direct : image du début de ta phrase utilisée")
+        return frame
+
+    def _show_live_frame(self) -> None:
+        """Aperçu en direct dans le panneau (seulement s'il est affiché)."""
+        frame = self._live_frame(5.0)
+        if frame is not None and frame is not self._shown_frame and self.isVisible():
+            self._shown_frame = frame
+            self._show_frame(frame)
+
     def _vision(self) -> str:
         return self.services.analysis.vision_mode
 
@@ -513,7 +560,9 @@ class MainWindow(QMainWindow):
     def _load_settings_page(self) -> None:
         model = self.services.model
         capture = self.services.settings.capture
-        self.settings_page.load_vision(capture.mode, capture.cursor_box)
+        self.settings_page.load_vision(
+            capture.mode, capture.cursor_box, capture.live, capture.live_interval_s
+        )
         self.settings_page.load(
             self.services.settings.voice,
             self.wake_box.isChecked(),
@@ -585,6 +634,16 @@ class MainWindow(QMainWindow):
             self._update_voice(output_device=str(value or ""))
         elif key == "vision":
             self.set_vision(str(value))
+        elif key == "live":
+            self.set_live(bool(value))
+        elif key == "live_interval_s":
+            from dataclasses import replace
+
+            capture = replace(self.services.settings.capture, live_interval_s=float(value))
+            self.services.settings = replace(self.services.settings, capture=capture)
+            if self.live is not None:
+                self.live.interval_s = float(value)
+            self._save("capture", "live_interval_s", float(value))
         elif key == "cursor_box":
             from dataclasses import replace
 
@@ -714,6 +773,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(600, self.open_setup)  # premier lancement : choisir son IA
         if not self.services.demo:
             self.prepare_ollama()
+            self.set_live(self.services.settings.capture.live, save=False)
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
                 QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
@@ -879,6 +939,7 @@ class MainWindow(QMainWindow):
             self.bubble.fade_out()
 
     def _wake_heard(self) -> None:
+        self._speech_frame = self._live_frame()
         self._core("listening")
         self._set_status("🎙 Je t'écoute…")
         if self._bubble_active():
@@ -892,7 +953,7 @@ class MainWindow(QMainWindow):
             self.observed = window
             self._update_state()
         self.question.setText("🎙 …")
-        self._start_analysis(window, "", audio)  # type: ignore[arg-type]
+        self._start_analysis(window, "", audio, self._take_speech_frame())  # type: ignore[arg-type]
 
     def _wake_cancel(self, reason: str) -> None:
         log.info("Réveil sans demande : %s", reason)
@@ -1134,6 +1195,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
         if self.wake is not None:
             self.wake.stop()
+        if self.live is not None:
+            self.live.stop()
         if self.ollama_runtime is not None:
             self.ollama_runtime.stop()
         for hotkey in (self.hotkey, self.talk_hotkey):
@@ -1287,7 +1350,11 @@ class MainWindow(QMainWindow):
         self._start_analysis(self.observed, self.question.text())  # type: ignore[arg-type]
 
     def _start_analysis(
-        self, window: WindowInfo, question: str, audio: PreparedAudio | None = None
+        self,
+        window: WindowInfo,
+        question: str,
+        audio: PreparedAudio | None = None,
+        frame: Frame | None = None,
     ) -> None:
         self.stop_voice()
         self._core("thinking")
@@ -1317,6 +1384,7 @@ class MainWindow(QMainWindow):
                 audio=audio,
                 web_search=web_search,
                 spoken=spoken,
+                frame=frame,
             )
 
         self._run(work, self._analysis_done, self._failed, self._analysis_progress)
@@ -1425,6 +1493,7 @@ class MainWindow(QMainWindow):
             self._set_status("⚠ " + exc.user_message)
             return
         self._core("listening")
+        self._speech_frame = self._live_frame()  # l'écran au moment où tu commences à parler
         self._set_status("🎙 Je t'écoute… relâche la touche quand tu as fini.")
 
     def talk_released(self) -> None:
@@ -1438,15 +1507,16 @@ class MainWindow(QMainWindow):
             self._set_status("⚠ " + exc.user_message)
             self._flash_error()
             return
+        frame = self._take_speech_frame()
         window = self.services.capture.foreground_window() or self.observed
-        if window is None and self._vision() == "window":
+        if window is None and frame is None and self._vision() == "window":
             self._set_status("Mets le jeu au premier plan, puis reparle.")
             return
         if window is not None and (self.observed is None or self.observed.handle != window.handle):
             self.observed = window
             self._update_state()
         self.question.setText("🎙 …")
-        self._start_analysis(window, "", audio)
+        self._start_analysis(window, "", audio, frame)
 
     def _fill_games(self, current: str | None = None) -> None:
         self.game_box.addItem("Jeu : auto", "auto")

@@ -109,7 +109,7 @@ class AnalysisService:
                         return AnalysisOutcome(
                             op_id, None, None, "", total, local_transcript, action=reply
                         )
-            if window is None and self.vision_mode == "window":
+            if window is None and frame is None and self.vision_mode == "window":
                 raise AliciaError(
                     "Mets le jeu au premier plan, puis redemande-moi.",
                     detail="aucune fenêtre à capturer",
