@@ -8,6 +8,7 @@ timeout_s = 25               # silence maximal (s) avant d'abandonner un modèle
 max_output_tokens = 1024
 temperature = 0.4
 history_turns = 3            # derniers échanges question/réponse renvoyés au modèle
+web_search = true            # recherche Google avant de répondre (case à cocher dans Alice)
 
 [ai.gemini]
 # Alias maintenu par Google vers le dernier modèle Flash. "gemini-flash-lite-latest" = plus rapide.
@@ -30,7 +31,7 @@ keep_alive = "10m"
 [capture]
 backend = "auto"             # auto | wgc | printwindow
 monitor_fallback = true      # plein écran : capture de l'écran du jeu si la fenêtre sort noire
-max_image_side = 1568        # px, grand côté de l'image envoyée à l'IA
+max_image_side = 2048        # px, grand côté de l'image envoyée à l'IA (petits textes lisibles)
 jpeg_quality = 88
 keep_last_frames = 5
 save_captures = false        # true = copie de chaque capture analysée dans le dossier captures/
@@ -44,6 +45,20 @@ level = "INFO"               # INFO | DEBUG
 # (avec la question tapée dans Alice, sinon une question générale). Vide = désactivé.
 # Exemples : "F9", "ctrl+F9", "alt+shift+A". Le jeu ne reçoit plus cette touche.
 analyze = "F9"
+# Maintenir la touche EN JEU = parler à Alice ; relâcher = capture + envoi de la question.
+# Appuyer pendant qu'Alice parle la coupe.
+talk = "F10"
+
+[voice]
+speak_answers = true         # lire les réponses à voix haute (case à cocher dans Alice)
+# Voix Microsoft Edge (gratuite, nécessite Internet). Autres voix FR : fr-FR-VivienneMultilingualNeural,
+# fr-FR-HenriNeural, fr-FR-EloiseNeural. Liste complète : alice-diag voices
+tts_voice = "fr-FR-DeniseNeural"
+tts_rate = "+8%"             # vitesse de lecture
+output_device = ""           # vide = haut-parleur Windows par défaut, sinon une partie du nom
+input_device = ""            # vide = micro Windows par défaut, sinon une partie du nom
+max_record_s = 30            # durée maximale d'une question orale
+sample_rate = 16000
 
 [game]
 profile = "auto"             # auto | generic | overwatch

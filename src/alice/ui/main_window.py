@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import threading
 from typing import Any
@@ -30,11 +31,12 @@ from PySide6.QtWidgets import (
 
 from alice import __version__
 from alice.app import Services
+from alice.core.ai.base import PreparedAudio
 from alice.core.analysis.service import AnalysisOutcome
 from alice.core.capture.models import Frame, WindowInfo
 from alice.core.errors import AliceError, ProviderError, ProviderErrorKind
 from alice.core.logging_setup import make_filter, make_formatter, set_level
-from alice.ui.workers import LogBridge, QtLogHandler, Task
+from alice.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
 log = logging.getLogger("alice.ui")
 MAX_LOG_LINES = 3000
@@ -164,9 +166,30 @@ class MainWindow(QMainWindow):
         self.answer_info = QLabel("")
         self.answer_info.setStyleSheet("color:#777;")
         answer_box = QGroupBox("Alice")
+        self.sources_label = QLabel("")
+        self.sources_label.setWordWrap(True)
+        self.sources_label.setOpenExternalLinks(True)
+        self.sources_label.setTextFormat(Qt.TextFormat.RichText)
+        self.sources_label.setStyleSheet("color:#777;")
+        self.web_box = QCheckBox("Recherche web")
+        self.web_box.setToolTip("Gemini peut faire une recherche Google (méta, patch actuel)")
+        self.web_box.setChecked(self.services.settings.ai.web_search)
+        self.voice_box = QCheckBox("Réponse vocale")
+        self.voice_box.setChecked(self.services.settings.voice.speak_answers)
+        self.voice_box.toggled.connect(lambda on: None if on else self.stop_voice())
+        self.stop_voice_button = QPushButton("Couper la voix")
+        self.stop_voice_button.clicked.connect(self.stop_voice)
+        self.stop_voice_button.setEnabled(False)
+        options = QHBoxLayout()
+        options.addWidget(self.web_box)
+        options.addWidget(self.voice_box)
+        options.addStretch(1)
+        options.addWidget(self.stop_voice_button)
         answer_layout = QVBoxLayout(answer_box)
         answer_layout.addLayout(ask)
+        answer_layout.addLayout(options)
         answer_layout.addWidget(self.answer, 1)
+        answer_layout.addWidget(self.sources_label)
         answer_layout.addWidget(self.answer_info)
 
         # Logs
@@ -211,10 +234,20 @@ class MainWindow(QMainWindow):
         self.log_handler.setFormatter(make_formatter())
         self.log_handler.addFilter(make_filter())
         logging.getLogger("alice").addHandler(self.log_handler)
+        self.voice_bridge = VoiceBridge()
+        self.voice_bridge.state.connect(self._voice_state)
+        if self.services.speaker is not None:
+            self.services.speaker.on_state = lambda state, msg: self.voice_bridge.state.emit(
+                state, msg
+            )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
-        if self.hotkey is not None:
-            self.hotkey.stop()
+        for hotkey in (self.hotkey, self.talk_hotkey):
+            if hotkey is not None:
+                hotkey.stop()
+        if self.services.recorder is not None:
+            self.services.recorder.cancel()
+        self.stop_voice()
         self.stop_observation()
         logging.getLogger("alice").removeHandler(self.log_handler)
         log.info("Fermeture de la fenêtre principale")
@@ -338,7 +371,13 @@ class MainWindow(QMainWindow):
             return
         self._start_analysis(self.observed, self.question.text())  # type: ignore[arg-type]
 
-    def _start_analysis(self, window: WindowInfo, question: str) -> None:
+    def _start_analysis(
+        self, window: WindowInfo, question: str, audio: PreparedAudio | None = None
+    ) -> None:
+        self.stop_voice()
+        web_search = self.web_box.isChecked()
+        spoken = self.voice_box.isChecked() and self.services.speaker is not None
+        self.sources_label.setText("")
         cancel = threading.Event()
         self.cancel_event = cancel
         self.busy = True
@@ -353,7 +392,11 @@ class MainWindow(QMainWindow):
                 question,
                 on_frame=lambda frame: emit(("frame", frame)),
                 on_delta=lambda text: emit(("delta", text)),
+                on_transcript=lambda text: emit(("transcript", text)),
                 cancel=cancel,
+                audio=audio,
+                web_search=web_search,
+                spoken=spoken,
             )
 
         self._run(work, self._analysis_done, self._failed, self._analysis_progress)
@@ -361,25 +404,103 @@ class MainWindow(QMainWindow):
     # --- raccourci global ---------------------------------------------------------------------
 
     def _setup_hotkey(self) -> None:
-        self.hotkey = None
-        text = self.services.settings.hotkey_analyze
+        self.hotkey = self._make_hotkey(self.services.settings.hotkey_analyze, False)
+        self.talk_hotkey = None
+        if self.services.recorder is not None:
+            self.talk_hotkey = self._make_hotkey(self.services.settings.hotkey_talk, True)
+        parts = []
+        if self.hotkey is not None:
+            self.hotkey.pressed.connect(self.hotkey_analyze)
+            parts.append(f"{self.hotkey.text} = analyse")
+        if self.talk_hotkey is not None:
+            self.talk_hotkey.pressed.connect(self.talk_pressed)
+            self.talk_hotkey.released.connect(self.talk_released)
+            parts.append(f"{self.talk_hotkey.text} maintenu = parler")
+        self.hotkey_label.setText(
+            "En jeu : " + " · ".join(parts) if parts else "Raccourcis en jeu indisponibles"
+        )
+
+    def _make_hotkey(self, text: str, track_release: bool):  # type: ignore[no-untyped-def]
         if not text:
-            self.hotkey_label.setText("Raccourci en jeu : désactivé")
-            return
+            return None
         from alice.ui.hotkey import GlobalHotkey
 
         try:
-            hotkey = GlobalHotkey(text)
+            hotkey = GlobalHotkey(text, track_release=track_release)
         except AliceError as exc:
-            log.error("Raccourci invalide : %s", exc.user_message)
-            self.hotkey_label.setText(f"Raccourci invalide : {text}")
+            log.error("Raccourci invalide « %s » : %s", text, exc.user_message)
+            return None
+        return hotkey if hotkey.start() else None
+
+    # --- voix -----------------------------------------------------------------------------------
+
+    def talk_pressed(self) -> None:
+        """Touche « parler » enfoncée en jeu : coupe Alice si elle parle, ouvre le micro."""
+        self.stop_voice()
+        recorder = self.services.recorder
+        if recorder is None or recorder.recording:
             return
-        hotkey.pressed.connect(self.hotkey_analyze)
-        if hotkey.start():
-            self.hotkey = hotkey
-            self.hotkey_label.setText(f"En jeu : {text} = capture + analyse")
+        if self.busy:
+            log.info("Parole ignorée : une analyse est déjà en cours")
+            self._set_status("Patiente : Alice analyse encore la question précédente.")
+            return
+        problem = self.services.model.check()
+        if problem:
+            self._set_status("⚠ " + problem)
+            return
+        try:
+            recorder.start()
+        except AliceError as exc:
+            log.error("Micro : %s", exc.detail)
+            self._set_status("⚠ " + exc.user_message)
+            return
+        self._set_status("🎙 Je t'écoute… relâche la touche quand tu as fini.")
+
+    def talk_released(self) -> None:
+        recorder = self.services.recorder
+        if recorder is None or not recorder.recording:
+            return
+        try:
+            audio = recorder.stop()
+        except AliceError as exc:
+            log.warning("Question orale abandonnée : %s", exc.detail)
+            self._set_status("⚠ " + exc.user_message)
+            return
+        window = self.services.capture.foreground_window() or self.observed
+        if window is None:
+            self._set_status("Mets le jeu au premier plan, puis reparle.")
+            return
+        if self.observed is None or self.observed.handle != window.handle:
+            self.observed = window
+            self._update_state()
+        self.question.setText("🎙 …")
+        self._start_analysis(window, "", audio)
+
+    def stop_voice(self) -> None:
+        speaker = self.services.speaker
+        if speaker is not None and speaker.speaking:
+            speaker.stop()
+        self.stop_voice_button.setEnabled(False)
+
+    def _voice_state(self, state: str, message: str | None) -> None:
+        if state == "speaking":
+            self.stop_voice_button.setEnabled(True)
         else:
-            self.hotkey_label.setText(f"Raccourci {text} indisponible (voir journal)")
+            self.stop_voice_button.setEnabled(False)
+            if state == "error" and message:
+                self._set_status("⚠ " + message)
+
+    def _show_sources(self, result) -> None:  # type: ignore[no-untyped-def]
+        notes = []
+        if result.sources:
+            links = " · ".join(
+                f'<a href="{html.escape(src.url)}">{html.escape(src.title)}</a>'
+                for src in result.sources[:5]
+            )
+            notes.append(f"Sources web : {links}")
+        if "search_disabled" in result.extra:
+            notes.append("Recherche web refusée par le modèle : réponse sans recherche.")
+        self.sources_label.setText("<br>".join(notes))
 
     def hotkey_analyze(self) -> None:
         """Appui sur le raccourci en jeu : capture la fenêtre active et lance l'analyse."""
@@ -453,6 +574,8 @@ class MainWindow(QMainWindow):
         if kind == "frame":
             self._show_frame(value)
             self._set_status("Analyse en cours…")
+        elif kind == "transcript":
+            self.question.setText(f"🎙 {value}")
         elif kind == "delta":
             cursor = self.answer.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
@@ -469,6 +592,12 @@ class MainWindow(QMainWindow):
             f"{result.provider}/{result.model} · {first}total {outcome.total_ms} ms · "
             f"profil {outcome.profile} · [{outcome.operation_id}]"
         )
+        if outcome.transcript is not None:
+            self.question.setText(f"🎙 {outcome.transcript}")
+        self._show_sources(result)
+        if self.voice_box.isChecked() and self.services.speaker is not None:
+            if self.services.speaker.speak(result.text):
+                self.stop_voice_button.setEnabled(True)
         fallback = result.extra.get("fallback_from")
         if fallback:
             self._set_status(

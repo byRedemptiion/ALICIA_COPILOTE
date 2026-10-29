@@ -32,9 +32,14 @@ class FakeModel:
         if self.fail_with is not None:
             raise self.fail_with
         sizes = ", ".join(f"{i.width}x{i.height}" for i in request.images) or "aucune"
+        if request.audio is not None:
+            prefix = "Question : question orale factice\n"
+            question = f"audio {request.audio.duration_s} s"
+        else:
+            prefix, question = "", request.question
         words = (
-            f"[Réponse factice — aucune IA appelée] Image reçue : {sizes}. "
-            f"Question : « {request.question} »."
+            prefix + f"[Réponse factice — aucune IA appelée] Image reçue : {sizes}. "
+            f"Question : « {question} »."
         ).split(" ")
         for index, word in enumerate(words):
             if cancel is not None and cancel.is_set():

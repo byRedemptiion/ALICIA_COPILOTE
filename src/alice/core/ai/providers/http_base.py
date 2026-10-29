@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from alice.core.ai.base import AnalysisRequest, AnalysisResult, DeltaCallback
+from alice.core.ai.base import AnalysisRequest, AnalysisResult, DeltaCallback, Source
 from alice.core.errors import ProviderError, ProviderErrorKind
 
 log = logging.getLogger("alice.ai")
@@ -24,6 +24,8 @@ class Chunk:
     input_tokens: int | None = None
     output_tokens: int | None = None
     finish_reason: str | None = None
+    sources: tuple[Source, ...] = ()
+    search_queries: tuple[str, ...] = ()
 
 
 class HttpVisionModel:
@@ -123,6 +125,8 @@ class HttpVisionModel:
                         input_tokens=chunk.input_tokens or last.input_tokens,
                         output_tokens=chunk.output_tokens or last.output_tokens,
                         finish_reason=chunk.finish_reason or last.finish_reason,
+                        sources=chunk.sources or last.sources,
+                        search_queries=chunk.search_queries or last.search_queries,
                     )
         except httpx.TimeoutException as exc:
             if first_token_ms is not None:
@@ -155,6 +159,8 @@ class HttpVisionModel:
             input_tokens=last.input_tokens,
             output_tokens=last.output_tokens,
             finish_reason=last.finish_reason,
+            sources=list(dict.fromkeys(last.sources)),
+            search_queries=list(last.search_queries),
         )
 
     @property

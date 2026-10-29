@@ -1,5 +1,7 @@
 # Installation d'Alice sous Windows : uv, Python 3.12, dépendances, clé Gemini.
 # Lancé par Installer_Alice.bat. Ne modifie aucune politique PowerShell globale.
+# -Update : mise à jour des dépendances seulement (lancée par Lancer_Alice.bat).
+param([switch]$Update)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
@@ -20,6 +22,11 @@ uv --version
 Step "Installation de Python 3.12 et des dépendances (première fois : quelques minutes)"
 uv sync --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE)." }
+Copy-Item "uv.lock" ".venv\uv.lock.installed" -Force
+if ($Update) {
+    Write-Host "`nDépendances à jour." -ForegroundColor Green
+    exit 0
+}
 
 Step "Vérification du module de capture Windows"
 uv run --frozen python -c "import windows_capture; print('windows-capture OK')"

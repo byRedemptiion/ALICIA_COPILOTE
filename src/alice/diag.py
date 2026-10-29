@@ -42,6 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("image")
     ask.add_argument("question")
     sub.add_parser("models", help="modèles Gemini accessibles avec ta clé")
+    sub.add_parser("devices", help="micros et sorties audio détectés")
+    sub.add_parser("voices", help="voix françaises disponibles pour la réponse vocale")
+    say = sub.add_parser("say", help="teste la réponse vocale")
+    say.add_argument("text", nargs="?", default="Bonjour, je suis Alice. Je t'entends bien ?")
+    rec = sub.add_parser("record", help="teste le micro : enregistre N secondes en WAV")
+    rec.add_argument("--seconds", type=float, default=4.0)
+    rec.add_argument("--out", default="micro.wav")
     sub.add_parser("ping", help="question texte minimale à l'IA (sans image) : teste clé et réseau")
     args = parser.parse_args(argv)
 
@@ -49,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(settings.log_dir, "DEBUG" if args.debug else settings.log_level)
 
     try:
+        if args.command in ("devices", "voices", "say", "record"):
+            return _audio_command(args, settings)
         if args.command in ("list-windows", "capture"):
             from dataclasses import replace
 
@@ -129,6 +138,53 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERREUR : {exc.user_message}", file=sys.stderr)
         print(f"Détail : {exc.detail}", file=sys.stderr)
         return 1
+
+
+def _audio_command(args, settings) -> int:  # type: ignore[no-untyped-def]
+    import time
+
+    if args.command == "devices":
+        from alice.core.audio.devices import list_devices
+
+        for line in list_devices():
+            print(line)
+        return 0
+    if args.command == "voices":
+        import asyncio
+
+        import edge_tts
+
+        voices = asyncio.run(edge_tts.list_voices())
+        for voice in voices:
+            if voice["Locale"].startswith("fr-"):
+                print(f"{voice['ShortName']:<36} {voice['Gender']}")
+        return 0
+    if args.command == "say":
+        from alice.core.audio.speaker import Speaker
+
+        speaker = Speaker(settings.voice)
+        state = {}
+        speaker.on_state = lambda s, m: state.update(state=s, message=m)
+        started = time.perf_counter()
+        speaker.speak(args.text)
+        while speaker.speaking:
+            time.sleep(0.05)
+        if state.get("state") == "error":
+            print("ERREUR :", state.get("message"))
+            return 1
+        print(f"Lecture terminée en {time.perf_counter() - started:.1f} s")
+        return 0
+    from alice.core.audio.recorder import Recorder
+
+    recorder = Recorder(settings.voice.sample_rate, settings.voice.input_device, args.seconds + 1)
+    recorder.start()
+    print(f"Parle pendant {args.seconds:.0f} s dans « {recorder.device_label} »...")
+    time.sleep(args.seconds)
+    audio = recorder.stop()
+    with open(args.out, "wb") as handle:
+        handle.write(audio.data)
+    print(f"OK : {audio.duration_s} s enregistrées -> {args.out}")
+    return 0
 
 
 if __name__ == "__main__":

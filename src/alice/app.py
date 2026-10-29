@@ -11,6 +11,8 @@ from alice import __version__
 from alice.core.ai.base import VisionModel
 from alice.core.ai.factory import create_model
 from alice.core.analysis.service import AnalysisService
+from alice.core.audio.recorder import Recorder
+from alice.core.audio.speaker import Speaker
 from alice.core.capture.service import CaptureService
 from alice.core.config import Settings
 from alice.core.session.context import SessionContext
@@ -26,10 +28,17 @@ class Services:
     session: SessionContext
     analysis: AnalysisService
     demo: bool
+    speaker: Speaker | None = None
+    recorder: Recorder | None = None
 
 
 def build_services(
-    settings: Settings, *, demo: bool = False, model: VisionModel | None = None
+    settings: Settings,
+    *,
+    demo: bool = False,
+    model: VisionModel | None = None,
+    speaker: Speaker | None = None,
+    recorder: Recorder | None = None,
 ) -> Services:
     capture = (
         CaptureService.demo(settings.capture.keep_last_frames)
@@ -39,7 +48,10 @@ def build_services(
     model = model or create_model(settings.ai)
     session = SessionContext(settings.ai.history_turns)
     analysis = AnalysisService(settings, capture, model, session)
-    return Services(settings, capture, model, session, analysis, demo)
+    voice = settings.voice
+    speaker = speaker or Speaker(voice)
+    recorder = recorder or Recorder(voice.sample_rate, voice.input_device, voice.max_record_s)
+    return Services(settings, capture, model, session, analysis, demo, speaker, recorder)
 
 
 def log_startup(settings: Settings, log_file: str) -> None:

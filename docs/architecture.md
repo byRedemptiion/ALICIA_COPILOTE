@@ -59,12 +59,22 @@ src/alice/
 
 | Version | Objectif |
 | --- | --- |
-| V0.1 | Capture de fenêtre et question texte, analyse multimodale en streaming, logs (cette version) |
+| V0.1 | Capture de fenêtre et question texte, analyse multimodale en streaming, logs ✅ validée sur Overwatch |
 | V0.2 | Session de capture permanente, détection locale des changements, zones d'intérêt |
-| V0.3 | Micro et questions vocales (push-to-talk) |
-| V0.4 | Réponses vocales interruptibles |
+| V0.3 | Questions orales : F10 maintenu, audio + capture envoyés ensemble à Gemini (pas de transcription locale), recherche web Google |
+| V0.4 | Réponses vocales phrase par phrase, coupées par F10 ou un bouton (livrées avec la V0.3) |
 | V0.5 | Mémoire de session structurée (héros, objets, objectifs) |
 | V0.6 | Score d'importance, interventions spontanées, modes Silent/Copilot/Coach/Analyst |
 | V0.7 | Recherche externe et connaissances par jeu |
 | V0.8 | Overlay en jeu |
 | V1.0 | Packaging `.exe` (PyInstaller), configuration dans l'interface |
+
+## Voix (V0.3) et projets dont elle s'inspire
+
+| Brique | Choix | Inspiration (licence MIT) |
+| --- | --- | --- |
+| Micro | `sounddevice`, ouvert seulement pendant que F10 est maintenu ; refus clair si trop court ou muet | [huburton/jarvis](https://github.com/huburton/jarvis) (raccourci plutôt que micro ouvert) |
+| Compréhension | L'audio part **avec la capture** à Gemini, qui transcrit et répond en un seul appel : pas de Whisper local, pas de PyTorch, pas de GPU pris au jeu | [dnhkng/GLaDOS](https://github.com/dnhkng/GLaDOS) (« direct audio » vers le modèle) |
+| Voix | `edge-tts` (voix neuronales Microsoft) décodé par `miniaudio`, lu par `sounddevice` ; la phrase suivante est synthétisée pendant la lecture de la précédente ; arrêt en moins de 50 ms | [KoljaB/RealtimeTTS](https://github.com/KoljaB/RealtimeTTS) (EdgeEngine, découpage en phrases), [huburton/jarvis](https://github.com/huburton/jarvis) (lecture interruptible) |
+
+RealtimeTTS n'est pas utilisé directement : sa voix Edge passe par le lecteur externe `mpv` sous Windows. RealtimeSTT impose PyTorch (plusieurs Go) pour la détection de voix, inutile en push-to-talk.

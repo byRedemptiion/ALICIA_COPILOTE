@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from alice.core.ai.base import AnalysisRequest
+from alice.core.ai.base import AnalysisRequest, Source
 from alice.core.ai.providers.http_base import Chunk, HttpVisionModel, error_message, json_lines
 from alice.core.config import GeminiSettings
 from alice.core.errors import ProviderError, ProviderErrorKind
@@ -47,6 +47,7 @@ class GeminiModel(HttpVisionModel):
         return None
 
     _thinking_rejected = False
+    _search_rejected = False
     _overloaded_until: dict[str, float]
 
     def analyze(self, request, on_delta=None, cancel=None):  # type: ignore[no-untyped-def]
@@ -123,7 +124,25 @@ class GeminiModel(HttpVisionModel):
                     "Réglage de réflexion refusé par %s, envoi sans : %s", self.model, exc.detail
                 )
                 self._thinking_rejected = True
-                return super()._run(request, on_delta, cancel, emitted)
+                return self._run(request, on_delta, cancel, emitted)
+            # Recherche Google refusée (modèle sans « grounding » ou quota dédié épuisé) :
+            # on répond sans recherche, et on le dit dans le journal et sous la réponse.
+            if (
+                request.web_search
+                and not self._search_rejected
+                and exc.status_code in (400, 429)
+                and any(w in exc.detail.lower() for w in ("search", "grounding", "tool"))
+            ):
+                log.warning(
+                    "Recherche Google refusée par %s, réponse sans : %s", self.model, exc.detail
+                )
+                self._search_rejected = True
+                try:
+                    result = self._run(request, on_delta, cancel, emitted)
+                finally:
+                    self._search_rejected = False
+                result.extra["search_disabled"] = exc.detail[:200]
+                return result
             raise
 
     def _headers(self) -> dict[str, str]:
@@ -143,6 +162,15 @@ class GeminiModel(HttpVisionModel):
             }
             for image in request.images
         ]
+        if request.audio is not None:
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": request.audio.mime_type,
+                        "data": base64.b64encode(request.audio.data).decode(),
+                    }
+                }
+            )
         parts.append({"text": request.question})
         contents.append({"role": "user", "parts": parts})
 
@@ -158,11 +186,13 @@ class GeminiModel(HttpVisionModel):
         if thinking and not self._thinking_rejected:
             generation["thinkingConfig"] = thinking
 
-        body = {
+        body: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": request.system_prompt}]},
             "contents": contents,
             "generationConfig": generation,
         }
+        if request.web_search and not self._search_rejected:
+            body["tools"] = [{"google_search": {}}]
         url = f"{self.settings.base_url}/models/{self.model}:streamGenerateContent?alt=sse"
         return url, self._headers(), body
 
@@ -178,8 +208,16 @@ class GeminiModel(HttpVisionModel):
             usage = event.get("usageMetadata") or {}
             text_parts: list[str] = []
             finish = None
+            sources: list[Source] = []
+            queries: list[str] = []
             for candidate in event.get("candidates") or []:
                 finish = candidate.get("finishReason") or finish
+                grounding = candidate.get("groundingMetadata") or {}
+                queries.extend(str(q) for q in grounding.get("webSearchQueries") or [])
+                for item in grounding.get("groundingChunks") or []:
+                    web = item.get("web") or {}
+                    if web.get("uri"):
+                        sources.append(Source(str(web.get("title") or web["uri"]), str(web["uri"])))
                 for part in (candidate.get("content") or {}).get("parts") or []:
                     if part.get("thought"):
                         continue  # résumé de réflexion interne : pas pour le joueur
@@ -190,6 +228,8 @@ class GeminiModel(HttpVisionModel):
                 input_tokens=usage.get("promptTokenCount"),
                 output_tokens=usage.get("candidatesTokenCount"),
                 finish_reason=finish,
+                sources=tuple(sources),
+                search_queries=tuple(queries),
             )
 
     def _http_error(self, status: int, body: str) -> ProviderError:

@@ -320,3 +320,62 @@ def test_overloaded_model_is_skipped_for_a_while():
         "gemini-lite",
         "gemini-lite",
     ]
+
+
+def test_gemini_sends_search_tool_audio_and_parses_sources():
+    from alice.core.ai.base import PreparedAudio
+
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        final = text_event("Prends la lame.")
+        final["candidates"][0]["groundingMetadata"] = {
+            "webSearchQueries": ["ashe stadium build"],
+            "groundingChunks": [{"web": {"uri": "https://example.com/a", "title": "Guide"}}],
+        }
+        return httpx.Response(200, text=sse(final))
+
+    audio = PreparedAudio(b"RIFFdata", "audio/wav", 1.5)
+    request = AnalysisRequest(
+        question="voir audio", images=(IMAGE,), system_prompt="s", audio=audio, web_search=True
+    )
+    result = gemini(handler).analyze(request)
+    body = seen["body"]
+    assert body["tools"] == [{"google_search": {}}]
+    mimes = [p["inline_data"]["mime_type"] for p in body["contents"][-1]["parts"][:-1]]
+    assert mimes == ["image/jpeg", "audio/wav"]
+    assert result.sources[0].title == "Guide"
+    assert result.search_queries == ["ashe stadium build"]
+
+
+def test_search_refused_answers_without_and_says_so():
+    bodies = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "tools" in body:
+            return httpx.Response(
+                400, json={"error": {"message": "Search Grounding is not supported."}}
+            )
+        return httpx.Response(200, text=sse(text_event("OK")))
+
+    request = AnalysisRequest(question="q", images=(IMAGE,), system_prompt="s", web_search=True)
+    result = gemini(handler).analyze(request)
+    assert result.text == "OK" and "search_disabled" in result.extra
+    assert len(bodies) == 2
+
+
+def test_ollama_refuses_voice_questions_clearly():
+    from alice.core.ai.base import PreparedAudio
+
+    request = AnalysisRequest(
+        question="q",
+        images=(IMAGE,),
+        system_prompt="s",
+        audio=PreparedAudio(b"x", "audio/wav", 1.0),
+    )
+    with pytest.raises(ProviderError) as info:
+        ollama(lambda r: httpx.Response(200)).analyze(request)
+    assert "Gemini" in info.value.user_message

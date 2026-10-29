@@ -40,6 +40,12 @@ class LogBridge(QObject):
     line = Signal(str)
 
 
+class VoiceBridge(QObject):
+    """Relaie l'état de la voix (thread audio) vers l'interface."""
+
+    state = Signal(str, object)  # (« speaking » | « idle » | « error », message)
+
+
 class QtLogHandler(logging.Handler):
     """Relaie les logs vers le panneau de l'interface (thread-safe via signal Qt)."""
 

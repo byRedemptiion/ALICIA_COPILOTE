@@ -10,6 +10,7 @@ import ctypes
 import logging
 import sys
 import threading
+import time
 from ctypes import wintypes
 
 from PySide6.QtCore import QObject, Signal
@@ -45,10 +46,17 @@ def parse_hotkey(text: str) -> tuple[int, int]:
 
 class GlobalHotkey(QObject):
     pressed = Signal()
+    released = Signal()  # émis seulement avec track_release=True (touche « maintenir pour parler »)
     failed = Signal(str)
 
-    def __init__(self, text: str) -> None:
+    _ids = 0
+
+    def __init__(self, text: str, *, track_release: bool = False) -> None:
         super().__init__()
+        GlobalHotkey._ids += 1
+        self._id = GlobalHotkey._ids
+        self.track_release = track_release
+        self.max_hold_s = 60.0
         self.text = text
         self.modifiers, self.vk = parse_hotkey(text)
         self._thread: threading.Thread | None = None
@@ -74,11 +82,12 @@ class GlobalHotkey(QObject):
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         kernel32 = ctypes.WinDLL("kernel32")
         self._thread_id = kernel32.GetCurrentThreadId()
-        if not user32.RegisterHotKey(None, 1, self.modifiers | MOD_NOREPEAT, self.vk):
+        user32.GetAsyncKeyState.restype = ctypes.c_short
+        if not user32.RegisterHotKey(None, self._id, self.modifiers | MOD_NOREPEAT, self.vk):
             error = ctypes.get_last_error()
             message = (
                 f"Le raccourci {self.text} est déjà utilisé par un autre programme "
-                f"(code {error}). Change-le dans alice.toml ([hotkeys] analyze)."
+                f"(code {error}). Change-le dans alice.toml (section [hotkeys])."
             )
             log.error(message)
             self.failed.emit(message)
@@ -93,6 +102,20 @@ class GlobalHotkey(QObject):
                 if msg.message == WM_HOTKEY:
                     log.info("Raccourci %s pressé", self.text)
                     self.pressed.emit()
+                    if self.track_release:
+                        self._wait_release(user32)
         finally:
-            user32.UnregisterHotKey(None, 1)
+            user32.UnregisterHotKey(None, self._id)
             self.active = False
+
+    def _wait_release(self, user32) -> None:  # type: ignore[no-untyped-def]
+        """Attend que la touche soit relâchée (lecture de l'état du clavier, rien n'est envoyé)."""
+        deadline = time.monotonic() + self.max_hold_s
+        while time.monotonic() < deadline:
+            if not (user32.GetAsyncKeyState(self.vk) & 0x8000):
+                break
+            time.sleep(0.015)
+        else:
+            log.warning("Raccourci %s maintenu plus de %d s : arrêt", self.text, self.max_hold_s)
+        log.info("Raccourci %s relâché", self.text)
+        self.released.emit()

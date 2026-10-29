@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -12,6 +13,8 @@ from alice.core.ai.base import AnalysisRequest
 from alice.core.ai.providers.http_base import Chunk, HttpVisionModel, error_message, json_lines
 from alice.core.config import OllamaSettings
 from alice.core.errors import ProviderError, ProviderErrorKind
+
+log = logging.getLogger("alice.ai")
 
 
 class OllamaModel(HttpVisionModel):
@@ -33,6 +36,14 @@ class OllamaModel(HttpVisionModel):
         return None if self.model else "Aucun modèle Ollama configuré ([ai.ollama] model)."
 
     def _request(self, request: AnalysisRequest) -> tuple[str, dict[str, str], dict[str, Any]]:
+        if request.audio is not None:
+            raise ProviderError(
+                ProviderErrorKind.BAD_REQUEST,
+                "Les questions orales nécessitent Gemini : Ollama ne comprend pas l'audio. "
+                "Tape ta question ou repasse sur Gemini.",
+            )
+        if request.web_search:
+            log.info("Recherche web non disponible avec Ollama : ignorée")
         messages: list[dict[str, Any]] = [{"role": "system", "content": request.system_prompt}]
         for turn in request.history:
             messages.append({"role": "user", "content": turn.question})

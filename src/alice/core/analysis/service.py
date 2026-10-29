@@ -7,9 +7,15 @@ import threading
 import time
 from dataclasses import dataclass
 
-from alice.core.ai.base import AnalysisRequest, AnalysisResult, DeltaCallback, VisionModel
+from alice.core.ai.base import (
+    AnalysisRequest,
+    AnalysisResult,
+    DeltaCallback,
+    PreparedAudio,
+    VisionModel,
+)
 from alice.core.ai.image_prep import prepare_image
-from alice.core.ai.prompts import build_system_prompt
+from alice.core.ai.prompts import VOICE_QUESTION, TranscriptSplitter, build_system_prompt
 from alice.core.capture.models import Frame, WindowInfo
 from alice.core.capture.service import CaptureService
 from alice.core.config import Settings
@@ -28,6 +34,7 @@ class AnalysisOutcome:
     result: AnalysisResult
     profile: str
     total_ms: int
+    transcript: str | None = None  # question orale transcrite par l'IA
 
 
 class AnalysisService:
@@ -51,13 +58,26 @@ class AnalysisService:
         frame: Frame | None = None,
         on_frame=None,  # type: ignore[no-untyped-def]  # appelé dès que la capture est prête
         on_delta: DeltaCallback | None = None,
+        on_transcript=None,  # type: ignore[no-untyped-def]  # question orale transcrite
         cancel: threading.Event | None = None,
+        audio: PreparedAudio | None = None,
+        web_search: bool = False,
+        spoken: bool = False,
     ) -> AnalysisOutcome:
-        question = question.strip() or "Que vois-tu d'important sur cet écran ?"
+        if audio is not None:
+            question = VOICE_QUESTION
+        else:
+            question = question.strip() or "Que vois-tu d'important sur cet écran ?"
         with operation() as op_id:
             started = time.perf_counter()
-            log.info("Analyse demandée (envoi manuel) — fenêtre « %s »", window.title)
-            log.debug("Question : %s", question)
+            log.info(
+                "Analyse demandée (%s%s) — fenêtre « %s »",
+                f"question orale {audio.duration_s:.1f} s" if audio else "question écrite",
+                ", recherche web autorisée" if web_search else "",
+                window.title,
+            )
+            if audio is None:
+                log.debug("Question : %s", question)
             if frame is None:
                 frame = self.capture.capture(window)
             if on_frame is not None:
@@ -75,10 +95,12 @@ class AnalysisService:
             request = AnalysisRequest(
                 question=question,
                 images=(image,),
-                system_prompt=build_system_prompt(profile.context),
+                system_prompt=build_system_prompt(profile.context, spoken=spoken),
                 history=self.session.history(),
                 max_output_tokens=self.settings.ai.max_output_tokens,
                 temperature=self.settings.ai.temperature,
+                audio=audio,
+                web_search=web_search,
             )
             log.info(
                 "Appel IA %s/%s — image %dx%d, %d Ko, profil %s, historique %d",
@@ -90,13 +112,38 @@ class AnalysisService:
                 profile.key,
                 len(request.history),
             )
+            splitter = None
+            sink = on_delta
+            if audio is not None:
+                splitter = TranscriptSplitter(
+                    on_transcript or (lambda _t: None), on_delta or (lambda _t: None)
+                )
+                sink = splitter.feed
             try:
-                result = self.model.analyze(request, on_delta=on_delta, cancel=cancel)
+                result = self.model.analyze(request, on_delta=sink, cancel=cancel)
             except ProviderError as exc:
                 level = logging.INFO if exc.kind is ProviderErrorKind.CANCELLED else logging.ERROR
                 log.log(level, "Appel IA échoué [%s] : %s", exc.kind, exc.detail)
                 raise
+            transcript = None
+            if splitter is not None:
+                splitter.close()
+                transcript = splitter.transcript
+                from alice.core.ai.prompts import split_transcript
+
+                _, result.text = split_transcript(result.text)
+                log.info("Question orale transcrite : %d caractères", len(transcript or ""))
+                log.debug("Transcription : %s", transcript)
+                question = transcript or "(question orale inaudible)"
             self.session.record(question, result.text)
+            if result.sources:
+                log.info(
+                    "Recherche web : %d source(s), requêtes %s",
+                    len(result.sources),
+                    result.search_queries,
+                )
+            if "search_disabled" in result.extra:
+                log.warning("Réponse produite sans recherche web (refusée par le fournisseur)")
             total = int((time.perf_counter() - started) * 1000)
             log.info(
                 "Réponse IA : %d caractères, 1er mot %s ms, IA %d ms, total %d ms, jetons %s/%s, fin %s",
@@ -109,7 +156,7 @@ class AnalysisService:
                 result.finish_reason,
             )
             log.debug("Réponse : %s", result.text)
-            return AnalysisOutcome(op_id, frame, result, profile.key, total)
+            return AnalysisOutcome(op_id, frame, result, profile.key, total, transcript)
 
     def _maybe_save(self, frame: Frame, op_id: str) -> None:
         if not self.settings.capture.save_captures:

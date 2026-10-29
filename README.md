@@ -2,7 +2,7 @@
 
 Alice regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle analyse la capture et te répond en quelques secondes. **Elle observe et conseille seulement** : aucun clic, aucune touche, aucune injection dans le jeu, aucune lecture de sa mémoire.
 
-**Version 0.1** : capture d'une fenêtre (même en plein écran), question texte, réponse de l'IA affichée mot par mot, logs détaillés. La voix, la capture automatique et les interventions spontanées arrivent dans les versions suivantes ([feuille de route](docs/architecture.md#feuille-de-route)).
+**Version 0.3** : capture d'une fenêtre (même en plein écran), question écrite (F9) ou orale (F10 maintenu), recherche web, réponse affichée mot par mot et lue à voix haute, logs détaillés. La capture automatique, la mémoire de session et les interventions spontanées arrivent dans les versions suivantes ([feuille de route](docs/architecture.md#feuille-de-route)).
 
 ## Installer (une seule fois)
 
@@ -22,6 +22,19 @@ Double-cliquer sur **`Lancer_Alice.bat`**.
 3. Le **Journal** en bas affiche chaque étape : backend de capture, durée, temps avant le premier mot, erreurs.
 
 Pour essayer sans jeu : `Lancer_Alice.bat --demo` (inventaire fictif, clairement signalé).
+
+### Parler à Alice : F10 (maintenir)
+
+**Maintiens F10 en jeu, pose ta question à voix haute, relâche.** Alice capture l'écran, envoie ta voix et l'image à Gemini, affiche ta question transcrite puis **répond à voix haute**. Pour la couper, réappuie sur F10 ou clique sur « Couper la voix ».
+
+- La voix d'Alice est une voix Microsoft Edge (`fr-FR-DeniseNeural`, gratuite, nécessite Internet). Pour en essayer d'autres : `uv run alice-diag voices`, puis `[voice] tts_voice` dans `alice.toml`.
+- Micro ou haut-parleur précis : `uv run alice-diag devices`, puis `[voice] input_device` / `output_device` (une partie du nom suffit).
+- Tester sans jeu : `uv run alice-diag record` (micro) et `uv run alice-diag say` (voix).
+- Le micro n'est ouvert que pendant que tu maintiens F10 : rien n'est écouté en dehors, et aucun enregistrement n'est gardé sur le disque.
+
+### Recherche web
+
+La case **Recherche web** laisse Gemini faire une recherche Google avant de répondre : méta actuelle, builds, notes de patch. Les sources s'affichent sous la réponse. Cela ajoute une à deux secondes ; l'offre gratuite a aussi un quota de recherches par jour.
 
 ### Jouer en plein écran : le raccourci F9
 

@@ -91,6 +91,7 @@ class AISettings:
     history_turns: int
     gemini: GeminiSettings
     ollama: OllamaSettings
+    web_search: bool = False
 
 
 @dataclass(frozen=True)
@@ -105,12 +106,25 @@ class CaptureSettings:
 
 
 @dataclass(frozen=True)
+class VoiceSettings:
+    speak_answers: bool = True  # lire les réponses à voix haute
+    tts_voice: str = "fr-FR-DeniseNeural"
+    tts_rate: str = "+8%"
+    output_device: str = ""  # vide = sortie Windows par défaut ; sinon une partie du nom
+    input_device: str = ""  # vide = micro Windows par défaut ; sinon une partie du nom
+    max_record_s: float = 30.0
+    sample_rate: int = 16000
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
     log_level: str
     game_profile: str
     hotkey_analyze: str = ""
+    hotkey_talk: str = ""
+    voice: VoiceSettings = field(default_factory=VoiceSettings)
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
@@ -179,6 +193,7 @@ def load_settings(
     gemini = _section(ai, "gemini")
     ollama = _section(ai, "ollama")
     capture = _section(data, "capture")
+    voice = _section(data, "voice")
 
     provider = str(env.get("ALICE_AI_PROVIDER") or ai.get("provider", "gemini")).strip().lower()
     if provider not in PROVIDERS:
@@ -218,6 +233,7 @@ def load_settings(
                 base_url=str(ollama.get("base_url", "")).rstrip("/"),
                 keep_alive=str(ollama.get("keep_alive", "10m")),
             ),
+            web_search=bool(ai.get("web_search", False)),
         ),
         capture=CaptureSettings(
             backend=backend,
@@ -231,6 +247,16 @@ def load_settings(
         log_level=level,
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),
         hotkey_analyze=str(_section(data, "hotkeys").get("analyze", "")).strip(),
+        hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
+        voice=VoiceSettings(
+            speak_answers=bool(voice.get("speak_answers", True)),
+            tts_voice=str(voice.get("tts_voice", "fr-FR-DeniseNeural")).strip(),
+            tts_rate=str(voice.get("tts_rate", "+0%")).strip(),
+            output_device=str(voice.get("output_device", "")).strip(),
+            input_device=str(voice.get("input_device", "")).strip(),
+            max_record_s=_number(voice, "max_record_s", float, 2),
+            sample_rate=_number(voice, "sample_rate", int, 8000),
+        ),
         sources=tuple(sources),
         captures_dir=cwd / "captures",
     )

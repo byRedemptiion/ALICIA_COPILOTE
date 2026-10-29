@@ -17,6 +17,19 @@ class PreparedImage:
 
 
 @dataclass(frozen=True)
+class PreparedAudio:
+    data: bytes
+    mime_type: str  # ex. « audio/wav »
+    duration_s: float
+
+
+@dataclass(frozen=True)
+class Source:
+    title: str
+    url: str
+
+
+@dataclass(frozen=True)
 class Turn:
     question: str
     answer: str
@@ -30,6 +43,8 @@ class AnalysisRequest:
     history: tuple[Turn, ...] = ()
     max_output_tokens: int = 1024
     temperature: float = 0.4
+    audio: PreparedAudio | None = None  # question orale du joueur (V0.3)
+    web_search: bool = False  # autoriser une recherche web si le fournisseur sait le faire
 
 
 @dataclass
@@ -43,6 +58,8 @@ class AnalysisResult:
     output_tokens: int | None = None
     finish_reason: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
+    sources: list[Source] = field(default_factory=list)
+    search_queries: list[str] = field(default_factory=list)
 
 
 DeltaCallback = Callable[[str], None]
