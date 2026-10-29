@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 640)
         self._build_ui()
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
+        self.ollama_runtime = None  # OllamaRuntime quand l'IA locale est choisie
         self.update_info: UpdateInfo | None = None
         self._updating = False
         self.updater = self._make_updater()
@@ -496,6 +497,8 @@ class MainWindow(QMainWindow):
             self.set_wake(True)
         if not self.services.demo and self._needs_key():
             QTimer.singleShot(600, self.open_setup)  # premier lancement : choisir son IA
+        if not self.services.demo:
+            self.prepare_ollama()
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
                 QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
@@ -543,6 +546,58 @@ class MainWindow(QMainWindow):
         problem = model.check()
         self._notify("⚠ " + problem if problem else "IA prête ✓ Maintiens F10 ou dis « Alicia… »")
         self._update_state()
+        self.prepare_ollama()
+
+    def prepare_ollama(self) -> None:
+        """IA locale choisie : démarre Ollama s'il ne tourne pas, télécharge son modèle au besoin."""
+        ai = self.services.settings.ai
+        if ai.provider != "ollama":
+            return
+        from alicia.core.ai.providers.ollama_runtime import OllamaRuntime
+
+        if self.ollama_runtime is None or self.ollama_runtime.model != ai.ollama.model:
+            self.ollama_runtime = OllamaRuntime(ai.ollama.base_url, ai.ollama.model)
+        runtime = self.ollama_runtime
+
+        def work(emit):  # type: ignore[no-untyped-def]
+            started = runtime.ensure_running()
+            if started:
+                emit(("status", "Ollama démarré ✓"))
+            if not runtime.has_model():
+                emit(("status", f"Téléchargement du modèle « {runtime.model} » (plusieurs Go)…"))
+                runtime.pull(lambda percent: emit(("pull", percent)))
+                return "pulled"
+            return "started" if started else "ready"
+
+        def progress(item) -> None:  # type: ignore[no-untyped-def]
+            kind, value = item
+            if kind == "pull":
+                text = f"Téléchargement du modèle IA locale : {value} %"
+                self.status.setText(text)
+                if value % 10 == 0:
+                    self._notify(text)
+            else:
+                self._notify(value)
+
+        def done(result: str) -> None:
+            if result == "pulled":
+                self._notify("IA locale prête ✓ Maintiens F10 ou dis « Alicia… »")
+            elif result == "started":
+                self._notify("Ollama démarré ✓ IA locale prête")
+
+        def failed(exc: Exception) -> None:
+            message = exc.user_message if isinstance(exc, AliciaError) else repr(exc)
+            log.error("Ollama : %s", exc.detail if isinstance(exc, AliciaError) else repr(exc))
+            self._notify("⚠ " + message)
+
+        task = Task(0, work)
+        task.signals.progress.connect(lambda _g, item: progress(item))
+        task.signals.finished.connect(
+            lambda _g, value: (self._live_tasks.discard(task), done(value))
+        )
+        task.signals.failed.connect(lambda _g, exc: (self._live_tasks.discard(task), failed(exc)))
+        self._live_tasks.add(task)
+        self.pool.start(task)
 
     # --- réveil vocal « Alicia » ----------------------------------------------------------------
 
@@ -862,6 +917,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
         if self.wake is not None:
             self.wake.stop()
+        if self.ollama_runtime is not None:
+            self.ollama_runtime.stop()
         for hotkey in (self.hotkey, self.talk_hotkey):
             if hotkey is not None:
                 hotkey.stop()

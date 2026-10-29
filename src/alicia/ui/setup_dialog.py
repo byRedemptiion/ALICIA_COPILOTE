@@ -106,7 +106,8 @@ class SetupDialog(QDialog):
         obox = QVBoxLayout(self.ollama_box)
         obox.setContentsMargins(16, 12, 16, 12)
         ollama_help = QLabel(
-            "Installe Ollama puis un modèle qui voit les images (par ex. « ollama pull qwen2.5vl:7b »). "
+            "Installe Ollama : ALICIA le démarre toute seule et télécharge son modèle d'images "
+            "(environ 6 Go) au premier usage. "
             "Gratuit et hors ligne, mais il faut une bonne carte graphique, et c'est plus lent "
             "et moins précis que Gemini."
         )
