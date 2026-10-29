@@ -66,6 +66,14 @@ Avec **F10** ou à l'écrit, Alicia exécute certaines demandes **sur Windows, j
 obs = { launch = "C:/Program Files/obs-studio/bin/64bit/obs64.exe", process = "obs64.exe" }
 ```
 
+### Tes jeux et tes sites de référence
+
+ALICIA a un **profil par jeu** : elle sait à quel jeu tu joues (sans le deviner sur l'image), quoi regarder à l'écran, et **sur quels sites chercher en premier** quand la recherche web est active. Profils fournis : **Overwatch** et **World of Warcraft: Forever** (Icy Veins, Method, Mobalytics, Warcraft Tavern, Warcraft Wiki).
+
+- Le jeu est reconnu tout seul à sa fenêtre. Tu peux aussi le choisir : menu « Jeu » du panneau, ou **clic droit sur le rond → Jeu**.
+- Pour changer les sites ou ajouter un jeu, double-clique sur **`Mes_Jeux_Alicia.bat`** : il ouvre ton fichier `games.toml`. Décommente et modifie seulement ce que tu veux changer (par exemple juste `sources` sous `[wow-forever]`), puis relance ALICIA.
+- Le journal indique le jeu reconnu et le nom du programme (`Jeu : … (fenêtre xxx.exe, détecté)`), utile pour ajouter un jeu.
+
 ### Recherche web
 
 La case **Recherche web** laisse Gemini faire une recherche Google avant de répondre : méta actuelle, builds, notes de patch. Les sources s'affichent sous la réponse. Cela ajoute une à deux secondes ; l'offre gratuite a aussi un quota de recherches par jour.

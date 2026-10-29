@@ -92,4 +92,6 @@ steam = { launch = "steam://open/main", process = "steam.exe" }
 "battle.net" = { launch = "battlenet://", process = "Battle.net.exe" }
 
 [game]
-profile = "auto"             # auto | generic | overwatch
+# Jeu joué : "auto" le reconnaît à la fenêtre. Sinon le nom d'un profil
+# (overwatch, wow-forever…). Profils et sites de référence : alicia-diag games
+profile = "auto"

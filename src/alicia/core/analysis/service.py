@@ -51,6 +51,7 @@ class AnalysisService:
     ) -> None:
         self.router = router
         self.transcriber = transcriber
+        self.game_profile = settings.game_profile  # « auto » ou un profil choisi dans l'interface
         self.settings = settings
         self.capture = capture
         self.model = model
@@ -127,16 +128,27 @@ class AnalysisService:
                 self.settings.capture.max_image_side,
                 self.settings.capture.jpeg_quality,
             )
-            profile = resolve_profile(frame.window, self.settings.game_profile)
+            profile = resolve_profile(frame.window, self.game_profile)
             request = AnalysisRequest(
                 question=question,
                 images=(image,),
-                system_prompt=build_system_prompt(profile.context, spoken=spoken),
+                system_prompt=build_system_prompt(
+                    profile.prompt_context(web_search), spoken=spoken
+                ),
                 history=self.session.history(),
                 max_output_tokens=self.settings.ai.max_output_tokens,
                 temperature=self.settings.ai.temperature,
                 audio=audio,
                 web_search=web_search,
+            )
+            log.info(
+                "Jeu : %s (fenêtre %s, %s)%s",
+                profile.name,
+                frame.window.exe_name or "?",
+                "choisi" if self.game_profile != "auto" else "détecté",
+                f" — sources prioritaires : {', '.join(profile.sources)}"
+                if web_search and profile.sources
+                else "",
             )
             log.info(
                 "Appel IA %s/%s — image %dx%d, %d Ko, profil %s, historique %d",

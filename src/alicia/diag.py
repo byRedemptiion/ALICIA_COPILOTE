@@ -53,12 +53,16 @@ def main(argv: list[str] | None = None) -> int:
     rec = sub.add_parser("record", help="teste le micro : enregistre N secondes en WAV")
     rec.add_argument("--seconds", type=float, default=4.0)
     rec.add_argument("--out", default="micro.wav")
+    sub.add_parser("games", help="profils de jeu et sites de référence ; crée ton games.toml")
     sub.add_parser("ping", help="question texte minimale à l'IA (sans image) : teste clé et réseau")
     args = parser.parse_args(argv)
 
     migrate_legacy_dirs()
     settings = load_settings()
     setup_logging(settings.log_dir, "DEBUG" if args.debug else settings.log_level)
+
+    if args.command == "games":
+        return _games_command()
 
     try:
         if args.command in ("devices", "voices", "say", "record", "prepare-voice", "transcribe"):
@@ -143,6 +147,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERREUR : {exc.user_message}", file=sys.stderr)
         print(f"Détail : {exc.detail}", file=sys.stderr)
         return 1
+
+
+def _games_command() -> int:
+    from alicia.games.profiles import all_profiles, builtin_text, default_user_file
+
+    user_file = default_user_file()
+    if not user_file.exists():
+        user_file.parent.mkdir(parents=True, exist_ok=True)
+        # Copie entièrement commentée : décommente seulement ce que tu changes, pour
+        # continuer de profiter des mises à jour des autres profils.
+        commented = "".join(
+            line if line.startswith("#") or not line.strip() else "# " + line
+            for line in builtin_text().splitlines(keepends=True)
+        )
+        user_file.write_text(commented, encoding="utf-8")
+        print(f"Fichier créé (modifie-le pour tes jeux et tes sites) : {user_file}")
+    else:
+        print(f"Tes profils : {user_file}")
+    for profile in all_profiles().values():
+        if profile.key == "generic":
+            continue
+        print(f"\n[{profile.key}] {profile.name}")
+        print(f"  reconnu par : {', '.join(profile.exe_names + profile.title_keywords) or '—'}")
+        for source in profile.sources:
+            print(f"  · {source}")
+    return 0
 
 
 def _audio_command(args, settings) -> int:  # type: ignore[no-untyped-def]

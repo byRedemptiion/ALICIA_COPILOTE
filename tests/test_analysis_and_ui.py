@@ -369,3 +369,79 @@ def test_long_answers_keep_their_end_in_the_bubble():
     short = _tail(text)
     assert short.startswith("…") and short.endswith("conclusion finale")
     assert len(short) <= MAX_BUBBLE_CHARS + 2
+
+
+def test_wow_forever_profile_points_to_its_reference_sites():
+    from alicia.games.profiles import load_profiles
+
+    profiles = load_profiles()
+    window = WindowInfo(1, "World of Warcraft", 2, exe_name="WowClassic.exe")
+    profile = resolve_profile(window, profiles=profiles)
+    assert profile.key == "wow-forever"
+    assert any("icy-veins.com/wow-forever" in s for s in profile.sources)
+    with_search = profile.prompt_context(web_search=True)
+    assert "site:" in with_search and "method.gg/wow-forever" in with_search
+    assert "site:" not in profile.prompt_context(web_search=False)
+
+
+def test_player_games_file_adds_and_overrides_profiles(tmp_path):
+    from alicia.games.profiles import load_profiles
+
+    user_file = tmp_path / "games.toml"
+    user_file.write_text(
+        '[overwatch]\nname = "OW"\nexe = ["overwatch.exe"]\nsources = ["mon-site.fr"]\n\n'
+        '[elden-ring]\nname = "Elden Ring"\nexe = ["eldenring.exe"]\n'
+        'sources = ["eldenring.wiki.fextralife.com"]\ncontext = "Souls-like."\n',
+        encoding="utf-8",
+    )
+    profiles = load_profiles(user_file)
+    assert profiles["overwatch"].sources == ("mon-site.fr",)
+    assert "Stadium" in profiles["overwatch"].context  # le reste du profil fourni est gardé
+    elden = resolve_profile(
+        WindowInfo(1, "ELDEN RING", 3, exe_name="eldenring.exe"), profiles=profiles
+    )
+    assert elden.name == "Elden Ring"
+    # Un fichier cassé n'empêche pas ALICIA de démarrer : on garde les profils fournis.
+    user_file.write_text("[cassé", encoding="utf-8")
+    assert "wow-forever" in load_profiles(user_file)
+
+
+def test_chosen_game_sends_its_sources_with_web_search(settings):
+    model = FakeModel()
+    services = build_services(settings, demo=True, model=model)
+    services.analysis.game_profile = "wow-forever"
+    services.analysis.analyze(DEMO_WINDOW, "Quelle quête ?", web_search=True)
+    prompt = model.requests[-1].system_prompt
+    assert "World of Warcraft: Forever" in prompt
+    assert "site:" in prompt and "icy-veins.com/wow-forever" in prompt
+
+
+def test_bubble_can_be_moved_and_remembers_its_place(qt_app, tmp_path):
+    from PySide6.QtCore import QPoint
+
+    from alicia.ui.orb import OrbWindow
+
+    position = tmp_path / "orb.json"
+    orb = OrbWindow(200, position)
+    orb.show()
+    orb.bubble.offset = QPoint(-300, 150)
+    orb.bubble.moved.emit()
+    orb.close()
+    again = OrbWindow(200, position)
+    again.show()
+    assert again.bubble.offset == QPoint(-300, 150)
+    again.bubble.reset_offset()
+    assert again.bubble.offset is None
+    again.close()
+
+
+def test_game_can_be_chosen_from_the_orb_menu(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    keys = [key for key, _name in window.orb.games]
+    assert keys[0] == "auto" and "wow-forever" in keys
+    window.orb.game_chosen.emit("wow-forever")
+    assert window.services.analysis.game_profile == "wow-forever"
+    assert window.game_box.currentData() == "wow-forever"
+    window.close()

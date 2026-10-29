@@ -1,13 +1,23 @@
-"""Profils de jeu : contexte ajouté au prompt, sans toucher au moteur d'Alicia.
+"""Profils de jeu : ce qu'ALICIA sait du jeu et les sites où elle cherche en priorité.
 
-Un profil pourra plus tard fournir des zones d'écran (HUD, inventaire) et des connaissances.
+Les profils viennent de `games.toml` (fourni avec ALICIA), complété ou remplacé par le
+fichier du joueur `%APPDATA%\\Alicia\\games.toml`. Un profil ne touche pas au moteur :
+il ajoute du contexte au prompt et oriente la recherche web.
 """
 
 from __future__ import annotations
 
+import logging
+import tomllib
 from dataclasses import dataclass, field
+from importlib import resources
+from pathlib import Path
 
 from alicia.core.capture.models import WindowInfo
+
+log = logging.getLogger("alicia.games")
+
+USER_FILE = "games.toml"
 
 
 @dataclass(frozen=True)
@@ -17,6 +27,7 @@ class GameProfile:
     exe_names: tuple[str, ...] = ()
     title_keywords: tuple[str, ...] = ()
     context: str = ""
+    sources: tuple[str, ...] = ()
     regions: dict[str, tuple[float, float, float, float]] = field(default_factory=dict)
 
     def matches(self, window: WindowInfo) -> bool:
@@ -24,31 +35,115 @@ class GameProfile:
         title = window.title.casefold()
         return exe in self.exe_names or any(k in title for k in self.title_keywords)
 
+    def prompt_context(self, web_search: bool = False) -> str:
+        """Contexte ajouté au prompt système : le jeu, puis ses sites de référence."""
+        parts = [self.context.strip()] if self.context.strip() else []
+        if self.sources:
+            listed = "\n".join(f"- {source}" for source in self.sources)
+            if web_search:
+                parts.append(
+                    "Sites de référence pour ce jeu, du plus fiable au moins fiable :\n"
+                    f"{listed}\n"
+                    "Quand tu cherches sur le web, cible d'abord ces sites (ajoute "
+                    "« site:domaine » à tes requêtes) ; élargis seulement s'ils ne disent "
+                    "rien, et préfère toujours l'information la plus récente."
+                )
+            else:
+                parts.append(f"Sites de référence du joueur pour ce jeu :\n{listed}")
+        return "\n\n".join(parts)
+
 
 GENERIC = GameProfile(key="generic", name="Jeu générique")
 
-OVERWATCH = GameProfile(
-    key="overwatch",
-    name="Overwatch",
-    exe_names=("overwatch.exe",),
-    title_keywords=("overwatch",),
-    context="""\
-Le jeu est Overwatch (FPS en équipe, héros répartis en rôles tank, dégâts et soutien).
-- Identifie le héros du joueur à partir de son HUD (portrait, capacités, arme) avant de conseiller.
-- En mode Stadium, le joueur achète entre les manches des objets et des pouvoirs avec une \
-monnaie : compare les cartes visibles selon le héros, leur texte lisible et leur coût.
-- Les valeurs d'équilibrage changent à chaque saison : ne cite que les chiffres lisibles \
-à l'écran, et dis-le si tu t'appuies sur un souvenir général.""",
-)
 
-PROFILES: dict[str, GameProfile] = {p.key: p for p in (GENERIC, OVERWATCH)}
+def _strings(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(v).strip() for v in value if str(v).strip())
 
 
-def resolve_profile(window: WindowInfo | None, setting: str = "auto") -> GameProfile:
+def _parse(data: dict, origin: str) -> dict[str, GameProfile]:
+    profiles = {}
+    for key, entry in data.items():
+        if not isinstance(entry, dict):
+            log.warning(
+                "Profil de jeu « %s » ignoré dans %s : ce n'est pas une section", key, origin
+            )
+            continue
+        key = str(key).strip().lower()
+        profiles[key] = GameProfile(
+            key=key,
+            name=str(entry.get("name", key)).strip() or key,
+            exe_names=tuple(s.casefold() for s in _strings(entry.get("exe", []))),
+            title_keywords=tuple(s.casefold() for s in _strings(entry.get("title", []))),
+            context=str(entry.get("context", "")).strip(),
+            sources=_strings(entry.get("sources", [])),
+        )
+    return profiles
+
+
+def builtin_text() -> str:
+    return resources.files("alicia.games").joinpath("games.toml").read_text("utf-8")
+
+
+def load_profiles(user_file: Path | None = None) -> dict[str, GameProfile]:
+    """Profils fournis + ceux du joueur.
+
+    Un profil du joueur qui porte le nom d'un profil fourni le complète champ par champ :
+    il suffit d'écrire `sources = [...]` sous `[wow-forever]` pour changer les sites.
+    """
+    data = tomllib.loads(builtin_text())
+    if user_file is not None and user_file.is_file():
+        try:
+            user = tomllib.loads(user_file.read_text("utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+            log.error("Profils de jeu illisibles dans %s : %s", user_file, exc)
+        else:
+            for key, entry in user.items():
+                key = str(key).strip().lower()
+                base = data.get(key)
+                if isinstance(base, dict) and isinstance(entry, dict):
+                    data[key] = {**base, **entry}
+                else:
+                    data[key] = entry
+    profiles = {"generic": GENERIC}
+    profiles.update(_parse(data, "games.toml"))
+    return profiles
+
+
+def default_user_file() -> Path:
+    from alicia.core.config import data_dir
+
+    return data_dir() / USER_FILE
+
+
+_CACHE: dict[str, GameProfile] | None = None
+
+
+def all_profiles(reload: bool = False) -> dict[str, GameProfile]:
+    global _CACHE
+    if _CACHE is None or reload:
+        _CACHE = load_profiles(default_user_file())
+    return _CACHE
+
+
+def resolve_profile(
+    window: WindowInfo | None,
+    setting: str = "auto",
+    profiles: dict[str, GameProfile] | None = None,
+) -> GameProfile:
+    profiles = profiles if profiles is not None else all_profiles()
     if setting != "auto":
-        return PROFILES.get(setting, GENERIC)
+        return profiles.get(setting, GENERIC)
     if window is not None:
-        for profile in PROFILES.values():
+        exe = window.exe_name.casefold()
+        # Le nom du programme d'abord (plus sûr), puis un mot du titre.
+        for profile in profiles.values():
+            if profile is not GENERIC and exe and exe in profile.exe_names:
+                return profile
+        for profile in profiles.values():
             if profile is not GENERIC and profile.matches(window):
                 return profile
     return GENERIC

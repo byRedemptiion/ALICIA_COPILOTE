@@ -258,7 +258,15 @@ class MainWindow(QMainWindow):
         self.stop_voice_button.setToolTip("Couper la voix d'ALICIA")
         self.stop_voice_button.clicked.connect(self.stop_voice)
         self.stop_voice_button.setEnabled(False)
+        self.game_box = QComboBox()
+        self.game_box.setToolTip(
+            "Le jeu auquel tu joues : ALICIA connaît son contexte et cherche d'abord sur ses "
+            "sites de référence. « Auto » le reconnaît à la fenêtre."
+        )
+        self._fill_games()
+        self.game_box.currentIndexChanged.connect(self._change_game)
         options = QHBoxLayout()
+        options.addWidget(self.game_box)
         options.addWidget(self.web_box)
         options.addWidget(self.voice_box)
         options.addWidget(self.engine_box)
@@ -343,6 +351,14 @@ class MainWindow(QMainWindow):
         self.orb.open_panel.connect(self.show_panel)
         self.orb.stop_voice.connect(self.stop_voice)
         self.orb.quit_requested.connect(self.quit_app)
+        self.orb.games = [
+            (self.game_box.itemData(i), self.game_box.itemText(i))
+            for i in range(self.game_box.count())
+        ]
+        self.orb.current_game = self.services.analysis.game_profile
+        self.orb.game_chosen.connect(
+            lambda key: self.game_box.setCurrentIndex(max(0, self.game_box.findData(key)))
+        )
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
@@ -687,6 +703,24 @@ class MainWindow(QMainWindow):
             self._update_state()
         self.question.setText("🎙 …")
         self._start_analysis(window, "", audio)
+
+    def _fill_games(self) -> None:
+        from alicia.games.profiles import all_profiles
+
+        self.game_box.addItem("Jeu : auto", "auto")
+        for profile in all_profiles().values():
+            if profile.key != "generic":
+                self.game_box.addItem(profile.name, profile.key)
+        self.game_box.addItem("Autre jeu", "generic")
+        current = self.services.analysis.game_profile
+        self.game_box.setCurrentIndex(max(0, self.game_box.findData(current)))
+
+    def _change_game(self) -> None:
+        key = self.game_box.currentData()
+        self.services.analysis.game_profile = key
+        if hasattr(self, "orb"):
+            self.orb.current_game = key
+        log.info("Jeu choisi : %s", self.game_box.currentText())
 
     def _change_voice_engine(self) -> None:
         speaker = self.services.speaker

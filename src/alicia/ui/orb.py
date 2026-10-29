@@ -2,8 +2,8 @@
 
 Le rond est une petite fenêtre sans bord, transparente et toujours au-dessus des autres.
 On le déplace à la souris ; double-clic = panneau complet ; clic droit = menu.
-La bulle de texte n'apparaît que pendant un échange, puis s'efface toute seule. Elle laisse
-passer les clics (le jeu les reçoit) et ne prend jamais le focus.
+La bulle de texte n'apparaît que pendant un échange, puis s'efface toute seule. Elle ne
+prend jamais le focus ; on peut la glisser où l'on veut (elle suit ensuite le rond).
 
 Les deux fenêtres sont exclues des captures d'écran (Windows 10 2004+), pour qu'ALICIA ne
 se voie pas elle-même dans l'image envoyée à l'IA.
@@ -74,13 +74,14 @@ def _tail(text: str) -> str:
 class Bubble(QWidget):
     """Bulle de dialogue à côté du rond : ta question, puis la réponse d'ALICIA."""
 
+    moved = Signal()  # le joueur l'a déplacée : sa place relative au rond est à retenir
+
     def __init__(self) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
-            | Qt.WindowType.WindowTransparentForInput
             | Qt.WindowType.WindowDoesNotAcceptFocus,
         )
         self.setObjectName("aliciaBubble")
@@ -117,8 +118,11 @@ class Bubble(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
         self.setFixedWidth(BUBBLE_WIDTH)
+        self.setToolTip("Glisser : déplacer · double-clic : fermer · clic droit : recoller au rond")
         self._buffer = ""
         self._anchor = QRect()
+        self.offset: QPoint | None = None  # place choisie par le joueur, relative au rond
+        self._drag: QPoint | None = None
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self.fade_out)
@@ -213,12 +217,50 @@ class Bubble(QWidget):
         self.setFixedHeight(height)
         self._place()
 
+    # --- déplacement à la souris -------------------------------------------------------------
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self.keep()  # on ne la fait pas disparaître pendant qu'on la tient
+            event.accept()
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.reset_offset()
+            event.accept()
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self._drag is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag)
+            event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self._drag is not None:
+            self._drag = None
+            if not self._anchor.isNull():
+                self.offset = self.pos() - self._anchor.topLeft()
+                self.moved.emit()
+            self.hide_after(6000)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        self.fade_out()
+
+    def reset_offset(self) -> None:
+        self.offset = None
+        self._place()
+        self.moved.emit()
+
     def _place(self) -> None:
         if self._anchor.isNull():
             return
         screen = QGuiApplication.screenAt(self._anchor.center()) or QGuiApplication.primaryScreen()
         area = screen.availableGeometry() if screen is not None else QRect(0, 0, 1920, 1080)
         gap = 10
+        if self.offset is not None:  # place choisie par le joueur, gardée à l'écran
+            point = self._anchor.topLeft() + self.offset
+            x = max(area.left(), min(point.x(), area.right() - self.width()))
+            y = max(area.top(), min(point.y(), area.bottom() - self.height()))
+            self.move(x, y)
+            return
         # À gauche du rond s'il est dans la moitié droite de l'écran, sinon à droite.
         if self._anchor.center().x() > area.center().x():
             x = self._anchor.left() - self.width() - gap
@@ -236,6 +278,7 @@ class OrbWindow(QWidget):
     open_panel = Signal()
     stop_voice = Signal()
     quit_requested = Signal()
+    game_chosen = Signal(str)
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -260,6 +303,9 @@ class OrbWindow(QWidget):
             "Glisser : déplacer · double-clic : panneau complet · clic droit : menu"
         )
         self.bubble = Bubble()
+        self.bubble.moved.connect(self._save_position)
+        self.games: list[tuple[str, str]] = []  # (clé, nom) proposés dans le menu « Jeu »
+        self.current_game = "auto"
         self._drag: QPoint | None = None
         self._placed = False
 
@@ -278,6 +324,11 @@ class OrbWindow(QWidget):
             point = QPoint(int(data["x"]), int(data["y"]))
         except (OSError, ValueError, KeyError, TypeError):
             return None
+        if "bubble_dx" in data and "bubble_dy" in data:
+            try:
+                self.bubble.offset = QPoint(int(data["bubble_dx"]), int(data["bubble_dy"]))
+            except (TypeError, ValueError):
+                self.bubble.offset = None
         center = point + QPoint(self.width() // 2, self.height() // 2)
         return point if QGuiApplication.screenAt(center) is not None else None
 
@@ -286,9 +337,11 @@ class OrbWindow(QWidget):
             return
         try:
             self.position_file.parent.mkdir(parents=True, exist_ok=True)
-            self.position_file.write_text(
-                json.dumps({"x": self.x(), "y": self.y()}), encoding="utf-8"
-            )
+            data = {"x": self.x(), "y": self.y()}
+            if self.bubble.offset is not None:
+                data["bubble_dx"] = self.bubble.offset.x()
+                data["bubble_dy"] = self.bubble.offset.y()
+            self.position_file.write_text(json.dumps(data), encoding="utf-8")
         except OSError as exc:
             log.debug("Position du rond non enregistrée : %r", exc)
 
@@ -344,10 +397,20 @@ class OrbWindow(QWidget):
             ("Ouvrir le panneau complet", self.open_panel.emit),
             ("Couper la voix", self.stop_voice.emit),
             ("Masquer la bulle", self.bubble.fade_out),
+            ("Recoller la bulle au rond", self.bubble.reset_offset),
             ("Replacer en haut à droite", self._reset_position),
             (None, None),
             ("Quitter ALICIA", self.quit_requested.emit),
         )
+        if self.games:
+            games = menu.addMenu("Jeu")
+            for key, name in self.games:
+                action = QAction(name, games)
+                action.setCheckable(True)
+                action.setChecked(key == self.current_game)
+                action.triggered.connect(lambda _=False, k=key: self.game_chosen.emit(k))
+                games.addAction(action)
+            menu.addSeparator()
         for text, slot in actions:
             if text is None:
                 menu.addSeparator()
