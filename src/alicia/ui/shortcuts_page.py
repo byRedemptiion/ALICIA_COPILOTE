@@ -59,8 +59,9 @@ def _modifiers_text(modifiers: Qt.KeyboardModifier) -> list[str]:
     return parts
 
 
-def key_to_hotkey(key: int, modifiers: Qt.KeyboardModifier) -> str | None:
-    """Touche Qt → texte de raccourci (« ctrl+f9 », « num5 »), ou None si non prise en charge."""
+def key_to_hotkey(key: int, modifiers: Qt.KeyboardModifier, native_vk: int = 0) -> str | None:
+    """Touche Qt → texte de raccourci (« ctrl+f9 », « num5 », « vk226 » pour la touche < d'un
+    clavier AZERTY), ou None si non prise en charge."""
     if Qt.Key.Key_F1 <= key <= Qt.Key.Key_F24:
         name = f"f{key - Qt.Key.Key_F1 + 1}"
     elif modifiers & Qt.KeyboardModifier.KeypadModifier and Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
@@ -69,6 +70,9 @@ def key_to_hotkey(key: int, modifiers: Qt.KeyboardModifier) -> str | None:
         name = chr(key).lower()
     elif key in _NAMED:
         name = _NAMED[Qt.Key(key)]
+    elif 0 < native_vk < 255:
+        # Autres touches (<, ², ù, chiffres AZERTY sans Maj…) : code de touche Windows.
+        name = f"vk{native_vk}"
     else:
         return None
     return "+".join([*_modifiers_text(modifiers), name])
@@ -122,7 +126,7 @@ class KeyCaptureButton(QPushButton):
             return
         if key in _MODIFIER_KEYS:
             return  # on attend la touche qui accompagne Ctrl / Alt / Maj
-        text = key_to_hotkey(key, event.modifiers())
+        text = key_to_hotkey(key, event.modifiers(), event.nativeVirtualKey())
         if text is None:
             self.setText("Touche non prise en charge, essaie une autre")
             return
@@ -187,7 +191,7 @@ class ShortcutsPage(QWidget):
 
         note = QLabel(
             "Clique sur une touche puis appuie sur la nouvelle : touches F1 à F24, lettres, "
-            "chiffres, pavé numérique, Inser, Début, Fin, Pause, avec ou sans Ctrl / Alt / Maj, "
+            "chiffres, pavé numérique, Inser, Début, Fin, Pause, <, ², ù…, avec ou sans Ctrl / Alt / Maj, "
             "ou un <b>bouton latéral de la souris</b> (pratique pour parler en jouant).<br>"
             "Une touche du clavier est réservée à ALICIA (le jeu ne la reçoit plus tant qu'elle "
             "est ouverte) ; un bouton de souris reste aussi transmis au jeu."

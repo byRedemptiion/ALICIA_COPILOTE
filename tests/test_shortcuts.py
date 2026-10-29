@@ -78,3 +78,13 @@ def test_changing_the_talk_key_is_saved_and_checked(qt_app, tmp_path, monkeypatc
     assert "déjà" in window.shortcuts_page.states["analyze"].text()
     assert load_settings(cwd=tmp_path).hotkey_talk == "mouse4"  # relu au prochain lancement
     window.close()
+
+
+def test_french_keyboard_keys_are_supported():
+    none = Qt.KeyboardModifier.NoModifier
+    assert key_to_hotkey(Qt.Key.Key_Less, none, native_vk=0xE2) == "vk226"
+    assert key_to_hotkey(Qt.Key.Key_Ampersand, none, native_vk=0x31) == "vk49"  # touche 1/&
+    assert parse_hotkey("vk226")[1] == 0xE2
+    assert parse_hotkey("<")[1] == 0xE2
+    assert hotkey_label("vk226") == "Touche <"
+    assert hotkey_label("ctrl+vk49") == "Ctrl + Touche 1"

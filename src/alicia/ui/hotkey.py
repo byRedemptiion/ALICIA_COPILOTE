@@ -44,12 +44,51 @@ MOUSE_KEYS = {0x04, 0x05, 0x06}
 LABELS = {"mouse4": "Souris 4", "mouse5": "Souris 5", "mousemiddle": "Clic molette"}
 
 
+# Touches « OEM » d'un clavier français AZERTY, désignées par leur code (« vk226 »).
+OEM_LABELS = {
+    0xE2: "<",
+    0xDE: "²",
+    0xBA: "$",
+    0xC0: "ù",
+    0xDC: "*",
+    0xBF: ":",
+    0xBE: ";",
+    0xBC: ",",
+    0xDB: ")",
+    0xBB: "=",
+    0xDF: "!",
+    0xDD: "^",
+}
+
+
+def _vk_code(part: str) -> int | None:
+    """« vk226 » ou « vk0xe2 » → 226."""
+    if not part.startswith("vk"):
+        return None
+    digits = part[2:]
+    try:
+        value = int(digits, 16) if digits.startswith("0x") else int(digits)
+    except ValueError:
+        return None
+    return value if 1 <= value <= 254 else None
+
+
+def _label(part: str) -> str:
+    low = part.lower()
+    if low in LABELS:
+        return LABELS[low]
+    vk = _vk_code(low)
+    if vk is not None:
+        if 0x30 <= vk <= 0x39:
+            return f"Touche {chr(vk)}"
+        return f"Touche {OEM_LABELS.get(vk, f'n°{vk}')}"
+    return part.upper() if len(part) <= 3 else part.capitalize()
+
+
 def hotkey_label(text: str) -> str:
-    """« ctrl+mouse4 » → « Ctrl + Souris 4 » (affichage)."""
+    """« ctrl+mouse4 » → « Ctrl + Souris 4 », « vk226 » → « Touche < » (affichage)."""
     parts = [p.strip() for p in text.split("+") if p.strip()]
-    return " + ".join(
-        LABELS.get(p.lower(), p.upper() if len(p) <= 3 else p.capitalize()) for p in parts
-    )
+    return " + ".join(_label(p) for p in parts)
 
 
 def parse_hotkey(text: str) -> tuple[int, int]:
@@ -69,6 +108,10 @@ def parse_hotkey(text: str) -> tuple[int, int]:
         vk = ord(key.upper())
     elif key in NAMED_KEYS:
         vk = NAMED_KEYS[key]
+    elif key == "<":
+        vk = 0xE2  # touche < > des claviers AZERTY (VK_OEM_102)
+    elif _vk_code(key) is not None:
+        vk = _vk_code(key)  # type: ignore[assignment]
     else:
         raise ConfigError(
             f"Touche « {key} » non prise en charge (F1-F24, lettre, chiffre, pavé numérique, "
