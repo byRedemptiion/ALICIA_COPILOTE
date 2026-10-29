@@ -259,3 +259,44 @@ def test_silent_model_timeout_is_not_retried_and_says_where():
     assert info.value.kind is ProviderErrorKind.TIMEOUT
     assert "premier mot" in info.value.user_message
     assert calls["n"] == 1
+
+
+def test_overloaded_model_falls_back_to_next_and_says_so():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        if "gemini-test:" in request.url.path:
+            return httpx.Response(503, json={"error": {"message": "high demand"}})
+        return httpx.Response(200, text=sse(text_event("Prends la lame.")))
+
+    model = gemini(handler, fallback_models=("gemini-lite",))
+    result = model.analyze(REQUEST)
+    assert result.text == "Prends la lame."
+    assert result.model == "gemini-lite"
+    assert result.extra["fallback_from"] == "gemini-test"
+    assert model.model == "gemini-test"  # le modèle principal reste la référence
+    assert len(seen) == 2  # pas de nouvel essai sur le modèle saturé
+
+
+def test_auth_error_does_not_fall_back():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(403, json={"error": {"message": "Permission denied"}})
+
+    with pytest.raises(ProviderError) as info:
+        gemini(handler, fallback_models=("gemini-lite",)).analyze(REQUEST)
+    assert info.value.kind is ProviderErrorKind.AUTH
+    assert calls["n"] == 1
+
+
+def test_all_models_overloaded_reports_last_error():
+    model = gemini(
+        lambda r: httpx.Response(503, json={"error": {"message": "high demand"}}),
+        fallback_models=("gemini-lite",),
+    )
+    with pytest.raises(ProviderError) as info:
+        model.analyze(REQUEST)
+    assert "gemini-lite" in info.value.user_message

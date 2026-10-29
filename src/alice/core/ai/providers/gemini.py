@@ -45,6 +45,51 @@ class GeminiModel(HttpVisionModel):
 
     _thinking_rejected = False
 
+    def analyze(self, request, on_delta=None, cancel=None):  # type: ignore[no-untyped-def]
+        """Essaie le modèle principal puis les modèles de secours, en le journalisant."""
+        models = [self.settings.model, *self.settings.fallback_models]
+        if len(models) == 1:
+            return super().analyze(request, on_delta, cancel)
+        problem = self.check()
+        if problem:
+            raise ProviderError(ProviderErrorKind.AUTH, problem)
+        try:
+            for index, model in enumerate(models):
+                self.model = model
+                emitted = [False]
+                try:
+                    result = self._run(request, on_delta, cancel, emitted)
+                except ProviderError as exc:
+                    switchable = (
+                        not emitted[0]
+                        and not (cancel is not None and cancel.is_set())
+                        and (
+                            exc.kind
+                            in (
+                                ProviderErrorKind.UNAVAILABLE,
+                                ProviderErrorKind.RATE_LIMIT,
+                                ProviderErrorKind.TIMEOUT,
+                            )
+                            or exc.status_code == 404
+                        )
+                    )
+                    if not switchable or index == len(models) - 1:
+                        raise
+                    log.warning(
+                        "Modèle %s indisponible [%s] : bascule sur %s — %s",
+                        model,
+                        exc.kind,
+                        models[index + 1],
+                        exc.detail,
+                    )
+                    continue
+                if index > 0:
+                    result.extra["fallback_from"] = models[0]
+                return result
+        finally:
+            self.model = models[0]
+        raise AssertionError("inatteignable")
+
     def _run(self, request, on_delta, cancel, emitted):  # type: ignore[no-untyped-def]
         try:
             return super()._run(request, on_delta, cancel, emitted)
@@ -158,7 +203,8 @@ class GeminiModel(HttpVisionModel):
         if status >= 500:
             return ProviderError(
                 ProviderErrorKind.UNAVAILABLE,
-                "Gemini est momentanément indisponible.",
+                f"Le modèle Gemini « {self.model} » est saturé (forte demande). "
+                "Réessaie dans un moment.",
                 detail=f"HTTP {status}: {message}",
                 status_code=status,
             )

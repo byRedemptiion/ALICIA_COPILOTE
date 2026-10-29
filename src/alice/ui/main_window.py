@@ -469,7 +469,13 @@ class MainWindow(QMainWindow):
             f"{result.provider}/{result.model} · {first}total {outcome.total_ms} ms · "
             f"profil {outcome.profile} · [{outcome.operation_id}]"
         )
-        self._set_status("Réponse prête.")
+        fallback = result.extra.get("fallback_from")
+        if fallback:
+            self._set_status(
+                f"Réponse prête — modèle de secours {result.model} ({fallback} saturé)."
+            )
+        else:
+            self._set_status("Réponse prête.")
         QApplication.alert(self)  # fait clignoter Alice dans la barre des tâches
         self.analysis_done.emit(outcome)
 

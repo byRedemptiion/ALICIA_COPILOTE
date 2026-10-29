@@ -72,6 +72,7 @@ class GeminiSettings:
     api_key: Secret
     thinking_budget: int | None = None
     thinking_level: str | None = None
+    fallback_models: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,9 @@ def load_settings(
                 thinking_budget=int(thinking_budget) if thinking_budget is not None else None,
                 thinking_level=(
                     str(gemini["thinking_level"]) if "thinking_level" in gemini else None
+                ),
+                fallback_models=tuple(
+                    str(m).strip() for m in gemini.get("fallback_models", []) if str(m).strip()
                 ),
             ),
             ollama=OllamaSettings(
