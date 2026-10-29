@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -38,7 +39,9 @@ from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.config import state_dir
 from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import make_filter, make_formatter, set_level
+from alicia.games.store import GameStore
 from alicia.ui.core_widget import AliciaCore
+from alicia.ui.games_page import GamesPage
 from alicia.ui.orb import OrbWindow
 from alicia.ui.theme import CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
@@ -97,6 +100,13 @@ def _section(title: str) -> QLabel:
     return label
 
 
+def _muted_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("muted")
+    label.setWordWrap(True)
+    return label
+
+
 def _panel(*items) -> QFrame:  # type: ignore[no-untyped-def]
     """Cadre arrondi du HUD ; un élément peut être (widget, étirement)."""
     frame = QFrame()
@@ -151,6 +161,7 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         self.setStyleSheet(STYLESHEET)
+        self.game_store = GameStore()
 
         # --- En-tête : nom, raccourcis, modèle -------------------------------------------------
         brand = QLabel("A · L · I · C · I · A")
@@ -163,10 +174,21 @@ class MainWindow(QMainWindow):
         self.provider_label.setObjectName("chip")
         self.hotkey_label = QLabel("")
         self.hotkey_label.setObjectName("chip")
+        self.nav_console = QPushButton("◈  ALICIA")
+        self.nav_games = QPushButton("▦  JEUX")
+        for button, index in ((self.nav_console, 0), (self.nav_games, 1)):
+            button.setObjectName("nav")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _=False, i=index: self.show_page(i))
+        self.nav_console.setChecked(True)
+        self.nav_games.setToolTip("Tes jeux et leurs sites de référence")
         header = QHBoxLayout()
         header.addWidget(brand)
         header.addSpacing(10)
         header.addWidget(tagline)
+        header.addSpacing(24)
+        header.addWidget(self.nav_console)
+        header.addWidget(self.nav_games)
         header.addStretch(1)
         header.addWidget(self.hotkey_label)
         header.addWidget(self.provider_label)
@@ -198,10 +220,18 @@ class MainWindow(QMainWindow):
         self.preview_info = QLabel("")
         self.preview_info.setObjectName("muted")
         self.preview_info.setWordWrap(True)
-        left = _panel(
-            _section("CIBLE"),
-            self.window_list,
+        # La fenêtre du jeu se choisit dans l'onglet Jeux : F9 et F10 la trouvent seuls.
+        self.target_panel = _panel(
+            _section("FENÊTRE DU JEU"),
+            _muted_label(
+                "Inutile en jeu : F9 et F10 prennent la fenêtre au premier plan. "
+                "Choisis-la ici pour poser des questions écrites depuis ce panneau."
+            ),
+            (self.window_list, 1),
             buttons,
+        )
+        self.window_list.setMaximumHeight(16777215)
+        left = _panel(
             _section("VISION"),
             (self.preview, 1),
             self.preview_info,
@@ -265,13 +295,20 @@ class MainWindow(QMainWindow):
         )
         self._fill_games()
         self.game_box.currentIndexChanged.connect(self._change_game)
-        options = QHBoxLayout()
-        options.addWidget(self.game_box)
-        options.addWidget(self.web_box)
-        options.addWidget(self.voice_box)
-        options.addWidget(self.engine_box)
-        options.addStretch(1)
-        options.addWidget(self.stop_voice_button)
+        for combo in (self.game_box, self.engine_box):
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        game_row = QHBoxLayout()
+        game_row.addWidget(self.game_box, 1)
+        game_row.addWidget(self.stop_voice_button)
+        switches = QHBoxLayout()
+        switches.addWidget(self.web_box)
+        switches.addWidget(self.voice_box)
+        switches.addStretch(1)
+        switches.addWidget(self.engine_box)
+        options = QVBoxLayout()
+        options.setSpacing(8)
+        options.addLayout(game_row)
+        options.addLayout(switches)
         right = _panel(
             _section("CONVERSATION"),
             self.asked_label,
@@ -337,12 +374,69 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(root)
         layout.setContentsMargins(18, 14, 18, 10)
         layout.setSpacing(12)
+        # --- Pages : console d'ALICIA / onglet Jeux ----------------------------------------------
+        console = QWidget()
+        console_layout = QVBoxLayout(console)
+        console_layout.setContentsMargins(0, 0, 0, 0)
+        console_layout.setSpacing(12)
+        console_layout.addWidget(splitter, 1)
+        console_layout.addLayout(ask)
+        self.games_page = GamesPage(
+            self.game_store,
+            active_game=self._active_game_key,
+            current_window=lambda: self.observed,
+            side_panel=self.target_panel,
+        )
+        self.games_page.games_changed.connect(self._games_changed)
+        self.games_page.use_game.connect(self._select_game)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(console)
+        self.pages.addWidget(self.games_page)
+
         layout.addLayout(header)
-        layout.addWidget(splitter, 1)
-        layout.addLayout(ask)
+        layout.addWidget(self.pages, 1)
         layout.addWidget(self.logs_panel)
         layout.addLayout(footer)
         self.setCentralWidget(root)
+
+    def show_page(self, index: int) -> None:
+        """0 = console d'ALICIA, 1 = onglet Jeux (toujours ouvert sur la liste)."""
+        self.pages.setCurrentIndex(index)
+        self.nav_console.setChecked(index == 0)
+        self.nav_games.setChecked(index == 1)
+        if index == 1:
+            self.games_page.show_list()
+
+    def _active_game_key(self) -> str:
+        """Le jeu choisi, sinon celui reconnu dans la fenêtre observée."""
+        key = self.services.analysis.game_profile
+        if key != "auto":
+            return key
+        from alicia.games.profiles import resolve_profile
+
+        return resolve_profile(self.observed).key if self.observed is not None else ""
+
+    def _select_game(self, key: str) -> None:
+        self.game_box.setCurrentIndex(max(0, self.game_box.findData(key)))
+
+    def _games_changed(self) -> None:
+        """Un jeu a été ajouté, modifié ou supprimé : menus du panneau et du rond à jour."""
+        current = self.services.analysis.game_profile
+        if current not in self.game_store.profiles and current != "auto":
+            current = "auto"
+        self.game_box.blockSignals(True)
+        self.game_box.clear()
+        self._fill_games(current)
+        self.game_box.blockSignals(False)
+        self.services.analysis.game_profile = self.game_box.currentData()
+        self._sync_orb_games()
+
+    def _sync_orb_games(self) -> None:
+        self.orb.games = [
+            (self.game_box.itemData(i), self.game_box.itemText(i))
+            for i in range(self.game_box.count())
+        ]
+        self.orb.current_game = self.services.analysis.game_profile
 
     def _build_orb(self) -> None:
         settings = self.services.settings
@@ -351,14 +445,8 @@ class MainWindow(QMainWindow):
         self.orb.open_panel.connect(self.show_panel)
         self.orb.stop_voice.connect(self.stop_voice)
         self.orb.quit_requested.connect(self.quit_app)
-        self.orb.games = [
-            (self.game_box.itemData(i), self.game_box.itemText(i))
-            for i in range(self.game_box.count())
-        ]
-        self.orb.current_game = self.services.analysis.game_profile
-        self.orb.game_chosen.connect(
-            lambda key: self.game_box.setCurrentIndex(max(0, self.game_box.findData(key)))
-        )
+        self._sync_orb_games()
+        self.orb.game_chosen.connect(self._select_game)
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
@@ -491,7 +579,9 @@ class MainWindow(QMainWindow):
             mode = " (plein écran)" if self.observed and self.observed.fullscreen else ""
             self._set_status(f"Observation : {self.observed.title}{mode} — prête")  # type: ignore[union-attr]
         else:
-            self._set_status("Sélectionne la fenêtre du jeu puis clique sur Démarrer.")
+            self._set_status(
+                "En jeu : maintiens F10 pour me parler, ou F9 pour une analyse rapide."
+            )
 
     # --- actions ------------------------------------------------------------------------------
 
@@ -525,7 +615,9 @@ class MainWindow(QMainWindow):
     def start_observation(self) -> bool:
         window = self.selected_window()
         if window is None:
-            self._set_status("Sélectionne d'abord une fenêtre.")
+            self._set_status(
+                "Aucune fenêtre de jeu : utilise F9/F10 en jeu, ou choisis-la dans l'onglet Jeux."
+            )
             return False
         self.observed = window
         log.info(
@@ -704,15 +796,12 @@ class MainWindow(QMainWindow):
         self.question.setText("🎙 …")
         self._start_analysis(window, "", audio)
 
-    def _fill_games(self) -> None:
-        from alicia.games.profiles import all_profiles
-
+    def _fill_games(self, current: str | None = None) -> None:
         self.game_box.addItem("Jeu : auto", "auto")
-        for profile in all_profiles().values():
-            if profile.key != "generic":
-                self.game_box.addItem(profile.name, profile.key)
+        for profile in self.game_store.games():
+            self.game_box.addItem(profile.name, profile.key)
         self.game_box.addItem("Autre jeu", "generic")
-        current = self.services.analysis.game_profile
+        current = current or self.services.analysis.game_profile
         self.game_box.setCurrentIndex(max(0, self.game_box.findData(current)))
 
     def _change_game(self) -> None:

@@ -116,6 +116,34 @@ QPushButton#primary:hover {{
     background: {PINK_SOFT};
     color: #2a0012;
 }}
+QPushButton#nav {{
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 6px 14px;
+    color: {MUTED};
+    font-weight: 600;
+    letter-spacing: 2px;
+}}
+QPushButton#nav:hover {{
+    color: {TEXT};
+}}
+QPushButton#nav:checked {{
+    color: {PINK};
+    border-bottom-color: {PINK};
+}}
+QFrame#gameCard {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(18, 28, 88, 0.85), stop:1 rgba(8, 12, 46, 0.85));
+    border: 1px solid {BORDER};
+    border-radius: 14px;
+}}
+QFrame#gameCard:hover {{
+    border-color: {PINK};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(40, 24, 96, 0.9), stop:1 rgba(12, 14, 56, 0.9));
+}}
 QPushButton#ghost {{
     border: none;
     background: transparent;

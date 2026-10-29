@@ -445,3 +445,22 @@ def test_game_can_be_chosen_from_the_orb_menu(qt_app, settings):
     assert window.services.analysis.game_profile == "wow-forever"
     assert window.game_box.currentData() == "wow-forever"
     window.close()
+
+
+def test_games_tab_updates_the_game_menus(qt_app, settings):
+    from alicia.games.store import GameDraft
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.show_page(1)
+    assert window.pages.currentWidget() is window.games_page
+    assert window.nav_games.isChecked() and not window.nav_console.isChecked()
+    window.game_store.save(
+        None, GameDraft("Hades II", ["hades2.exe"], [], ["hades.fandom.com"], "")
+    )
+    window.games_page.games_changed.emit()
+    assert window.game_box.findData("hades-ii") >= 0
+    assert ("hades-ii", "Hades II") in window.orb.games
+    window.games_page.use_game.emit("hades-ii")
+    assert window.services.analysis.game_profile == "hades-ii"
+    window.close()

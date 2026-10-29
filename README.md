@@ -70,8 +70,10 @@ obs = { launch = "C:/Program Files/obs-studio/bin/64bit/obs64.exe", process = "o
 
 ALICIA a un **profil par jeu** : elle sait à quel jeu tu joues (sans le deviner sur l'image), quoi regarder à l'écran, et **sur quels sites chercher en premier** quand la recherche web est active. Profils fournis : **Overwatch** et **World of Warcraft: Forever** (Icy Veins, Method, Mobalytics, Warcraft Tavern, Warcraft Wiki).
 
-- Le jeu est reconnu tout seul à sa fenêtre. Tu peux aussi le choisir : menu « Jeu » du panneau, ou **clic droit sur le rond → Jeu**.
-- Pour changer les sites ou ajouter un jeu, double-clique sur **`Mes_Jeux_Alicia.bat`** : il ouvre ton fichier `games.toml`. Décommente et modifie seulement ce que tu veux changer (par exemple juste `sources` sous `[wow-forever]`), puis relance ALICIA.
+- Le jeu est reconnu tout seul à sa fenêtre. Tu peux aussi le choisir : menu du panneau, ou **clic droit sur le rond → Jeu**.
+- **Onglet JEUX** (en haut du panneau) : tous tes jeux en cartes. Clique sur un jeu pour ouvrir sa fiche : **ajoute un site** (colle simplement l'adresse), retire-en, change l'ordre (du plus fiable au moins fiable), règle comment le reconnaître et ce qu'ALICIA doit savoir. « Enregistrer » et c'est pris en compte tout de suite. « ＋ Ajouter un jeu » crée un nouveau jeu, prérempli avec la fenêtre observée.
+- La **fenêtre du jeu** se choisit aussi dans cet onglet (inutile en jeu : F9 et F10 prennent la fenêtre au premier plan).
+- Tout est enregistré dans `%APPDATA%\Alicia\games.toml`, modifiable à la main (`Mes_Jeux_Alicia.bat` l'ouvre). « Rétablir l'original » annule tes changements sur un jeu fourni.
 - Le journal indique le jeu reconnu et le nom du programme (`Jeu : … (fenêtre xxx.exe, détecté)`), utile pour ajouter un jeu.
 
 ### Recherche web
