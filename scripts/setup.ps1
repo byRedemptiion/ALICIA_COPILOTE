@@ -6,10 +6,11 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 
 Step "Vérification de uv (gestionnaire Python)"
+$env:Path = "$env:USERPROFILE\.local\bin;$env:LOCALAPPDATA\Programs\uv;$env:USERPROFILE\.cargo\bin;$env:Path"
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "uv absent : installation depuis astral.sh..."
     powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
-    $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+    if ($LASTEXITCODE -ne 0) { throw "L'installation de uv a échoué (code $LASTEXITCODE)." }
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         throw "uv n'a pas pu être installé. Installe-le manuellement : https://docs.astral.sh/uv/"
     }
