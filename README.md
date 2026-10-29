@@ -34,6 +34,27 @@ Pour essayer sans jeu : `Lancer_Alice.bat --demo` (inventaire fictif, clairement
 - Tester sans jeu : `uv run alice-diag record` (micro), `uv run alice-diag transcribe micro.wav` (compréhension) et `uv run alice-diag say --engine kokoro` (voix).
 - Le micro n'est ouvert que pendant que tu maintiens F10 : rien n'est écouté en dehors, et aucun enregistrement n'est gardé sur le disque.
 
+### Actions sur le PC (comme un Jarvis)
+
+Avec **F10** ou à l'écrit, Alice exécute certaines demandes **sur Windows, jamais dans le jeu** :
+
+| Exemple | Action | Sécurité |
+| --- | --- | --- |
+| « Monte le son », « baisse le volume de 20 », « volume à 30 », « coupe le son » | Volume | immédiat |
+| « Lance Discord », « ouvre Spotify » | Applis de la liste `[actions.apps]` | immédiat |
+| « Rappelle-moi dans 20 minutes de manger », « minuteur de 5 minutes » | Rappel dit à voix haute | immédiat |
+| « Verrouille le PC », « mets le PC en veille », « ferme Discord » | Session, veille, fermeture d'appli | **confirmation** (« oui » / « non ») |
+| « Éteins le PC », « redémarre le PC » | Extinction / redémarrage | **confirmation + 60 s**, « annule » l'arrête |
+
+- Les demandes sont reconnues **sur ton PC, sans IA** (instantané, gratuit, hors ligne). Seules les actions de cette liste existent : Alice ne peut jamais lancer une commande libre.
+- Un « non » l'emporte toujours, et une confirmation expire au bout de 20 s.
+- Ajouter une appli dans `alice.toml` :
+
+```toml
+[actions.apps]
+obs = { launch = "C:/Program Files/obs-studio/bin/64bit/obs64.exe", process = "obs64.exe" }
+```
+
 ### Recherche web
 
 La case **Recherche web** laisse Gemini faire une recherche Google avant de répondre : méta actuelle, builds, notes de patch. Les sources s'affichent sous la réponse. Cela ajoute une à deux secondes ; l'offre gratuite a aussi un quota de recherches par jour.

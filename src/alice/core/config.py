@@ -122,6 +122,28 @@ class VoiceSettings:
 
 
 @dataclass(frozen=True)
+class AppEntry:
+    launch: str  # chemin d'un .exe ou lien (discord://, spotify:)
+    process: str = ""  # nom du processus pour « ferme X » (ex. Discord.exe)
+
+
+DEFAULT_APPS = {
+    "discord": AppEntry("discord://", "Discord.exe"),
+    "spotify": AppEntry("spotify:", "Spotify.exe"),
+    "steam": AppEntry("steam://open/main", "steam.exe"),
+    "battle.net": AppEntry("battlenet://", "Battle.net.exe"),
+}
+
+
+@dataclass(frozen=True)
+class ActionSettings:
+    enabled: bool = True
+    shutdown_delay_s: int = 60
+    confirm_timeout_s: float = 20.0
+    apps: dict[str, AppEntry] = field(default_factory=lambda: dict(DEFAULT_APPS))
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
@@ -130,6 +152,7 @@ class Settings:
     hotkey_analyze: str = ""
     hotkey_talk: str = ""
     voice: VoiceSettings = field(default_factory=VoiceSettings)
+    actions: ActionSettings = field(default_factory=ActionSettings)
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
@@ -168,6 +191,29 @@ def _number(section: dict[str, Any], key: str, kind: type, minimum: float) -> An
     if value < minimum:
         raise ConfigError(f"Réglage « {key} » trop petit (minimum {minimum}).")
     return value
+
+
+def _actions(section: dict[str, Any]) -> ActionSettings:
+    apps: dict[str, AppEntry] = {}
+    raw_apps = section.get("apps", {})
+    if not isinstance(raw_apps, dict):
+        raise ConfigError("La section [actions.apps] est invalide.")
+    for name, value in raw_apps.items():
+        if isinstance(value, str):
+            entry = AppEntry(value.strip())
+        elif isinstance(value, dict) and value.get("launch"):
+            entry = AppEntry(str(value["launch"]).strip(), str(value.get("process", "")).strip())
+        else:
+            raise ConfigError(f"Application « {name} » invalide dans [actions.apps].")
+        apps[str(name).strip().lower()] = entry
+    return ActionSettings(
+        enabled=bool(section.get("enabled", True)),
+        shutdown_delay_s=_number(section, "shutdown_delay_s", int, 10)
+        if "shutdown_delay_s" in section
+        else 60,
+        confirm_timeout_s=float(section.get("confirm_timeout_s", 20)),
+        apps=apps or dict(DEFAULT_APPS),
+    )
 
 
 def _choice(section: dict[str, Any], key: str, default: str, allowed: tuple[str, ...]) -> str:
@@ -262,6 +308,7 @@ def load_settings(
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),
         hotkey_analyze=str(_section(data, "hotkeys").get("analyze", "")).strip(),
         hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
+        actions=_actions(_section(data, "actions")),
         voice=VoiceSettings(
             speak_answers=bool(voice.get("speak_answers", True)),
             stt=_choice(voice, "stt", "local", ("local", "gemini")),

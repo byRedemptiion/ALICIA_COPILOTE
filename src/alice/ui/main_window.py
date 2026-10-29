@@ -250,6 +250,9 @@ class MainWindow(QMainWindow):
         logging.getLogger("alice").addHandler(self.log_handler)
         self.voice_bridge = VoiceBridge()
         self.voice_bridge.state.connect(self._voice_state)
+        self.voice_bridge.reminder.connect(self._reminder)
+        if self.services.actions is not None:
+            self.services.actions.on_reminder = self.voice_bridge.reminder.emit
         if self.services.speaker is not None:
             self.services.speaker.on_state = lambda state, msg: self.voice_bridge.state.emit(
                 state, msg
@@ -261,6 +264,8 @@ class MainWindow(QMainWindow):
                 hotkey.stop()
         if self.services.recorder is not None:
             self.services.recorder.cancel()
+        if self.services.actions is not None:
+            self.services.actions.stop()
         self.stop_voice()
         self.stop_observation()
         logging.getLogger("alice").removeHandler(self.log_handler)
@@ -376,6 +381,14 @@ class MainWindow(QMainWindow):
             self.analyze_button.setText("Analyser")
             self._update_state()
             return
+        # Une demande d'action (« éteins le PC », « oui »…) ne demande ni jeu ni IA.
+        if self.services.actions is not None and self.question.text().strip():
+            reply = self.services.actions.route(self.question.text())
+            if reply is not None:
+                from alice.core.analysis.service import AnalysisOutcome
+
+                self._action_done(AnalysisOutcome("action", None, None, "", 0, action=reply))
+                return
         if self.observed is None and not self.start_observation():
             return
         problem = self.services.model.check()
@@ -505,6 +518,34 @@ class MainWindow(QMainWindow):
         speaker.warm_up_async()
         log.info("Voix d'Alice : %s", engine)
 
+    def _action_done(self, outcome: AnalysisOutcome) -> None:
+        reply = outcome.action
+        assert reply is not None
+        if outcome.transcript is not None:
+            self.question.setText(f"🎙 {outcome.transcript}")
+        self.answer.setPlainText(reply.text)
+        self.sources_label.setText("")
+        self.answer_info.setText(f"Action sur le PC : {reply.intent} · [{outcome.operation_id}]")
+        if reply.awaiting_confirmation:
+            self._set_status(
+                "Confirmation demandée : réponds « oui » ou « non » (F10 ou à l'écrit)."
+            )
+        else:
+            self._set_status("Action traitée.")
+        self._say(reply.text)
+        self.analysis_done.emit(outcome)
+
+    def _say(self, text: str) -> None:
+        speaker = self.services.speaker
+        if self.voice_box.isChecked() and speaker is not None and speaker.speak(text):
+            self.stop_voice_button.setEnabled(True)
+
+    def _reminder(self, text: str) -> None:
+        self.answer.setPlainText(text)
+        self._set_status("⏰ " + text)
+        QApplication.alert(self)
+        self._say(text)
+
     def stop_voice(self) -> None:
         speaker = self.services.speaker
         if speaker is not None and speaker.speaking:
@@ -612,7 +653,11 @@ class MainWindow(QMainWindow):
             self.answer.setTextCursor(cursor)
 
     def _analysis_done(self, outcome: AnalysisOutcome) -> None:
+        if outcome.action is not None:
+            self._action_done(outcome)
+            return
         result = outcome.result
+        assert result is not None
         self.answer.setMarkdown(result.text)
         first = (
             f"1er mot {result.first_token_ms} ms · " if result.first_token_ms is not None else ""

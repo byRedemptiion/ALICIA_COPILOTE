@@ -7,6 +7,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+from alice.core.actions.controller import ActionReply
 from alice.core.ai.base import (
     AnalysisRequest,
     AnalysisResult,
@@ -30,11 +31,12 @@ log = logging.getLogger("alice.analysis")
 @dataclass
 class AnalysisOutcome:
     operation_id: str
-    frame: Frame
-    result: AnalysisResult
+    frame: Frame | None
+    result: AnalysisResult | None
     profile: str
     total_ms: int
-    transcript: str | None = None  # question orale transcrite par l'IA
+    transcript: str | None = None  # question orale transcrite
+    action: ActionReply | None = None  # demande d'action sur le PC (pas d'appel IA)
 
 
 class AnalysisService:
@@ -45,7 +47,9 @@ class AnalysisService:
         model: VisionModel,
         session: SessionContext,
         transcriber=None,  # type: ignore[no-untyped-def]  # LocalTranscriber (voix → texte), facultatif
+        router=None,  # type: ignore[no-untyped-def]  # texte → ActionReply | None (actions sur le PC)
     ) -> None:
+        self.router = router
         self.transcriber = transcriber
         self.settings = settings
         self.capture = capture
@@ -85,6 +89,14 @@ class AnalysisService:
                 question = VOICE_QUESTION
             else:
                 question = question.strip() or "Que vois-tu d'important sur cet écran ?"
+                if self.router is not None:
+                    reply = self.router(question)
+                    if reply is not None:
+                        total = int((time.perf_counter() - started) * 1000)
+                        log.info("Demande traitée comme action « %s » (sans IA)", reply.intent)
+                        return AnalysisOutcome(
+                            op_id, None, None, "", total, local_transcript, action=reply
+                        )
             mode = (
                 f"question orale {audio.duration_s:.1f} s"
                 if audio

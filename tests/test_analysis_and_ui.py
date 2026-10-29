@@ -292,3 +292,23 @@ def test_voice_engine_can_be_switched_from_the_ui(qt_app, settings):
     assert speaker.settings.tts_engine == "kokoro"
     assert getattr(speaker.synthesizer, "warm_up", None) is not None
     window.close()
+
+
+def test_typed_action_works_without_game_or_ai(qt_app, settings):
+    from alice.core.actions.controller import ActionController
+    from alice.core.config import ActionSettings
+    from alice.ui.main_window import MainWindow
+    from tests.test_actions import FakeSystem
+
+    system = FakeSystem()
+    actions = ActionController(ActionSettings(), system)
+    model = FakeModel()
+    window = MainWindow(build_services(settings, demo=True, model=model, actions=actions))
+    window.question.setText("Éteins le PC")
+    window.analyze_or_cancel()
+    assert "confirmes" in window.answer.toPlainText()
+    window.question.setText("oui")
+    window.analyze_or_cancel()
+    assert system.calls == [("shutdown", 60)]
+    assert model.requests == []
+    window.close()

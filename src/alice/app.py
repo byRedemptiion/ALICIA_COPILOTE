@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 
 from alice import __version__
+from alice.core.actions.controller import ActionController
 from alice.core.ai.base import VisionModel
 from alice.core.ai.factory import create_model
 from alice.core.analysis.service import AnalysisService
@@ -32,6 +33,7 @@ class Services:
     speaker: Speaker | None = None
     recorder: Recorder | None = None
     transcriber: LocalTranscriber | None = None
+    actions: ActionController | None = None
 
 
 def build_services(
@@ -42,6 +44,7 @@ def build_services(
     speaker: Speaker | None = None,
     recorder: Recorder | None = None,
     transcriber: LocalTranscriber | None = None,
+    actions: ActionController | None = None,
 ) -> Services:
     capture = (
         CaptureService.demo(settings.capture.keep_last_frames)
@@ -53,12 +56,25 @@ def build_services(
     voice = settings.voice
     if transcriber is None and voice.stt == "local" and not demo:
         transcriber = LocalTranscriber(voice.whisper_model)
-    analysis = AnalysisService(settings, capture, model, session, transcriber)
+    if actions is None and settings.actions.enabled:
+        actions = ActionController(settings.actions, None if demo else _system())
+    router = actions.route if actions is not None else None
+    analysis = AnalysisService(settings, capture, model, session, transcriber, router)
     speaker = speaker or Speaker(voice)
     recorder = recorder or Recorder(voice.sample_rate, voice.input_device, voice.max_record_s)
     return Services(
-        settings, capture, model, session, analysis, demo, speaker, recorder, transcriber
+        settings, capture, model, session, analysis, demo, speaker, recorder, transcriber, actions
     )
+
+
+def _system():  # type: ignore[no-untyped-def]
+    from alice.core.actions.system import WindowsSystem
+    from alice.core.errors import UnsupportedPlatformError
+
+    try:
+        return WindowsSystem()
+    except UnsupportedPlatformError:
+        return None
 
 
 def log_startup(settings: Settings, log_file: str) -> None:

@@ -44,6 +44,7 @@ class VoiceBridge(QObject):
     """Relaie l'état de la voix (thread audio) vers l'interface."""
 
     state = Signal(str, object)  # (« speaking » | « idle » | « error », message)
+    reminder = Signal(str)  # rappel de minuteur (thread du minuteur → interface)
 
 
 class QtLogHandler(logging.Handler):

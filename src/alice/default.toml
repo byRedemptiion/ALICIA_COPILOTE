@@ -70,5 +70,19 @@ input_device = ""            # vide = micro Windows par défaut, sinon une parti
 max_record_s = 30            # durée maximale d'une question orale
 sample_rate = 16000
 
+[actions]
+# Actions sur le PC à la voix (F10) ou à l'écrit : éteindre, redémarrer, veille, verrouiller,
+# volume, lancer/fermer une appli de la liste, minuteur. Jamais d'action dans le jeu.
+enabled = true
+shutdown_delay_s = 60        # délai avant extinction/redémarrage (« annule » l'arrête)
+confirm_timeout_s = 20       # temps pour répondre « oui » à une confirmation
+
+# Applis que tu peux lancer/fermer à la voix : nom = { launch = chemin ou lien, process = .exe }
+[actions.apps]
+discord = { launch = "discord://", process = "Discord.exe" }
+spotify = { launch = "spotify:", process = "Spotify.exe" }
+steam = { launch = "steam://open/main", process = "steam.exe" }
+"battle.net" = { launch = "battlenet://", process = "Battle.net.exe" }
+
 [game]
 profile = "auto"             # auto | generic | overwatch
