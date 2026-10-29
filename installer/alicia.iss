@@ -32,6 +32,9 @@ Compression=lzma2/max
 SolidCompression=yes
 ShowLanguageDialog=no
 CloseApplications=no
+; uv relie ses Python par des « jonctions » NTFS : la protection RedirectionGuard d'Inno
+; (héritée par les programmes lancés) empêche de les suivre (erreur Windows 448).
+RedirectionGuard=no
 
 [Languages]
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
@@ -164,7 +167,7 @@ begin
   WizardForm.StatusLabel.Caption :=
     'Installation de Python, des composants et des voix (quelques minutes, fenêtre de progression)…';
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\scripts\setup.ps1') + '" -Installer';
-  if not Exec('powershell.exe', Params, ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, ResultCode)
+  if not ExecAsOriginalUser('powershell.exe', Params, ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, ResultCode)
      or (ResultCode <> 0) then
   begin
     SetupFailed := True;

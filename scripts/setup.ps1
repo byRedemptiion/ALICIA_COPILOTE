@@ -27,7 +27,7 @@ try {
 
     Step "Python 3.12 et composants d'ALICIA (première fois : quelques minutes)"
     uv sync --python 3.12 --frozen
-    if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE). Vérifie ta connexion Internet." }
+    if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE) : voir le message ci-dessus." }
     if (-not (Test-Path ".venv\Scripts\alicia-gui.exe")) {
         # Lanceur sans terminal ajouté par une mise à jour : on réinstalle le paquet d'ALICIA.
         uv sync --python 3.12 --frozen --reinstall-package alicia-copilot
