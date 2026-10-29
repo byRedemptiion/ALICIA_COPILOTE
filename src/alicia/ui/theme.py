@@ -1,0 +1,228 @@
+"""Thème HUD d'ALICIA, tiré de son portrait : bleu nuit, néons cyan et rose, armure rouge et or."""
+
+from __future__ import annotations
+
+from PySide6.QtGui import QColor, QFont
+
+BG = "#040a24"
+PANEL = "rgba(10, 18, 58, 0.72)"
+BORDER = "#24307a"
+CYAN = "#22e3ff"
+CYAN_SOFT = "#7fefff"
+PINK = "#ff3d8b"
+PINK_SOFT = "#ff8cc0"
+RED = "#c8143c"
+GOLD = "#f5b62a"
+TEXT = "#e9eeff"
+MUTED = "#7f8cc4"
+DANGER = "#ff3b5c"
+
+STATE_COLORS = {
+    "idle": QColor(43, 140, 255),  # halo bleu du portrait
+    "listening": QColor(34, 227, 255),  # cyan : elle t'écoute
+    "thinking": QColor(155, 92, 255),  # violet : elle réfléchit
+    "speaking": QColor(255, 61, 139),  # rose de ses cheveux : elle parle
+    "action": QColor(245, 182, 42),  # or de son armure : action sur le PC
+    "error": QColor(255, 40, 70),
+}
+STATE_LABELS = {
+    "idle": "EN VEILLE",
+    "listening": "J'ÉCOUTE",
+    "thinking": "J'ANALYSE",
+    "speaking": "JE PARLE",
+    "action": "ACTION",
+    "error": "ERREUR",
+}
+
+FONT_FAMILY = "Bahnschrift"  # police « DIN » fournie avec Windows ; repli automatique sinon
+
+
+def title_font(size: float, weight: QFont.Weight = QFont.Weight.DemiBold) -> QFont:
+    font = QFont([FONT_FAMILY, "Segoe UI", "Arial"])
+    font.setPointSizeF(size)
+    font.setWeight(weight)
+    font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 118)
+    return font
+
+
+STYLESHEET = f"""
+QMainWindow, QWidget#root {{
+    background: qradialgradient(cx:0.5, cy:0.4, radius:0.95, fx:0.5, fy:0.4,
+        stop:0 #12206a, stop:0.55 {BG}, stop:1 #02041a);
+}}
+QWidget {{
+    color: {TEXT};
+    font-family: "{FONT_FAMILY}", "Segoe UI";
+    font-size: 10.5pt;
+}}
+QFrame#panel {{
+    background: {PANEL};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+}}
+QLabel#sectionTitle {{
+    color: {GOLD};
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 3px;
+}}
+QLabel#muted, QLabel#chip {{
+    color: {MUTED};
+}}
+QLabel#chip {{
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 3px 10px;
+    background: rgba(18, 59, 79, 0.35);
+}}
+QLabel#asked {{
+    color: {GOLD};
+    font-size: 10.5pt;
+    padding: 2px 0 6px 0;
+    border-bottom: 1px solid {BORDER};
+}}
+QLabel#status {{
+    color: {CYAN_SOFT};
+    font-size: 11pt;
+}}
+QPushButton {{
+    background: rgba(34, 227, 255, 0.06);
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 7px 14px;
+    color: {TEXT};
+    letter-spacing: 1px;
+}}
+QPushButton:hover {{
+    border-color: {CYAN};
+    background: rgba(34, 227, 255, 0.14);
+}}
+QPushButton:pressed {{
+    background: rgba(34, 227, 255, 0.28);
+}}
+QPushButton:disabled {{
+    color: #35505c;
+    border-color: #0d2533;
+    background: transparent;
+}}
+QPushButton#primary {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {RED}, stop:1 {PINK});
+    color: #ffffff;
+    font-weight: 700;
+    border: none;
+    padding: 9px 22px;
+}}
+QPushButton#primary:hover {{
+    background: {PINK_SOFT};
+    color: #2a0012;
+}}
+QPushButton#ghost {{
+    border: none;
+    background: transparent;
+    color: {MUTED};
+    padding: 4px 8px;
+}}
+QPushButton#ghost:hover {{
+    color: {CYAN};
+}}
+QLineEdit {{
+    background: rgba(2, 10, 16, 0.85);
+    border: 1px solid {BORDER};
+    border-bottom: 2px solid {PINK};
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 11.5pt;
+    selection-background-color: {CYAN};
+    selection-color: #ffffff;
+}}
+QLineEdit:focus {{
+    border-color: {PINK};
+}}
+QTextBrowser, QPlainTextEdit {{
+    background: transparent;
+    border: none;
+    selection-background-color: {CYAN};
+    selection-color: #ffffff;
+}}
+QTextBrowser {{
+    font-size: 12.5pt;
+}}
+QPlainTextEdit {{
+    font-family: "Consolas";
+    font-size: 8.5pt;
+    color: #7fb4c4;
+}}
+QListWidget {{
+    background: rgba(2, 10, 16, 0.6);
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 4px;
+    outline: 0;
+}}
+QListWidget::item {{
+    padding: 6px 8px;
+    border-radius: 6px;
+}}
+QListWidget::item:hover {{
+    background: rgba(34, 227, 255, 0.08);
+}}
+QListWidget::item:selected {{
+    background: rgba(255, 61, 139, 0.28);
+    color: #ffffff;
+}}
+QCheckBox {{
+    spacing: 8px;
+    color: {TEXT};
+}}
+QCheckBox::indicator {{
+    width: 30px;
+    height: 16px;
+    border-radius: 8px;
+    border: 1px solid {BORDER};
+    background: rgba(2, 10, 16, 0.85);
+}}
+QCheckBox::indicator:checked {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {RED}, stop:1 {PINK});
+    border-color: {PINK};
+}}
+QComboBox {{
+    background: rgba(2, 10, 16, 0.85);
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 5px 10px;
+}}
+QComboBox:hover {{
+    border-color: {CYAN};
+}}
+QComboBox QAbstractItemView {{
+    background: #0a1240;
+    border: 1px solid {BORDER};
+    selection-background-color: rgba(34, 227, 255, 0.25);
+}}
+QSplitter::handle {{
+    background: transparent;
+}}
+QScrollBar:vertical {{
+    background: transparent;
+    width: 8px;
+    margin: 2px;
+}}
+QScrollBar::handle:vertical {{
+    background: {BORDER};
+    border-radius: 4px;
+    min-height: 24px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {CYAN};
+}}
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{
+    background: none;
+    height: 0;
+}}
+QToolTip {{
+    background: #0a1240;
+    color: {TEXT};
+    border: 1px solid {CYAN};
+    padding: 4px 8px;
+}}
+"""

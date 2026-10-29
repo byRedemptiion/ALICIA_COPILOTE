@@ -1,4 +1,4 @@
-"""Fenêtre principale d'Alicia (V0.1) : sobre, fonctionnelle, jamais bloquante."""
+"""Fenêtre principale d'ALICIA : HUD futuriste autour de son portrait, jamais bloquante."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ import threading
 from typing import Any
 
 from PIL import Image
-from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFont, QImage, QPixmap, QTextCursor
+from PySide6.QtCore import Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QIcon, QImage, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -37,6 +37,8 @@ from alicia.core.analysis.service import AnalysisOutcome
 from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import make_filter, make_formatter, set_level
+from alicia.ui.core_widget import AliciaCore
+from alicia.ui.theme import CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
 log = logging.getLogger("alicia.ui")
@@ -59,9 +61,12 @@ class PreviewLabel(QLabel):
     def __init__(self) -> None:
         super().__init__("Aucune capture pour l'instant.")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(320, 180)
+        self.setMinimumSize(240, 135)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet("background:#111; color:#888; border-radius:6px;")
+        self.setStyleSheet(
+            "background: rgba(2,6,30,0.85); color:#5f6fa8; border:1px solid #24307a;"
+            "border-radius:8px;"
+        )
         self._pixmap: QPixmap | None = None
 
     def set_image(self, pixmap: QPixmap) -> None:
@@ -83,6 +88,30 @@ class PreviewLabel(QLabel):
             )
 
 
+def _section(title: str) -> QLabel:
+    label = QLabel(title)
+    label.setObjectName("sectionTitle")
+    return label
+
+
+def _panel(*items) -> QFrame:  # type: ignore[no-untyped-def]
+    """Cadre arrondi du HUD ; un élément peut être (widget, étirement)."""
+    frame = QFrame()
+    frame.setObjectName("panel")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(14, 12, 14, 12)
+    layout.setSpacing(8)
+    for item in items:
+        stretch = 0
+        if isinstance(item, tuple):
+            item, stretch = item
+        if isinstance(item, QHBoxLayout | QVBoxLayout):
+            layout.addLayout(item)
+        else:
+            layout.addWidget(item, stretch)
+    return frame
+
+
 class MainWindow(QMainWindow):
     analysis_done = Signal(object)  # AnalysisOutcome ou exception — utile aux tests
 
@@ -99,8 +128,11 @@ class MainWindow(QMainWindow):
         self._live_tasks: set[Task] = set()
 
         self.setWindowTitle(f"Alicia {__version__}" + (" — DÉMO" if services.demo else ""))
-        self.resize(1280, 820)
+        self.resize(1360, 840)
+        self.setMinimumSize(1000, 640)
         self._build_ui()
+        if self.core.portrait is not None:
+            self.setWindowIcon(QIcon(self.core.portrait))
         self._attach_logs()
         self.refresh_windows()
         self._update_state()
@@ -114,132 +146,209 @@ class MainWindow(QMainWindow):
     # --- construction -------------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.status = QLabel()
-        self.status.setStyleSheet("font-weight:600; padding:4px 0;")
+        self.setStyleSheet(STYLESHEET)
+
+        # --- En-tête : nom, raccourcis, modèle -------------------------------------------------
+        brand = QLabel("A · L · I · C · I · A")
+        brand.setFont(title_font(15))
+        brand.setStyleSheet(f"color:{PINK};")
+        tagline = QLabel("copilote de jeu")
+        tagline.setObjectName("muted")
         model = self.services.model
-        self.provider_label = QLabel(f"IA : {model.provider} / {model.model}")
-        self.provider_label.setStyleSheet("color:#777;")
+        self.provider_label = QLabel(f"IA · {model.provider} / {model.model}")
+        self.provider_label.setObjectName("chip")
         self.hotkey_label = QLabel("")
-        self.hotkey_label.setStyleSheet("color:#4a9; padding-right:12px;")
+        self.hotkey_label.setObjectName("chip")
         header = QHBoxLayout()
-        header.addWidget(self.status, 1)
+        header.addWidget(brand)
+        header.addSpacing(10)
+        header.addWidget(tagline)
+        header.addStretch(1)
         header.addWidget(self.hotkey_label)
         header.addWidget(self.provider_label)
 
-        # Fenêtres
+        # --- Colonne gauche : cible + vision -----------------------------------------------------
         self.window_list = QListWidget()
+        self.window_list.setMaximumHeight(190)
         self.window_list.itemSelectionChanged.connect(self._update_state)
         self.window_list.itemDoubleClicked.connect(lambda _item: self.toggle_observation())
-        self.refresh_button = QPushButton("Actualiser")
+        self.refresh_button = QPushButton("↻")
+        self.refresh_button.setToolTip("Actualiser la liste des fenêtres")
+        self.refresh_button.setFixedWidth(40)
         self.refresh_button.clicked.connect(self.refresh_windows)
         self.start_button = QPushButton("Démarrer")
         self.start_button.clicked.connect(self.toggle_observation)
         self.capture_button = QPushButton("Capturer")
         self.capture_button.clicked.connect(self.capture_now)
         buttons = QHBoxLayout()
-        for button in (self.refresh_button, self.start_button, self.capture_button):
-            buttons.addWidget(button)
-        windows_box = QGroupBox("Fenêtre du jeu")
-        windows_layout = QVBoxLayout(windows_box)
-        windows_layout.addWidget(self.window_list)
-        windows_layout.addLayout(buttons)
-
-        # Aperçu
+        buttons.addWidget(self.refresh_button)
+        buttons.addWidget(self.start_button, 1)
+        buttons.addWidget(self.capture_button, 1)
         self.preview = PreviewLabel()
         self.preview_info = QLabel("")
-        self.preview_info.setStyleSheet("color:#777;")
+        self.preview_info.setObjectName("muted")
         self.preview_info.setWordWrap(True)
-        preview_box = QGroupBox("Dernière capture")
-        preview_layout = QVBoxLayout(preview_box)
-        preview_layout.addWidget(self.preview, 1)
-        preview_layout.addWidget(self.preview_info)
+        left = _panel(
+            _section("CIBLE"),
+            self.window_list,
+            buttons,
+            _section("VISION"),
+            (self.preview, 1),
+            self.preview_info,
+        )
+        left.setMinimumWidth(270)
 
-        # Question / réponse
-        self.question = QLineEdit()
-        self.question.setPlaceholderText("Ex. : Quel objet est le meilleur pour mon héros ?")
-        self.question.returnPressed.connect(self.analyze_or_cancel)
-        self.analyze_button = QPushButton("Analyser")
-        self.analyze_button.setDefault(True)
-        self.analyze_button.clicked.connect(self.analyze_or_cancel)
-        ask = QHBoxLayout()
-        ask.addWidget(self.question, 1)
-        ask.addWidget(self.analyze_button)
+        # --- Centre : ALICIA ---------------------------------------------------------------------
+        self.core = AliciaCore()
+        self.status = QLabel()
+        self.status.setObjectName("status")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status.setWordWrap(True)
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.addWidget(self.core, 1)
+        center_layout.addWidget(self.status)
+
+        # --- Droite : conversation ---------------------------------------------------------------
+        self.asked_label = QLabel("")
+        self.asked_label.setObjectName("asked")
+        self.asked_label.setWordWrap(True)
         self.answer = QTextBrowser()
         self.answer.setOpenExternalLinks(True)
-        answer_font = QFont(self.answer.font())
-        answer_font.setPointSizeF(answer_font.pointSizeF() + 2)
-        self.answer.setFont(answer_font)
-        self.answer_info = QLabel("")
-        self.answer_info.setStyleSheet("color:#777;")
-        answer_box = QGroupBox("Alicia")
+        self.answer.document().setDefaultStyleSheet(
+            f"a {{ color: {CYAN}; }} b, strong {{ color: {PINK_SOFT}; }}"
+        )
+        self.answer.setPlaceholderText(
+            "Maintiens F10 en jeu et parle-moi, ou tape ta question en bas."
+        )
         self.sources_label = QLabel("")
         self.sources_label.setWordWrap(True)
         self.sources_label.setOpenExternalLinks(True)
         self.sources_label.setTextFormat(Qt.TextFormat.RichText)
-        self.sources_label.setStyleSheet("color:#777;")
+        self.sources_label.setObjectName("muted")
+        self.answer_info = QLabel("")
+        self.answer_info.setObjectName("muted")
+        self.answer_info.setWordWrap(True)
         self.web_box = QCheckBox("Recherche web")
-        self.web_box.setToolTip("Gemini peut faire une recherche Google (méta, patch actuel)")
+        self.web_box.setToolTip("Recherche Google avant de répondre (méta, patch actuel)")
         self.web_box.setChecked(self.services.settings.ai.web_search)
-        self.voice_box = QCheckBox("Réponse vocale")
+        self.voice_box = QCheckBox("Voix")
+        self.voice_box.setToolTip("ALICIA lit ses réponses à voix haute")
         self.voice_box.setChecked(self.services.settings.voice.speak_answers)
         self.voice_box.toggled.connect(lambda on: None if on else self.stop_voice())
-        self.stop_voice_button = QPushButton("Couper la voix")
-        self.stop_voice_button.clicked.connect(self.stop_voice)
-        self.stop_voice_button.setEnabled(False)
         self.engine_box = QComboBox()
-        self.engine_box.addItem("Voix Edge (en ligne)", "edge")
-        self.engine_box.addItem("Voix Kokoro (locale)", "kokoro")
+        self.engine_box.addItem("Edge (en ligne)", "edge")
+        self.engine_box.addItem("Kokoro (locale)", "kokoro")
         self.engine_box.setCurrentIndex(
             max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
         )
         self.engine_box.currentIndexChanged.connect(self._change_voice_engine)
+        self.stop_voice_button = QPushButton("■ Silence")
+        self.stop_voice_button.setToolTip("Couper la voix d'ALICIA")
+        self.stop_voice_button.clicked.connect(self.stop_voice)
+        self.stop_voice_button.setEnabled(False)
         options = QHBoxLayout()
         options.addWidget(self.web_box)
         options.addWidget(self.voice_box)
         options.addWidget(self.engine_box)
         options.addStretch(1)
         options.addWidget(self.stop_voice_button)
-        answer_layout = QVBoxLayout(answer_box)
-        answer_layout.addLayout(ask)
-        answer_layout.addLayout(options)
-        answer_layout.addWidget(self.answer, 1)
-        answer_layout.addWidget(self.sources_label)
-        answer_layout.addWidget(self.answer_info)
+        right = _panel(
+            _section("CONVERSATION"),
+            self.asked_label,
+            (self.answer, 1),
+            self.sources_label,
+            self.answer_info,
+            options,
+        )
+        right.setMinimumWidth(360)
 
-        # Logs
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(left)
+        splitter.addWidget(center)
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 1)
+        splitter.setSizes([300, 520, 460])
+
+        # --- Barre de question -------------------------------------------------------------------
+        self.question = QLineEdit()
+        self.question.setPlaceholderText(
+            "Demande à ALICIA… (« quel objet pour Ashe ? », « monte le son »)"
+        )
+        self.question.returnPressed.connect(self.analyze_or_cancel)
+        self.analyze_button = QPushButton("Analyser")
+        self.analyze_button.setObjectName("primary")
+        self.analyze_button.setDefault(True)
+        self.analyze_button.clicked.connect(self.analyze_or_cancel)
+        ask = QHBoxLayout()
+        ask.addWidget(self.question, 1)
+        ask.addWidget(self.analyze_button)
+
+        # --- Journal (replié par défaut) ---------------------------------------------------------
         self.logs = QPlainTextEdit()
         self.logs.setReadOnly(True)
         self.logs.setMaximumBlockCount(MAX_LOG_LINES)
-        self.logs.setFont(QFont("Consolas", 9))
         self.debug_box = QCheckBox("Logs détaillés")
         self.debug_box.setChecked(self.services.settings.log_level == "DEBUG")
         self.debug_box.toggled.connect(lambda on: set_level("DEBUG" if on else "INFO"))
-        open_logs = QPushButton("Ouvrir le dossier des logs")
+        open_logs = QPushButton("Ouvrir le dossier")
+        open_logs.setObjectName("ghost")
         open_logs.clicked.connect(self.open_log_folder)
         logs_bar = QHBoxLayout()
         logs_bar.addWidget(self.debug_box)
         logs_bar.addStretch(1)
         logs_bar.addWidget(open_logs)
-        logs_box = QGroupBox("Journal")
-        logs_layout = QVBoxLayout(logs_box)
-        logs_layout.addWidget(self.logs, 1)
-        logs_layout.addLayout(logs_bar)
-
-        top = QSplitter(Qt.Orientation.Horizontal)
-        top.addWidget(windows_box)
-        top.addWidget(preview_box)
-        top.addWidget(answer_box)
-        top.setSizes([300, 520, 460])
-        main = QSplitter(Qt.Orientation.Vertical)
-        main.addWidget(top)
-        main.addWidget(logs_box)
-        main.setSizes([600, 200])
+        self.logs_panel = _panel(_section("JOURNAL"), (self.logs, 1), logs_bar)
+        self.logs_panel.setMinimumHeight(160)
+        self.logs_panel.setVisible(False)
+        self.logs_toggle = QPushButton("Journal ▸")
+        self.logs_toggle.setObjectName("ghost")
+        self.logs_toggle.clicked.connect(self.toggle_logs)
+        footer = QHBoxLayout()
+        footer.addWidget(self.logs_toggle)
+        footer.addStretch(1)
+        version = QLabel(f"v{__version__}" + (" · DÉMO" if self.services.demo else ""))
+        version.setObjectName("muted")
+        footer.addWidget(version)
 
         root = QWidget()
+        root.setObjectName("root")
         layout = QVBoxLayout(root)
+        layout.setContentsMargins(18, 14, 18, 10)
+        layout.setSpacing(12)
         layout.addLayout(header)
-        layout.addWidget(main, 1)
+        layout.addWidget(splitter, 1)
+        layout.addLayout(ask)
+        layout.addWidget(self.logs_panel)
+        layout.addLayout(footer)
         self.setCentralWidget(root)
+
+    def toggle_logs(self) -> None:
+        visible = not self.logs_panel.isVisible()
+        self.logs_panel.setVisible(visible)
+        self.logs_toggle.setText("Journal ▾" if visible else "Journal ▸")
+
+    def _core(self, state: str) -> None:
+        """Met à jour le cœur animé (et sa source de niveau sonore)."""
+        source = None
+        if state == "listening" and self.services.recorder is not None:
+            source = lambda: getattr(self.services.recorder, "level", 0.0) * 3.0  # noqa: E731
+        elif state == "speaking" and self.services.speaker is not None:
+            source = lambda: getattr(self.services.speaker, "level", 0.0) * 2.5  # noqa: E731
+        self.core.set_state(state, source)
+
+    def _core_settle(self) -> None:
+        """Retour au repos, sauf si ALICIA est occupée ou parle."""
+        speaker = self.services.speaker
+        if self.busy:
+            self._core("thinking")
+        elif speaker is not None and getattr(speaker, "speaking", False):
+            self._core("speaking")
+        else:
+            self._core("idle")
 
     def _attach_logs(self) -> None:
         self.log_bridge = LogBridge()
@@ -358,6 +467,8 @@ class MainWindow(QMainWindow):
         self.observed = None
         self.busy = False
         self._update_state()
+        if hasattr(self, "core"):
+            self._core_settle()
 
     def capture_now(self) -> None:
         if self.observed is None or self.busy:
@@ -380,6 +491,7 @@ class MainWindow(QMainWindow):
             self._set_status("Analyse annulée.")
             self.analyze_button.setText("Analyser")
             self._update_state()
+            self._core_settle()
             return
         # Une demande d'action (« éteins le PC », « oui »…) ne demande ni jeu ni IA.
         if self.services.actions is not None and self.question.text().strip():
@@ -402,6 +514,9 @@ class MainWindow(QMainWindow):
         self, window: WindowInfo, question: str, audio: PreparedAudio | None = None
     ) -> None:
         self.stop_voice()
+        self._core("thinking")
+        shown = "…" if audio is not None else (question.strip() or DEFAULT_HOTKEY_QUESTION)
+        self.asked_label.setText(f"TOI  ›  {shown}")
         web_search = self.web_box.isChecked()
         spoken = self.voice_box.isChecked() and self.services.speaker is not None
         self.sources_label.setText("")
@@ -481,6 +596,7 @@ class MainWindow(QMainWindow):
             log.error("Micro : %s", exc.detail)
             self._set_status("⚠ " + exc.user_message)
             return
+        self._core("listening")
         self._set_status("🎙 Je t'écoute… relâche la touche quand tu as fini.")
 
     def talk_released(self) -> None:
@@ -492,6 +608,7 @@ class MainWindow(QMainWindow):
         except AliciaError as exc:
             log.warning("Question orale abandonnée : %s", exc.detail)
             self._set_status("⚠ " + exc.user_message)
+            self._flash_error()
             return
         window = self.services.capture.foreground_window() or self.observed
         if window is None:
@@ -523,6 +640,9 @@ class MainWindow(QMainWindow):
         assert reply is not None
         if outcome.transcript is not None:
             self.question.setText(f"🎙 {outcome.transcript}")
+        asked = outcome.transcript or self.question.text().strip()
+        if asked:
+            self.asked_label.setText(f"TOI  ›  {asked}")
         self.answer.setPlainText(reply.text)
         self.sources_label.setText("")
         self.answer_info.setText(f"Action sur le PC : {reply.intent} · [{outcome.operation_id}]")
@@ -532,7 +652,9 @@ class MainWindow(QMainWindow):
             )
         else:
             self._set_status("Action traitée.")
+        self.core.set_state("action")
         self._say(reply.text)
+        QTimer.singleShot(1800, self._core_settle)
         self.analysis_done.emit(outcome)
 
     def _say(self, text: str) -> None:
@@ -540,7 +662,13 @@ class MainWindow(QMainWindow):
         if self.voice_box.isChecked() and speaker is not None and speaker.speak(text):
             self.stop_voice_button.setEnabled(True)
 
+    def _flash_error(self) -> None:
+        self._core("error")
+        QTimer.singleShot(2500, self._core_settle)
+
     def _reminder(self, text: str) -> None:
+        self.core.set_state("action")
+        QTimer.singleShot(2500, self._core_settle)
         self.answer.setPlainText(text)
         self._set_status("⏰ " + text)
         QApplication.alert(self)
@@ -555,16 +683,20 @@ class MainWindow(QMainWindow):
     def _voice_state(self, state: str, message: str | None) -> None:
         if state == "speaking":
             self.stop_voice_button.setEnabled(True)
+            self._core("speaking")
         else:
             self.stop_voice_button.setEnabled(False)
             if state == "error" and message:
                 self._set_status("⚠ " + message)
+                self._flash_error()
+            else:
+                self._core_settle()
 
     def _show_sources(self, result) -> None:  # type: ignore[no-untyped-def]
         notes = []
         if result.sources:
             links = " · ".join(
-                f'<a href="{html.escape(src.url)}">{html.escape(src.title)}</a>'
+                f'<a style="color:{CYAN}" href="{html.escape(src.url)}">{html.escape(src.title)}</a>'
                 for src in result.sources[:5]
             )
             notes.append(f"Sources web : {links}")
@@ -646,6 +778,7 @@ class MainWindow(QMainWindow):
             self._set_status("Analyse en cours…")
         elif kind == "transcript":
             self.question.setText(f"🎙 {value}")
+            self.asked_label.setText(f"TOI  ›  🎙 {value}")
         elif kind == "delta":
             cursor = self.answer.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
@@ -680,11 +813,13 @@ class MainWindow(QMainWindow):
         else:
             self._set_status("Réponse prête.")
         QApplication.alert(self)  # fait clignoter Alicia dans la barre des tâches
+        self._core_settle()
         self.analysis_done.emit(outcome)
 
     def _failed(self, exc: Exception) -> None:
         if isinstance(exc, ProviderError) and exc.kind is ProviderErrorKind.CANCELLED:
             self._set_status("Analyse annulée.")
+            self._core_settle()
             return
         if isinstance(exc, AliciaError):
             message = exc.user_message
@@ -693,4 +828,5 @@ class MainWindow(QMainWindow):
             message = f"Erreur inattendue : {exc!r}. Détails dans le journal."
         self._set_status("⚠ " + message)
         self.answer.setPlainText(message)
+        self._flash_error()
         self.analysis_done.emit(exc)

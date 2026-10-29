@@ -312,3 +312,16 @@ def test_typed_action_works_without_game_or_ai(qt_app, settings):
     assert system.calls == [("shutdown", 60)]
     assert model.requests == []
     window.close()
+
+
+@pytest.mark.parametrize("state", ["idle", "listening", "thinking", "speaking", "action", "error"])
+def test_alicia_core_paints_every_state(qt_app, state):
+    from alicia.ui.core_widget import AliciaCore
+
+    core = AliciaCore()
+    assert core.portrait is not None  # portrait d'ALICIA embarqué
+    core.resize(420, 480)
+    core.set_state(state, (lambda: 0.6) if state in ("listening", "speaking") else None)
+    core._tick()
+    image = core.grab().toImage()
+    assert not image.isNull() and image.width() == 420

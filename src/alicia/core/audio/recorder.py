@@ -60,6 +60,7 @@ class Recorder:
         self._lock = threading.Lock()
         self._started = 0.0
         self.device_label = ""
+        self.level = 0.0  # niveau du micro (0-1), lu par l'interface
 
     @property
     def recording(self) -> bool:
@@ -77,6 +78,7 @@ class Recorder:
         def callback(indata, frames, _time, status):  # type: ignore[no-untyped-def]
             if status:
                 log.debug("Micro : %s", status)
+            self.level = float(np.abs(indata).max()) / 32768.0  # pour l'animation
             with self._lock:
                 if self._frames < max_frames:
                     self._chunks.append(indata[:, 0].copy())
@@ -103,6 +105,7 @@ class Recorder:
         log.info("Micro ouvert : %s (%d Hz)", self.device_label, self.sample_rate)
 
     def stop(self) -> PreparedAudio:
+        self.level = 0.0
         stream, self._stream = self._stream, None
         if stream is None:
             raise AudioError("Le micro n'était pas en cours d'enregistrement.")

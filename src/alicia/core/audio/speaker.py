@@ -118,6 +118,7 @@ class SoundDevicePlayer:
 
     def __init__(self, device: str = "") -> None:
         self.device = device
+        self.level = 0.0  # niveau de la voix en cours (0-1), lu par l'interface
 
     def open(self):  # type: ignore[no-untyped-def]
         sd = sounddevice()
@@ -129,13 +130,17 @@ class SoundDevicePlayer:
         log.debug("Sortie audio : %s", device_name(index, output=True))
         return stream
 
-    @staticmethod
-    def play(stream, samples: np.ndarray, stop: threading.Event) -> None:  # type: ignore[no-untyped-def]
+    def play(self, stream, samples: np.ndarray, stop: threading.Event) -> None:  # type: ignore[no-untyped-def]
         block = TTS_SAMPLE_RATE // 20  # 50 ms : l'arrêt est quasi immédiat
-        for start in range(0, len(samples), block):
-            if stop.is_set():
-                return
-            stream.write(samples[start : start + block].reshape(-1, 1))
+        try:
+            for start in range(0, len(samples), block):
+                if stop.is_set():
+                    return
+                chunk = samples[start : start + block]
+                self.level = float(np.abs(chunk).max()) / 32768.0 if len(chunk) else 0.0
+                stream.write(chunk.reshape(-1, 1))
+        finally:
+            self.level = 0.0
 
     @staticmethod
     def close(stream) -> None:  # type: ignore[no-untyped-def]
@@ -161,6 +166,10 @@ class Speaker:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.on_state: Callable[[str, str | None], None] = lambda _state, _msg: None
+
+    @property
+    def level(self) -> float:
+        return float(getattr(self.player, "level", 0.0)) if self.speaking else 0.0
 
     @property
     def speaking(self) -> bool:
