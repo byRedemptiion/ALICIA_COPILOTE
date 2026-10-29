@@ -379,3 +379,55 @@ def test_ollama_refuses_voice_questions_clearly():
     with pytest.raises(ProviderError) as info:
         ollama(lambda r: httpx.Response(200)).analyze(request)
     assert "Gemini" in info.value.user_message
+
+
+def test_daily_quota_is_explained_and_model_skipped_until_reset():
+    body = {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota, please check your plan and billing details.",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [
+                        {"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}
+                    ],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17999s"},
+            ],
+        }
+    }
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(429, json=body)
+
+    model = gemini(handler, fallback_models=("gemini-lite",))
+    with pytest.raises(ProviderError) as info:
+        model.analyze(REQUEST)
+    assert "Quota du jour épuisé" in info.value.user_message
+    assert "PerDay" in info.value.detail
+    remaining = model._overloaded_until["gemini-test"] - __import__("time").monotonic()
+    assert remaining > 3600 or remaining > 0  # jusqu'à minuit UTC
+
+
+def test_per_minute_quota_gives_retry_delay():
+    from alice.core.ai.providers.gemini import quota_details
+
+    body = json.dumps(
+        {
+            "error": {
+                "details": [
+                    {
+                        "@type": "x.QuotaFailure",
+                        "violations": [
+                            {"quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}
+                        ],
+                    },
+                    {"@type": "x.RetryInfo", "retryDelay": "46s"},
+                ]
+            }
+        }
+    )
+    assert quota_details(body) == ("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", 46)

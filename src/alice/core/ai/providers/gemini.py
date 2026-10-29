@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -22,6 +24,33 @@ KEY_HELP = (
     "Crée une clé gratuite sur https://aistudio.google.com (« Get API key »), "
     "puis colle-la dans le fichier .env : GEMINI_API_KEY=ta_clé"
 )
+
+
+def quota_details(body: str) -> tuple[str, int | None]:
+    """Extrait l'identifiant du quota dépassé et le délai conseillé d'une erreur 429."""
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return "", None
+    quota, retry = "", None
+    for detail in (data.get("error") or {}).get("details") or []:
+        kind = str(detail.get("@type", ""))
+        if kind.endswith("QuotaFailure"):
+            for violation in detail.get("violations") or []:
+                quota = quota or str(violation.get("quotaId") or violation.get("quotaMetric") or "")
+        elif kind.endswith("RetryInfo"):
+            delay = str(detail.get("retryDelay", "")).rstrip("s")
+            try:
+                retry = int(float(delay))
+            except ValueError:
+                pass
+    return quota, retry
+
+
+def seconds_until_utc_midnight() -> int:
+    now = datetime.now(UTC)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+    return int((tomorrow - now).total_seconds())
 
 
 class GeminiModel(HttpVisionModel):
@@ -90,7 +119,12 @@ class GeminiModel(HttpVisionModel):
                         )
                     )
                     if exc.kind in (ProviderErrorKind.UNAVAILABLE, ProviderErrorKind.RATE_LIMIT):
-                        self._overloaded_until[model] = time.monotonic() + OVERLOAD_PAUSE_S
+                        pause = OVERLOAD_PAUSE_S
+                        if getattr(exc, "daily", False):
+                            pause = seconds_until_utc_midnight()
+                        elif getattr(exc, "retry_after_s", None):
+                            pause = max(int(exc.retry_after_s), 5)  # type: ignore[attr-defined]
+                        self._overloaded_until[model] = time.monotonic() + pause
                     if not switchable or index == len(models) - 1:
                         raise
                     log.warning(
@@ -243,13 +277,29 @@ class GeminiModel(HttpVisionModel):
                 status_code=status,
             )
         if status == 429:
-            return ProviderError(
+            quota, retry_s = quota_details(body)
+            if "PerDay" in quota:
+                hint = (
+                    f"Quota du jour épuisé pour « {self.model} » (offre gratuite : une vingtaine "
+                    "de questions par jour et par modèle). Il revient à 1 h du matin "
+                    "(minuit UTC)."
+                )
+            elif "PerMinute" in quota:
+                hint = (
+                    f"Trop de questions en une minute pour « {self.model} ». "
+                    f"Réessaie dans {retry_s or 60} s."
+                )
+            else:
+                hint = "Quota Gemini atteint. Réessaie dans une minute."
+            error = ProviderError(
                 ProviderErrorKind.RATE_LIMIT,
-                "Quota Gemini atteint (offre gratuite limitée par minute et par jour). "
-                "Réessaie dans une minute.",
-                detail=f"HTTP 429: {message}",
+                hint,
+                detail=f"HTTP 429 [{quota or 'quota inconnu'}, réessai {retry_s} s]: {message}",
                 status_code=status,
             )
+            error.retry_after_s = retry_s  # type: ignore[attr-defined]
+            error.daily = "PerDay" in quota  # type: ignore[attr-defined]
+            return error
         if status == 404:
             return ProviderError(
                 ProviderErrorKind.BAD_REQUEST,
