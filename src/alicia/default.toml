@@ -83,6 +83,10 @@ output_device = ""           # vide = haut-parleur Windows par défaut, sinon un
 input_device = ""            # vide = micro Windows par défaut, sinon une partie du nom
 max_record_s = 30            # durée maximale d'une question orale
 sample_rate = 16000
+# Réveil vocal : commence ta phrase par « Alicia » (« Alicia, lance Discord ») au lieu de F10.
+# Tout reste sur ton PC : rien n'est envoyé tant que le mot n'est pas dit. Case dans le panneau.
+wake_word = true
+wake_model = "base"          # petit Whisper dédié au mot de réveil ("tiny" = plus léger)
 
 [actions]
 # Actions sur le PC à la voix (F10) ou à l'écrit : éteindre, redémarrer, veille, verrouiller,

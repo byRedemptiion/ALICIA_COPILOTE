@@ -107,6 +107,21 @@ class LocalTranscriber:
 
         threading.Thread(target=run, name="alicia-whisper-load", daemon=True).start()
 
+    def transcribe_samples(self, samples: np.ndarray, *, hotwords: str | None = None) -> str:
+        """Transcription brève d'échantillons float32 à 16 kHz (mot de réveil)."""
+        model = self.load()
+        segments, _info = model.transcribe(
+            samples,
+            language=self.language,
+            beam_size=1,
+            vad_filter=False,
+            condition_on_previous_text=False,
+            without_timestamps=True,
+            hotwords=hotwords,
+        )
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+        return "" if _HALLUCINATIONS.search(text) else text
+
     def transcribe(self, audio: PreparedAudio) -> str:
         model = self.load()
         samples = wav_to_float(audio)

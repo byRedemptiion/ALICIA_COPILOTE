@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
         self.resize(1360, 840)
         self.setMinimumSize(1000, 640)
         self._build_ui()
+        self.wake = None  # WakeListener, créé quand le réveil vocal est activé
         self.update_info: UpdateInfo | None = None
         self._updating = False
         self.updater = self._make_updater()
@@ -286,6 +287,16 @@ class MainWindow(QMainWindow):
         self.voice_box.setToolTip("ALICIA lit ses réponses à voix haute")
         self.voice_box.setChecked(self.services.settings.voice.speak_answers)
         self.voice_box.toggled.connect(lambda on: None if on else self.stop_voice())
+        self.wake_box = QCheckBox("Réveil « Alicia »")
+        self.wake_box.setToolTip(
+            "Commence ta phrase par « Alicia » pour lui parler sans F10. "
+            "Tout reste sur ton PC tant que le mot n'est pas dit."
+        )
+        self.wake_box.setChecked(
+            self.services.settings.voice.wake_word and self.services.recorder is not None
+        )
+        self.wake_box.setEnabled(self.services.recorder is not None)
+        self.wake_box.toggled.connect(self.set_wake)
         self.engine_box = QComboBox()
         self.engine_box.addItem("Edge (en ligne)", "edge")
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
@@ -312,6 +323,7 @@ class MainWindow(QMainWindow):
         switches = QHBoxLayout()
         switches.addWidget(self.web_box)
         switches.addWidget(self.voice_box)
+        switches.addWidget(self.wake_box)
         switches.addStretch(1)
         switches.addWidget(self.engine_box)
         options = QVBoxLayout()
@@ -457,6 +469,7 @@ class MainWindow(QMainWindow):
         self._sync_orb_games()
         self.orb.game_chosen.connect(self._select_game)
         self.orb.update_requested.connect(self.update_now)
+        self.orb.wake_toggled.connect(self.wake_box.setChecked)
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
@@ -465,9 +478,79 @@ class MainWindow(QMainWindow):
             self.show_orb()
         else:
             self.show_panel()
+        if self.wake_box.isChecked() and not self.services.demo:
+            self.set_wake(True)
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
                 QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
+
+    # --- réveil vocal « Alicia » ----------------------------------------------------------------
+
+    def set_wake(self, on: bool) -> None:
+        if hasattr(self, "orb"):
+            self.orb.wake_on = on
+        if not on:
+            if self.wake is not None:
+                self.wake.stop()
+            return
+        if self.services.recorder is None or self.services.demo:
+            return
+        if self.wake is None:
+            from alicia.core.audio.wake import WakeListener, WhisperWakeDetector
+
+            voice = self.services.settings.voice
+            detector = WhisperWakeDetector(voice.wake_model)
+            detector.warm_up_async()  # premier lancement : télécharge le petit modèle (~140 Mo)
+            self.wake = WakeListener(
+                detector,
+                on_wake=self.voice_bridge.wake.emit,
+                on_command=self.voice_bridge.wake_command.emit,
+                on_cancel=self.voice_bridge.wake_cancel.emit,
+                paused=self._wake_paused,
+                device=voice.input_device,
+                sample_rate=voice.sample_rate,
+            )
+        try:
+            self.wake.start()
+        except AliciaError as exc:
+            log.error("Réveil vocal indisponible : %s", exc.detail)
+            self._notify("⚠ " + exc.user_message)
+            self.wake_box.blockSignals(True)
+            self.wake_box.setChecked(False)
+            self.wake_box.blockSignals(False)
+            self.orb.wake_on = False
+
+    def _wake_paused(self) -> bool:
+        """Pas d'écoute pendant une analyse, F10 maintenue ou quand ALICIA parle (écho)."""
+        recorder, speaker = self.services.recorder, self.services.speaker
+        return bool(
+            self.busy
+            or (recorder is not None and recorder.recording)
+            or (speaker is not None and getattr(speaker, "speaking", False))
+        )
+
+    def _wake_heard(self) -> None:
+        self._core("listening")
+        self._set_status("🎙 Je t'écoute…")
+        if self._bubble_active():
+            self.bubble.ask("🎙 …")
+
+    def _wake_command(self, audio: PreparedAudio) -> None:
+        if self.busy:
+            return
+        window = self.services.capture.foreground_window() or self.observed
+        if window is not None and (self.observed is None or self.observed.handle != window.handle):
+            self.observed = window
+            self._update_state()
+        self.question.setText("🎙 …")
+        self._start_analysis(window, "", audio)  # type: ignore[arg-type]
+
+    def _wake_cancel(self, reason: str) -> None:
+        log.info("Réveil sans demande : %s", reason)
+        self._core_settle()
+        self._set_status("Je n'ai pas entendu de demande après « Alicia ».")
+        if self._bubble_active() and self.bubble.isVisible():
+            self.bubble.fade_out()
 
     # --- mise à jour ----------------------------------------------------------------------------
 
@@ -660,8 +743,12 @@ class MainWindow(QMainWindow):
     def _core(self, state: str) -> None:
         """Met à jour le cœur animé (et sa source de niveau sonore)."""
         source = None
-        if state == "listening" and self.services.recorder is not None:
-            source = lambda: getattr(self.services.recorder, "level", 0.0) * 3.0  # noqa: E731
+        recorder = self.services.recorder
+        if state == "listening" and recorder is not None and recorder.recording:
+            source = lambda: getattr(recorder, "level", 0.0) * 3.0  # noqa: E731
+        elif state == "listening" and self.wake is not None:
+            wake = self.wake
+            source = lambda: wake.level * 2.0  # noqa: E731
         elif state == "speaking" and self.services.speaker is not None:
             source = lambda: getattr(self.services.speaker, "level", 0.0) * 2.5  # noqa: E731
         self.core.set_state(state, source)
@@ -688,6 +775,9 @@ class MainWindow(QMainWindow):
         self.voice_bridge = VoiceBridge()
         self.voice_bridge.state.connect(self._voice_state)
         self.voice_bridge.reminder.connect(self._reminder)
+        self.voice_bridge.wake.connect(self._wake_heard)
+        self.voice_bridge.wake_command.connect(self._wake_command)
+        self.voice_bridge.wake_cancel.connect(self._wake_cancel)
         if self.services.actions is not None:
             self.services.actions.on_reminder = self.voice_bridge.reminder.emit
         if self.services.speaker is not None:
@@ -696,6 +786,8 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self.wake is not None:
+            self.wake.stop()
         for hotkey in (self.hotkey, self.talk_hotkey):
             if hotkey is not None:
                 hotkey.stop()

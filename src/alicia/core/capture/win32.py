@@ -188,6 +188,9 @@ class Win32:
         return pid.value
 
     def exe_name(self, pid: int) -> str:
+        return os.path.basename(self.exe_path(pid))
+
+    def exe_path(self, pid: int) -> str:
         handle = self.kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
             return ""
@@ -195,7 +198,7 @@ class Win32:
             size = wintypes.DWORD(1024)
             buffer = ctypes.create_unicode_buffer(size.value)
             if self.kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
-                return os.path.basename(buffer.value)
+                return buffer.value
             return ""
         finally:
             self.kernel32.CloseHandle(handle)
@@ -248,11 +251,13 @@ class Win32:
     def describe(self, hwnd: int) -> WindowInfo:
         pid = self.process_id(hwnd)
         monitor_index, monitor_rect = self.monitor_of(hwnd)
+        path = self.exe_path(pid)
         return WindowInfo(
             handle=int(hwnd),
             title=self.title(hwnd),
             process_id=pid,
-            exe_name=self.exe_name(pid),
+            exe_name=os.path.basename(path),
+            exe_path=path,
             rect=self.window_rect(hwnd),
             monitor_index=monitor_index,
             monitor_rect=monitor_rect,

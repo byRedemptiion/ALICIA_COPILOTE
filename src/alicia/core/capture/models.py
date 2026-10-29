@@ -43,6 +43,7 @@ class WindowInfo:
     monitor_index: int | None = None  # 1 = premier écran (ordre Windows)
     monitor_rect: Rect | None = None
     minimized: bool = False
+    exe_path: str = ""  # chemin complet du programme (distingue les versions d'un même jeu)
 
     @property
     def fullscreen(self) -> bool:

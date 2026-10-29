@@ -133,6 +133,8 @@ class VoiceSettings:
     input_device: str = ""  # vide = micro Windows par défaut ; sinon une partie du nom
     max_record_s: float = 30.0
     sample_rate: int = 16000
+    wake_word: bool = True  # dire « Alicia… » pour lui parler sans toucher au clavier
+    wake_model: str = "base"  # petit Whisper dédié au mot de réveil
 
 
 @dataclass(frozen=True)
@@ -363,6 +365,8 @@ def load_settings(
             input_device=str(voice.get("input_device", "")).strip(),
             max_record_s=_number(voice, "max_record_s", float, 2),
             sample_rate=_number(voice, "sample_rate", int, 8000),
+            wake_word=bool(voice.get("wake_word", True)),
+            wake_model=str(voice.get("wake_model", "base")).strip() or "base",
         ),
         sources=tuple(sources),
         captures_dir=cwd / "captures",

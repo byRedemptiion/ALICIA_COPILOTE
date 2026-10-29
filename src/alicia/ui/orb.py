@@ -280,6 +280,7 @@ class OrbWindow(QWidget):
     quit_requested = Signal()
     game_chosen = Signal(str)
     update_requested = Signal()
+    wake_toggled = Signal(bool)
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -307,6 +308,7 @@ class OrbWindow(QWidget):
         self.bubble.moved.connect(self._save_position)
         self.games: list[tuple[str, str]] = []  # (clé, nom) proposés dans le menu « Jeu »
         self.current_game = "auto"
+        self.wake_on = False
         self._drag: QPoint | None = None
         self._placed = False
 
@@ -399,6 +401,10 @@ class OrbWindow(QWidget):
             ("Couper la voix", self.stop_voice.emit),
             ("Masquer la bulle", self.bubble.fade_out),
             ("Recoller la bulle au rond", self.bubble.reset_offset),
+            (
+                "Réveil « Alicia » : activé ✓" if self.wake_on else "Réveil « Alicia » : coupé",
+                lambda: self.wake_toggled.emit(not self.wake_on),
+            ),
             ("Mettre à jour ALICIA", self.update_requested.emit),
             ("Replacer en haut à droite", self._reset_position),
             (None, None),

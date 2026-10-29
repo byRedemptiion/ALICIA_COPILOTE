@@ -40,6 +40,15 @@ Au lancement, **seul le rond d'ALICIA s'affiche**, en haut à droite, toujours a
 - Pour voir le rond par-dessus le jeu, règle le jeu en **plein écran fenêtré** (« sans bordure »). En plein écran exclusif, le jeu passe devant : F9, F10 et la voix marchent quand même.
 - Pour démarrer sur le panneau complet : `mode = "full"` dans la section `[ui]` de `alicia.toml`.
 
+### Réveil vocal : « Alicia… »
+
+Plus besoin de F10 : **commence ta phrase par « Alicia »**. « Alicia, lance Discord », « Alicia, quel objet je prends ? », « Alicia, éteins le PC ». Tu peux aussi dire « Alicia » seul, attendre que le rond passe au cyan, puis faire ta demande.
+
+- Tout reste **sur ton PC** : un petit modèle Whisper local repère son nom au début des phrases ; tant qu'il n'est pas dit, rien n'est envoyé ni gardé.
+- L'écoute se met en pause pendant qu'elle parle, qu'elle analyse ou que F10 est maintenue.
+- Case **Réveil « Alicia »** dans le panneau, ou **clic droit sur le rond**, pour la couper (par exemple en vocal avec des amis qui disent son nom).
+- Premier lancement : le petit modèle (~140 Mo) se télécharge tout seul en arrière-plan.
+
 ### Parler à Alicia : F10 (maintenir)
 
 **Maintiens F10 en jeu, pose ta question à voix haute, relâche.** Alicia capture l'écran, envoie ta voix et l'image à Gemini, affiche ta question transcrite puis **répond à voix haute**. Pour la couper, réappuie sur F10 ou clique sur « Couper la voix ».
@@ -77,6 +86,7 @@ obs = { launch = "C:/Program Files/obs-studio/bin/64bit/obs64.exe", process = "o
 ALICIA a un **profil par jeu** : elle sait à quel jeu tu joues (sans le deviner sur l'image), quoi regarder à l'écran, et **sur quels sites chercher en premier** quand la recherche web est active. Profils fournis : **Overwatch** et **World of Warcraft: Forever** (Icy Veins, Method, Mobalytics, Warcraft Tavern, Warcraft Wiki).
 
 - Le jeu est reconnu tout seul à sa fenêtre. Tu peux aussi le choisir : menu du panneau, ou **clic droit sur le rond → Jeu**.
+- **Plusieurs versions d'un même jeu** (WoW actuel, Classic, Forever…) : elles ont le même titre de fenêtre, ALICIA les distingue par leur **dossier d'installation** (`_retail_`, `_classic_`, `_forever_`). Sur la fiche d'un jeu, « Remplir avec la fenêtre du jeu » reprend le programme et le dossier de la fenêtre observée, et **Dupliquer** crée une nouvelle version à partir d'un jeu existant.
 - **Onglet JEUX** (en haut du panneau) : tous tes jeux en cartes. Clique sur un jeu pour ouvrir sa fiche : **ajoute un site** (colle simplement l'adresse), retire-en, change l'ordre (du plus fiable au moins fiable), règle comment le reconnaître et ce qu'ALICIA doit savoir. « Enregistrer » et c'est pris en compte tout de suite. « ＋ Ajouter un jeu » crée un nouveau jeu, prérempli avec la fenêtre observée.
 - La **fenêtre du jeu** se choisit aussi dans cet onglet (inutile en jeu : F9 et F10 prennent la fenêtre au premier plan).
 - Tout est enregistré dans `%APPDATA%\Alicia\games.toml`, modifiable à la main (`Mes_Jeux_Alicia.bat` l'ouvre). « Rétablir l'original » annule tes changements sur un jeu fourni.

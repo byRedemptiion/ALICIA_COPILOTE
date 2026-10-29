@@ -8,6 +8,7 @@ il ajoute du contexte au prompt et oriente la recherche web.
 from __future__ import annotations
 
 import logging
+import re
 import tomllib
 from dataclasses import dataclass, field
 from importlib import resources
@@ -28,12 +29,17 @@ class GameProfile:
     title_keywords: tuple[str, ...] = ()
     context: str = ""
     sources: tuple[str, ...] = ()
+    folders: tuple[str, ...] = ()  # dossier d'installation (ex. « _retail_ » pour WoW)
     regions: dict[str, tuple[float, float, float, float]] = field(default_factory=dict)
 
     def matches(self, window: WindowInfo) -> bool:
         exe = window.exe_name.casefold()
         title = window.title.casefold()
         return exe in self.exe_names or any(k in title for k in self.title_keywords)
+
+    def matches_folder(self, window: WindowInfo) -> bool:
+        parts = {p.casefold() for p in re.split(r"[\\/]", window.exe_path) if p}
+        return any(folder in parts for folder in self.folders)
 
     def prompt_context(self, web_search: bool = False) -> str:
         """Contexte ajouté au prompt système : le jeu, puis ses sites de référence."""
@@ -80,6 +86,7 @@ def _parse(data: dict, origin: str) -> dict[str, GameProfile]:
             title_keywords=tuple(s.casefold() for s in _strings(entry.get("title", []))),
             context=str(entry.get("context", "")).strip(),
             sources=_strings(entry.get("sources", [])),
+            folders=tuple(s.casefold() for s in _strings(entry.get("folder", []))),
         )
     return profiles
 
@@ -139,7 +146,12 @@ def resolve_profile(
         return profiles.get(setting, GENERIC)
     if window is not None:
         exe = window.exe_name.casefold()
-        # Le nom du programme d'abord (plus sûr), puis un mot du titre.
+        # Du plus sûr au moins sûr : dossier d'installation (versions d'un même jeu),
+        # nom du programme, puis un mot du titre.
+        if window.exe_path:
+            for profile in profiles.values():
+                if profile is not GENERIC and profile.matches_folder(window):
+                    return profile
         for profile in profiles.values():
             if profile is not GENERIC and exe and exe in profile.exe_names:
                 return profile

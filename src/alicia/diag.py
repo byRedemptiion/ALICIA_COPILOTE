@@ -199,6 +199,8 @@ def _audio_command(args, settings) -> int:  # type: ignore[no-untyped-def]
 
         if settings.voice.stt == "local":
             download_whisper(settings.voice.whisper_model)
+        if settings.voice.wake_word:
+            download_whisper(settings.voice.wake_model)
         download_kokoro()
         print("Modèles vocaux prêts.")
         return 0

@@ -100,3 +100,38 @@ def test_games_tab_lists_games_and_edits_sites(qt_app, tmp_path):
     assert page.save() == "hades-ii"
     page.show_list()
     assert page.currentWidget() is page.list_page
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (r"C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe", "wow-retail"),
+        (r"C:\Games\World of Warcraft\_classic_era_\WowClassic.exe", "wow-classic"),
+        (r"D:\World of Warcraft\_forever_\WowClassic.exe", "wow-forever"),
+        ("", "wow-forever"),  # sans chemin : le titre « World of Warcraft » suffit
+    ],
+)
+def test_wow_versions_are_told_apart_by_install_folder(path, expected):
+    exe = path.rsplit("\\", 1)[-1] if path else ""
+    window = WindowInfo(1, "World of Warcraft", 2, exe_name=exe, exe_path=path)
+    assert resolve_profile(window, profiles=load_profiles()).key == expected
+
+
+def test_duplicate_makes_a_new_version_with_its_own_folder(qt_app, tmp_path):
+    from alicia.ui.games_page import GamesPage
+
+    window = WindowInfo(
+        1, "World of Warcraft", 2, exe_name="Wow.exe", exe_path=r"E:\WoW\_xptr_\Wow.exe"
+    )
+    store = GameStore(tmp_path / "games.toml")
+    page = GamesPage(store, current_window=lambda: window)
+    page.open_game("wow-retail")
+    page.duplicate()
+    assert page.editing is None and "(copie)" in page.name_input.text()
+    page.name_input.setText("WoW PTR perso")
+    page._fill_from_window()
+    assert page.folder_input.text() == "_xptr_"
+    key = page.save()
+    assert key == "wow-ptr-perso"
+    assert resolve_profile(window, profiles=store.profiles).key == key
+    assert store.profiles["wow-retail"].folders  # l'original est intact

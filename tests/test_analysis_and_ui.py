@@ -368,7 +368,13 @@ def test_wow_forever_profile_points_to_its_reference_sites():
     from alicia.games.profiles import load_profiles
 
     profiles = load_profiles()
-    window = WindowInfo(1, "World of Warcraft", 2, exe_name="WowClassic.exe")
+    window = WindowInfo(
+        1,
+        "World of Warcraft",
+        2,
+        exe_name="WowClassic.exe",
+        exe_path=r"D:\Jeux\World of Warcraft\_forever_\WowClassic.exe",
+    )
     profile = resolve_profile(window, profiles=profiles)
     assert profile.key == "wow-forever"
     assert any("icy-veins.com/wow-forever" in s for s in profile.sources)
@@ -496,4 +502,20 @@ def test_update_button_reports_up_to_date_and_new_version(qt_app, settings):
     assert not asked  # vérification discrète : on ne dérange pas le joueur
     window.update_now()
     assert asked and asked[0].short == "bbbbbbb"
+    window.close()
+
+
+def test_wake_word_events_drive_the_interface(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.start()  # démo : le micro n'est pas ouvert
+    assert window.wake is None
+    window.voice_bridge.wake.emit()
+    assert window.core.state == "listening" and "écoute" in window.status.text()
+    assert window.bubble.isVisible()
+    window.voice_bridge.wake_cancel.emit("rien")
+    assert window.core.state == "idle"
+    window.orb.wake_toggled.emit(False)
+    assert not window.wake_box.isChecked()
     window.close()

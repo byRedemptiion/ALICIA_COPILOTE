@@ -42,6 +42,12 @@ def _muted(text: str = "") -> QLabel:
     return label
 
 
+def _install_folder(exe_path: str) -> str:
+    """Dossier qui contient le programme : « …\\_retail_\\Wow.exe » → « _retail_ »."""
+    parts = [p for p in exe_path.replace("\\", "/").split("/") if p]
+    return parts[-2].lower() if len(parts) >= 2 else ""
+
+
 def _split(text: str) -> list[str]:
     return [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
 
@@ -192,6 +198,12 @@ class GamesPage(QStackedWidget):
         back.clicked.connect(self.show_list)
         top.addWidget(back)
         top.addStretch(1)
+        self.copy_button = QPushButton("Dupliquer")
+        self.copy_button.setToolTip(
+            "Crée une copie de ce jeu (par exemple une autre version de WoW) à adapter"
+        )
+        self.copy_button.clicked.connect(self.duplicate)
+        top.addWidget(self.copy_button)
         self.use_button = QPushButton("Utiliser ce jeu maintenant")
         self.use_button.clicked.connect(self._use)
         top.addWidget(self.use_button)
@@ -252,6 +264,14 @@ class GamesPage(QStackedWidget):
         self.exe_input.setPlaceholderText("wow.exe, wowclassic.exe")
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("world of warcraft")
+        self.folder_input = QLineEdit()
+        self.folder_input.setPlaceholderText("_retail_, _classic_, _forever_")
+        self.window_hint = _muted("")
+        self.fill_button = QPushButton("Remplir avec la fenêtre du jeu")
+        self.fill_button.setToolTip(
+            "Reprend le programme et le dossier de la fenêtre observée (onglet Jeux, à droite)"
+        )
+        self.fill_button.clicked.connect(self._fill_from_window)
         self.context_input = QPlainTextEdit()
         self.context_input.setPlaceholderText(
             "Ce qu'ALICIA doit savoir : le genre, ce qui compte à l'écran, les pièges…"
@@ -269,6 +289,13 @@ class GamesPage(QStackedWidget):
             self.exe_input,
             _muted("Ou un mot du titre de sa fenêtre"),
             self.title_input,
+            _muted(
+                "Dossier d'installation : sépare les versions d'un même jeu "
+                "(WoW actuel « _retail_ », Classic « _classic_ », Forever « _forever_ »)"
+            ),
+            self.folder_input,
+            self.window_hint,
+            self.fill_button,
             _title("CE QU'ALICIA SAIT DU JEU"),
             (self.context_input, 1),
         )
@@ -331,11 +358,21 @@ class GamesPage(QStackedWidget):
             draft = GameDraft("", [], [], [], "")
             if window is not None and window.exe_name:
                 draft.exe_names = [window.exe_name.lower()]
+                draft.folders = [_install_folder(window.exe_path)] if window.exe_path else []
+                draft.folders = [f for f in draft.folders if f]
                 draft.name = window.title
         self.name_input.setText(draft.name)
         self.detail_title.setText(draft.name.upper() or "NOUVEAU JEU")
         self.exe_input.setText(", ".join(draft.exe_names))
         self.title_input.setText(", ".join(draft.title_keywords))
+        self.folder_input.setText(", ".join(draft.folders))
+        window = self.current_window()
+        self.window_hint.setText(
+            f"Fenêtre observée : {window.exe_path or window.exe_name or window.title}"
+            if window is not None
+            else "Aucune fenêtre observée : choisis-la à droite de la liste des jeux."
+        )
+        self.fill_button.setEnabled(window is not None and bool(window.exe_name))
         self.context_input.setPlainText(draft.context)
         self.sites.clear()
         for site in draft.sources:
@@ -348,6 +385,7 @@ class GamesPage(QStackedWidget):
         self.reset_button.setEnabled(builtin and self.store.is_modified(key or ""))
         self.delete_button.setVisible(key is not None and not builtin)
         self.use_button.setEnabled(key is not None)
+        self.copy_button.setEnabled(key is not None)
         self.setCurrentWidget(self.detail_page)
         (self.site_input if key else self.name_input).setFocus()
 
@@ -410,6 +448,7 @@ class GamesPage(QStackedWidget):
             _split(self.title_input.text()),
             self.site_list(),
             self.context_input.toPlainText(),
+            _split(self.folder_input.text()),
         )
         try:
             key = self.store.save(self.editing, draft)
@@ -423,6 +462,7 @@ class GamesPage(QStackedWidget):
         self.reset_button.setEnabled(builtin)
         self.delete_button.setVisible(not builtin)
         self.use_button.setEnabled(True)
+        self.copy_button.setEnabled(True)
         self.games_changed.emit()
         return key
 
@@ -437,6 +477,37 @@ class GamesPage(QStackedWidget):
             self.saved_label.setText("Original rétabli ✓")
         else:
             self.show_list()
+
+    def _fill_from_window(self) -> None:
+        window = self.current_window()
+        if window is None or not window.exe_name:
+            return
+        exes = _split(self.exe_input.text())
+        if window.exe_name.lower() not in exes:
+            exes.append(window.exe_name.lower())
+        self.exe_input.setText(", ".join(exes))
+        folder = _install_folder(window.exe_path)
+        folders = _split(self.folder_input.text())
+        if folder and folder not in folders:
+            folders.append(folder)
+        self.folder_input.setText(", ".join(folders))
+        self.saved_label.setText("Pense à enregistrer.")
+
+    def duplicate(self) -> None:
+        """Ouvre une copie du jeu affiché, comme nouveau jeu (rien n'est écrit avant Enregistrer)."""
+        if self.editing is None:
+            return
+        name = self.name_input.text().strip()
+        self.editing = None
+        self.name_input.setText(f"{name} (copie)")
+        self.folder_input.clear()
+        self.reset_button.setVisible(False)
+        self.delete_button.setVisible(False)
+        self.use_button.setEnabled(False)
+        self.copy_button.setEnabled(False)
+        self.saved_label.setText("Copie : change le nom et le dossier, puis enregistre.")
+        self.name_input.setFocus()
+        self.name_input.selectAll()
 
     def _use(self) -> None:
         if self.editing is not None:

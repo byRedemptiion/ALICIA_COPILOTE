@@ -10,6 +10,7 @@
 #
 #   [mon-jeu]
 #   name = "Nom affiché"
+#   folder = ["_retail_"]             # dossier d'installation (versions d'un même jeu)
 #   exe = ["jeu.exe"]                 # nom du programme (voir le journal d'ALICIA)
 #   title = ["mot du titre"]          # ou un mot du titre de la fenêtre
 #   sources = ["site.com/rubrique"]   # sites de référence, du plus fiable au moins fiable
@@ -33,8 +34,11 @@ Le jeu est Overwatch (FPS en équipe, héros répartis en rôles tank, dégâts 
 
 [wow-forever]
 name = "World of Warcraft: Forever"
-exe = ["wowforever.exe", "wowclassic.exe", "wowclassicb.exe", "wowclassict.exe", "wow.exe"]
-title = ["world of warcraft"]
+# Les versions de WoW partagent le titre « World of Warcraft » : ALICIA les distingue par
+# le dossier d'installation (World of Warcraft\_forever_\…). La bêta était dans _classic_beta_.
+folder = ["_forever_", "_forever_beta_", "_classic_beta_"]
+exe = ["wowforever.exe"]
+title = ["world of warcraft"]   # en dernier recours : le WoW joué le plus souvent
 sources = [
     "icy-veins.com/wow-forever",   # guides de classe, talents, donjons et raids
     "method.gg/wow-forever",       # donjons, raids
@@ -48,4 +52,36 @@ Le jeu est World of Warcraft: Forever (« Classic+ », lancé en novembre 2026) 
 - Les guides Classic ou de la version actuelle ne s'appliquent pas toujours : vérifie que la source parle bien de Forever, et dis-le quand ce n'est pas le cas.
 - Lis l'écran avant de conseiller : classe et niveau, zone, quête suivie, sorts sur les barres, butin, chat de groupe.
 - Pour une quête, donne l'étape suivante et où aller ; pour un objet, compare avec ce que le joueur porte si c'est visible.
+"""
+
+[wow-retail]
+name = "World of Warcraft (version actuelle)"
+folder = ["_retail_", "_ptr_", "_beta_"]
+exe = ["wow.exe"]
+sources = [
+    "wowhead.com",                 # base de données : quêtes, objets, PNJ
+    "icy-veins.com/wow",           # guides de classe
+    "method.gg",                   # donjons et raids
+    "raider.io",                   # Mythique+
+    "warcraft.wiki.gg",
+]
+context = """
+Le jeu est World of Warcraft dans sa version actuelle (extension en cours, Mythique+, raids).
+- Lis l'écran avant de conseiller : classe, spécialisation, niveau d'objet, zone, quête suivie, interface du donjon.
+- Les talents et l'équilibrage changent à chaque patch : préfère les sources récentes.
+"""
+
+[wow-classic]
+name = "WoW Classic"
+folder = ["_classic_", "_classic_era_", "_classic_ptr_", "_anniversary_"]
+exe = ["wowclassic.exe"]
+sources = [
+    "wowhead.com/classic",
+    "icy-veins.com/wow-classic",
+    "warcraft.wiki.gg",
+]
+context = """
+Le jeu est une version Classic de World of Warcraft (Classic Era, Hardcore ou une extension Classic).
+- Identifie la version à l'écran si possible (niveau maximum, interface) avant de conseiller.
+- Les guides de la version actuelle de WoW ne s'appliquent pas : vérifie que la source parle bien de Classic.
 """

@@ -45,6 +45,9 @@ class VoiceBridge(QObject):
 
     state = Signal(str, object)  # (« speaking » | « idle » | « error », message)
     reminder = Signal(str)  # rappel de minuteur (thread du minuteur → interface)
+    wake = Signal()  # « Alicia » entendu
+    wake_command = Signal(object)  # PreparedAudio : la demande qui suit le mot de réveil
+    wake_cancel = Signal(str)  # mot de réveil sans demande exploitable
 
 
 class QtLogHandler(logging.Handler):

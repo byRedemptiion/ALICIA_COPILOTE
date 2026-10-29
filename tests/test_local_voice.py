@@ -97,3 +97,22 @@ def test_kokoro_speaks_french_for_real():
     samples = kokoro_synthesizer("ff_siwis", 1.05)("Bonjour, je suis Alicia.")
     assert samples.dtype == np.int16 and len(samples) > 24000 * 0.8
     assert np.abs(samples).max() > 1000
+
+
+def test_wake_word_is_removed_before_routing(settings):
+    model = FakeModel()
+    services = build_services(
+        settings,
+        demo=True,
+        model=model,
+        transcriber=FakeTranscriber("Alicia, quel objet pour Ashe ?"),
+    )
+    services.analysis.analyze(DEMO_WINDOW, "", audio=wav())
+    assert model.requests[-1].question == "quel objet pour Ashe ?"
+
+    services = build_services(
+        settings, demo=True, model=model, transcriber=FakeTranscriber("Alicia.")
+    )
+    with pytest.raises(AliciaError) as info:
+        services.analysis.analyze(DEMO_WINDOW, "", audio=wav())
+    assert "après « Alicia »" in info.value.user_message

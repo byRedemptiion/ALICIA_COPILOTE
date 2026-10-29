@@ -11,7 +11,7 @@ import logging
 import re
 import tomllib
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from alicia.games import profiles as registry
@@ -66,6 +66,7 @@ class GameDraft:
     title_keywords: list[str]
     sources: list[str]
     context: str
+    folders: list[str] = field(default_factory=list)
 
     @classmethod
     def from_profile(cls, profile: GameProfile) -> GameDraft:
@@ -75,6 +76,7 @@ class GameDraft:
             list(profile.title_keywords),
             list(profile.sources),
             profile.context,
+            list(profile.folders),
         )
 
 
@@ -139,6 +141,7 @@ class GameStore:
                 sources.append(clean)
         entries[key] = {
             "name": name,
+            "folder": [f.strip().strip("\\/").lower() for f in draft.folders if f.strip()],
             "exe": [e.strip().lower() for e in draft.exe_names if e.strip()],
             "title": [t.strip().lower() for t in draft.title_keywords if t.strip()],
             "sources": sources,
@@ -161,11 +164,11 @@ class GameStore:
         parts = [HEADER]
         for key, entry in entries.items():
             lines = [f"[{key}]"]
-            for field, value in entry.items():
+            for name, value in entry.items():
                 if isinstance(value, list):
-                    lines.append(f"{field} = {_toml_list([str(v) for v in value])}")
+                    lines.append(f"{name} = {_toml_list([str(v) for v in value])}")
                 else:
-                    lines.append(f"{field} = {_toml_string(str(value))}")
+                    lines.append(f"{name} = {_toml_string(str(value))}")
             parts.append("\n".join(lines) + "\n")
         self.user_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.user_file.with_suffix(".toml.tmp")

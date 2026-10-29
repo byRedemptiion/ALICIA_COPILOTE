@@ -59,7 +59,7 @@ class AnalysisService:
 
     def analyze(
         self,
-        window: WindowInfo,
+        window: WindowInfo | None,
         question: str,
         *,
         frame: Frame | None = None,
@@ -76,6 +76,16 @@ class AnalysisService:
             local_transcript = None
             if audio is not None and self.transcriber is not None:
                 local_transcript = self.transcriber.transcribe(audio)
+                if local_transcript:
+                    from alicia.core.audio.wake import strip_wake_word
+
+                    heard = local_transcript
+                    local_transcript = strip_wake_word(local_transcript)
+                    if not local_transcript:
+                        raise AliciaError(
+                            "Oui ? Dis ta demande juste après « Alicia ».",
+                            detail=f"seulement le mot de réveil : {heard!r}",
+                        )
                 if not local_transcript:
                     raise AliciaError(
                         "Je n'ai rien compris : parle un peu plus fort ou plus près du micro, "
@@ -98,6 +108,11 @@ class AnalysisService:
                         return AnalysisOutcome(
                             op_id, None, None, "", total, local_transcript, action=reply
                         )
+            if window is None:
+                raise AliciaError(
+                    "Mets le jeu au premier plan, puis redemande-moi.",
+                    detail="aucune fenêtre à capturer",
+                )
             mode = (
                 f"question orale {audio.duration_s:.1f} s"
                 if audio
