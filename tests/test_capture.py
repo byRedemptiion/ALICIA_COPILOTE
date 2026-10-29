@@ -95,3 +95,32 @@ def test_windows_capture_refuses_other_platforms(monkeypatch):
         pytest.skip("test des plateformes non Windows")
     with pytest.raises(UnsupportedPlatformError):
         Win32()
+
+
+def test_screen_and_cursor_vision_modes():
+    from alicia.core.capture.models import Rect
+
+    screen = Rect(0, 0, 1280, 720)
+    svc = CaptureService(
+        lambda: [DEMO_WINDOW],
+        lambda w: w,
+        lambda w: [DemoBackend()],
+        cursor=lambda: (1200, 50, 1, screen),
+        screen_chain=lambda w: [DemoBackend()],
+    )
+    whole = svc.capture(None, "screen")
+    assert whole.mode == "screen"
+    assert (whole.width, whole.height) == (1280, 720) and whole.cursor == (1200, 50)
+
+    zone = svc.capture(None, "cursor", (400, 300))
+    assert (zone.width, zone.height) == (400, 300)
+    # Zone collée au bord : le curseur reste dedans, marqué en rose
+    assert zone.cursor == (400 - (1280 - 1200), 50)
+    r, g, b = zone.image.getpixel((zone.cursor[0] + 2, zone.cursor[1]))
+    assert r > 200 and g < 120  # trait rose du marqueur
+    assert svc.last is zone
+
+
+def test_application_mode_needs_a_window():
+    with pytest.raises(CaptureError):
+        service(DemoBackend()).capture(None, "window")

@@ -43,6 +43,11 @@ jpeg_quality = 88
 keep_last_frames = 5
 save_captures = false        # true = copie de chaque capture analysée dans le dossier captures/
 timeout_s = 2.0
+# Ce que regarde ALICIA (aussi dans Réglages et le menu du rond) :
+#   "window" = l'application (le jeu), "cursor" = une zone autour du curseur de la souris,
+#   "screen" = l'écran entier (celui du jeu, sinon celui du curseur)
+mode = "window"
+cursor_box = "1280x800"      # taille de la zone autour du curseur
 
 [logging]
 level = "INFO"               # INFO | DEBUG

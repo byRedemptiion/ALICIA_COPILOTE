@@ -24,6 +24,18 @@ from dotenv import dotenv_values
 from alicia.core.errors import ConfigError
 
 PROVIDERS = ("gemini", "openai", "ollama", "fake")
+VISION_MODES = ("window", "cursor", "screen")
+
+
+def _box(value: object) -> tuple[int, int]:
+    """« 1280x800 » → (1280, 800), bornes raisonnables."""
+    try:
+        width, height = (int(part) for part in str(value).lower().replace(" ", "").split("x"))
+    except ValueError:
+        return (1280, 800)
+    return (max(320, min(3840, width)), max(240, min(2160, height)))
+
+
 CAPTURE_BACKENDS = ("auto", "wgc", "printwindow")
 
 
@@ -126,6 +138,8 @@ class CaptureSettings:
     keep_last_frames: int
     save_captures: bool
     timeout_s: float
+    mode: str = "window"  # window (application) | cursor (zone autour du curseur) | screen
+    cursor_box: tuple[int, int] = (1280, 800)  # taille de la zone autour du curseur (px)
 
 
 @dataclass(frozen=True)
@@ -352,6 +366,8 @@ def load_settings(
             keep_last_frames=_number(capture, "keep_last_frames", int, 1),
             save_captures=bool(capture.get("save_captures", False)),
             timeout_s=_number(capture, "timeout_s", float, 0.2),
+            mode=_choice(capture, "mode", "window", VISION_MODES),
+            cursor_box=_box(capture.get("cursor_box", "1280x800")),
         ),
         log_level=level,
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),

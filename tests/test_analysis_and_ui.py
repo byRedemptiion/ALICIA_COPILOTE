@@ -562,3 +562,30 @@ def test_orb_edit_mode_changes_and_remembers_the_layout(qt_app, tmp_path):
     assert again.bubble.font_pt == 16 and again.bubble.side == "below"
     assert again.bubble.after_voice_ms() == 10000
     again.close()
+
+
+def test_cursor_vision_tells_the_ai_what_is_pointed(settings):
+    model = FakeModel()
+    services = build_services(settings, demo=True, model=model)
+    services.analysis.vision_mode = "cursor"
+    outcome = services.analysis.analyze(None, "C'est quoi ça ?")
+    assert outcome.frame.mode == "cursor" and outcome.frame.cursor is not None
+    assert "cercle rose" in model.requests[-1].system_prompt
+
+
+def test_vision_mode_can_be_switched_and_is_remembered(qt_app, settings):
+    import tomllib
+
+    from alicia.core.config import data_dir
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.orb.vision_chosen.emit("screen")
+    assert window.services.analysis.vision_mode == "screen"
+    assert window.vision_box.currentData() == "screen" and window.orb.vision == "screen"
+    saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))
+    assert saved["capture"]["mode"] == "screen"
+    window.hotkey_analyze()  # écran entier : pas besoin de fenêtre au premier plan
+    assert window.busy
+    run_until(qt_app, window)
+    window.close()

@@ -66,6 +66,8 @@ class Frame:
     duration_ms: int
     capture_id: str
     notes: tuple[str, ...] = field(default_factory=tuple)
+    cursor: tuple[int, int] | None = None  # position du curseur dans l'image (mode curseur)
+    mode: str = "window"
 
     @property
     def width(self) -> int:

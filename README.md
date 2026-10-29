@@ -89,6 +89,13 @@ Avec **F10** ou à l'écrit, Alicia exécute certaines demandes **sur Windows, j
 obs = { launch = "C:/Program Files/obs-studio/bin/64bit/obs64.exe", process = "obs64.exe" }
 ```
 
+### Ce que regarde ALICIA : application, curseur ou écran
+
+Menu **Vision** (panneau, clic droit sur le rond, ou Réglages) :
+- **L'application** : le jeu au premier plan (par défaut).
+- **Autour du curseur** : une zone autour de ta souris ; pointe un objet, un sort ou un texte et demande « c'est quoi ça ? ». Un cercle rose montre à l'IA ce que tu désignes. Taille de la zone dans Réglages.
+- **L'écran entier** : tout l'écran du jeu (pratique avec un guide ou une carte à côté).
+
 ### Tes jeux et tes sites de référence
 
 ALICIA a un **profil par jeu** : elle sait à quel jeu tu joues (sans le deviner sur l'image), quoi regarder à l'écran, et **sur quels sites chercher en premier** quand la recherche web est active. Profils fournis : **Overwatch** et **World of Warcraft: Forever** (Icy Veins, Method, Mobalytics, Warcraft Tavern, Warcraft Wiki).

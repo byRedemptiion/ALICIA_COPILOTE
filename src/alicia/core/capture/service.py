@@ -7,6 +7,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from alicia.core.capture.backends import (
@@ -16,7 +17,7 @@ from alicia.core.capture.backends import (
     PrintWindowBackend,
     WgcBackend,
 )
-from alicia.core.capture.models import Frame, WindowInfo, image_from_bgra, is_black
+from alicia.core.capture.models import Frame, Rect, WindowInfo, image_from_bgra, is_black
 from alicia.core.config import CaptureSettings
 from alicia.core.errors import AliciaError, CaptureError
 
@@ -36,8 +37,12 @@ class CaptureService:
         chain: Callable[[WindowInfo], Sequence[CaptureBackend]],
         keep_last: int = 5,
         foreground: Callable[[], WindowInfo | None] | None = None,
+        cursor: Callable[[], tuple[int, int, int | None, Rect | None]] | None = None,
+        screen_chain: Callable[[WindowInfo], Sequence[CaptureBackend]] | None = None,
     ) -> None:
         self._foreground = foreground
+        self._cursor = cursor
+        self._screen_chain = screen_chain
         self._lister = lister
         self._refresher = refresher
         self._chain = chain
@@ -61,17 +66,30 @@ class CaptureService:
                 backends.append(PrintWindowBackend(win32))
             return backends
 
+        def screen_chain(_screen: WindowInfo) -> list[CaptureBackend]:
+            return [WgcBackend("monitor", settings.timeout_s)]
+
         return cls(
             win32.list_windows,
             win32.check_still_valid,
             chain,
             settings.keep_last_frames,
             foreground=win32.foreground_window,
+            cursor=win32.cursor,
+            screen_chain=screen_chain,
         )
 
     @classmethod
     def demo(cls, keep_last: int = 5) -> CaptureService:
-        return cls(lambda: [DEMO_WINDOW], lambda w: w, lambda w: [DemoBackend()], keep_last)
+        screen = Rect(0, 0, 1280, 720)
+        return cls(
+            lambda: [DEMO_WINDOW],
+            lambda w: w,
+            lambda w: [DemoBackend()],
+            keep_last,
+            cursor=lambda: (900, 300, 1, screen),
+            screen_chain=lambda w: [DemoBackend()],
+        )
 
     # --- opérations ---------------------------------------------------------------------------
 
@@ -91,16 +109,106 @@ class CaptureService:
             log.warning("Fenêtre active introuvable : %r", exc)
             return None
 
-    def capture(self, window: WindowInfo) -> Frame:
+    def capture(
+        self,
+        window: WindowInfo | None,
+        mode: str = "window",
+        cursor_box: tuple[int, int] = (1280, 800),
+    ) -> Frame:
+        """« window » : l'application ; « screen » : l'écran entier ; « cursor » : une zone
+        autour du curseur, avec le curseur marqué pour que l'IA voie ce que tu montres."""
+        if mode in ("screen", "cursor"):
+            return self._capture_screen(window, mode, cursor_box)
+        if window is None:
+            raise CaptureError(
+                "Aucune application à regarder : mets le jeu au premier plan.",
+                detail="mode application sans fenêtre",
+            )
+        return self._capture_window(window)
+
+    def _screen_target(
+        self, window: WindowInfo | None, mode: str
+    ) -> tuple[WindowInfo, tuple[int, int] | None]:
+        cursor = None
+        if self._cursor is not None:
+            try:
+                cursor = self._cursor()
+            except AliciaError as exc:
+                log.warning("Curseur introuvable : %s", exc.detail)
+        if mode == "screen" and window is not None and window.monitor_index is not None:
+            index, rect = window.monitor_index, window.monitor_rect
+        elif cursor is not None and cursor[2] is not None:
+            index, rect = cursor[2], cursor[3]
+        elif window is not None and window.monitor_index is not None:
+            index, rect = window.monitor_index, window.monitor_rect
+        else:
+            raise CaptureError(
+                "Impossible de savoir quel écran capturer.", detail=f"curseur {cursor}"
+            )
+        screen = WindowInfo(
+            handle=0,
+            title=f"Écran {index}",
+            process_id=0,
+            exe_name=window.exe_name if window else "",
+            exe_path=window.exe_path if window else "",
+            rect=rect,
+            monitor_index=index,
+            monitor_rect=rect,
+        )
+        point = None
+        if cursor is not None and rect is not None and cursor[2] == index:
+            point = (cursor[0] - rect.left, cursor[1] - rect.top)
+        return screen, point
+
+    def _capture_screen(
+        self, window: WindowInfo | None, mode: str, cursor_box: tuple[int, int]
+    ) -> Frame:
+        if self._screen_chain is None:
+            raise CaptureError("Capture d'écran indisponible.", detail="pas de backend écran")
+        screen, point = self._screen_target(window, mode)
+        frame = self._capture_window(screen, chain=self._screen_chain(screen), refresh=False)
+        image = frame.image
+        if mode == "cursor":
+            if point is None:
+                point = (image.width // 2, image.height // 2)
+            # L'écran peut être capturé à une autre échelle que ses coordonnées Windows.
+            if screen.monitor_rect is not None and screen.monitor_rect.width:
+                scale = image.width / screen.monitor_rect.width
+                point = (int(point[0] * scale), int(point[1] * scale))
+            width, height = min(cursor_box[0], image.width), min(cursor_box[1], image.height)
+            left = max(0, min(point[0] - width // 2, image.width - width))
+            top = max(0, min(point[1] - height // 2, image.height - height))
+            image = image.crop((left, top, left + width, top + height))
+            point = (point[0] - left, point[1] - top)
+        if point is not None:
+            image = mark_cursor(image, point)
+        frame = replace(frame, image=image, window=window or screen, cursor=point, mode=mode)
+        self.recent[-1] = frame
+        log.info(
+            "Vision %s : %dx%d%s",
+            "autour du curseur" if mode == "cursor" else "écran entier",
+            frame.width,
+            frame.height,
+            f", curseur en {point}" if point else "",
+        )
+        return frame
+
+    def _capture_window(
+        self,
+        window: WindowInfo,
+        chain: Sequence[CaptureBackend] | None = None,
+        refresh: bool = True,
+    ) -> Frame:
         started = time.perf_counter()
         try:
-            window = self._refresher(window)
+            if refresh:
+                window = self._refresher(window)
         except AliciaError as exc:
             log.error("Capture refusée pour « %s » : %s", window.title, exc.detail)
             raise
         attempts: list[str] = []
         notes: list[str] = []
-        for backend in self._chain(window):
+        for backend in chain if chain is not None else self._chain(window):
             step = time.perf_counter()
             try:
                 pixels = backend.grab(window)
@@ -157,3 +265,18 @@ class CaptureService:
 
 def _ms(started: float) -> int:
     return int((time.perf_counter() - started) * 1000)
+
+
+def mark_cursor(image, point: tuple[int, int]):  # type: ignore[no-untyped-def]
+    """Cercle rose autour du curseur : l'IA voit ce que le joueur montre."""
+    from PIL import ImageDraw
+
+    marked = image.copy()
+    draw = ImageDraw.Draw(marked)
+    x, y = point
+    radius = max(14, image.width // 60)
+    for width, color in ((6, (0, 0, 0)), (3, (255, 61, 139))):
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), outline=color, width=width)
+    draw.line((x - radius // 3, y, x + radius // 3, y), fill=(255, 61, 139), width=2)
+    draw.line((x, y - radius // 3, x, y + radius // 3), fill=(255, 61, 139), width=2)
+    return marked

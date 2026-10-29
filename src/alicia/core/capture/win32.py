@@ -239,6 +239,17 @@ class Win32:
         self.user32.EnumDisplayMonitors(None, None, visit, 0)
         return found
 
+    def cursor(self) -> tuple[int, int, int | None, Rect | None]:
+        """Position du curseur (pixels physiques) et écran sous le curseur."""
+        point = wintypes.POINT()
+        if not self.user32.GetCursorPos(ctypes.byref(point)):
+            raise CaptureError("Position du curseur introuvable.")
+        x, y = int(point.x), int(point.y)
+        for index, (_handle, rect) in enumerate(self.monitors(), start=1):
+            if rect.left <= x < rect.right and rect.top <= y < rect.bottom:
+                return x, y, index, rect
+        return x, y, None, None
+
     def monitor_of(self, hwnd: int) -> tuple[int | None, Rect | None]:
         hmonitor = self.user32.MonitorFromWindow(hwnd, _MONITOR_DEFAULTTONEAREST)
         if not hmonitor:

@@ -105,6 +105,37 @@ class SettingsPage(QScrollArea):
         title.setStyleSheet(f"color:{PINK};")
         layout.addWidget(title)
 
+        # --- Vision ------------------------------------------------------------------------------
+        vision, grid = _panel()
+        grid.addWidget(_title("VISION"), 0, 0, 1, 3)
+        self.vision_box = QComboBox()
+        self.vision_box.addItem("L'application (le jeu au premier plan)", "window")
+        self.vision_box.addItem("Autour du curseur de la souris", "cursor")
+        self.vision_box.addItem("L'écran entier", "screen")
+        grid.addWidget(QLabel("ALICIA regarde"), 1, 0)
+        grid.addWidget(self.vision_box, 1, 1, 1, 2)
+        self.box_size = QComboBox()
+        for size, label in (
+            ("800x500", "Petite (800 × 500)"),
+            ("1280x800", "Moyenne (1280 × 800)"),
+            ("1920x1080", "Grande (1920 × 1080)"),
+        ):
+            self.box_size.addItem(label, size)
+        grid.addWidget(QLabel("Zone du curseur"), 2, 0)
+        grid.addWidget(self.box_size, 2, 1, 1, 2)
+        grid.addWidget(
+            _muted(
+                "Autour du curseur : pointe un objet, un sort ou un texte avec la souris et "
+                "demande « c'est quoi ça ? » ; un cercle rose montre à l'IA ce que tu désignes. "
+                "Écran entier : utile avec plusieurs fenêtres (guide, carte, chat)."
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
+        layout.addWidget(vision)
+
         # --- Micro -------------------------------------------------------------------------------
         mic, grid = _panel()
         grid.addWidget(_title("MICRO"), 0, 0, 1, 3)
@@ -212,6 +243,12 @@ class SettingsPage(QScrollArea):
         self.output_box.currentIndexChanged.connect(
             lambda _i: self._emit("output_device", self.output_box.currentData())
         )
+        self.vision_box.currentIndexChanged.connect(
+            lambda _i: self._emit("vision", self.vision_box.currentData())
+        )
+        self.box_size.currentIndexChanged.connect(
+            lambda _i: self._emit("cursor_box", self.box_size.currentData())
+        )
         self.mode_box.currentIndexChanged.connect(
             lambda _i: self._emit("ui_mode", self.mode_box.currentData())
         )
@@ -272,6 +309,17 @@ class SettingsPage(QScrollArea):
             self.speed_label.setText(f"{percent:+d} %")
             self.mode_box.setCurrentIndex(max(0, self.mode_box.findData(ui_mode)))
             self.ai_label.setText(ai_text)
+        finally:
+            self._loading = False
+
+    def load_vision(self, mode: str, box: tuple[int, int]) -> None:
+        self._loading = True
+        try:
+            self.vision_box.setCurrentIndex(max(0, self.vision_box.findData(mode)))
+            key = f"{box[0]}x{box[1]}"
+            if self.box_size.findData(key) < 0:
+                self.box_size.addItem(f"Personnalisée ({box[0]} × {box[1]})", key)
+            self.box_size.setCurrentIndex(self.box_size.findData(key))
         finally:
             self._loading = False
 

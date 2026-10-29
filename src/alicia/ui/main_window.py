@@ -53,6 +53,11 @@ from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 log = logging.getLogger("alicia.ui")
 MAX_LOG_LINES = 3000
 NOTICES = ("⚠", "Patiente", "Mets le jeu", "Raccourci :", "Confirmation demandée")
+VISION_CHOICES = (
+    ("window", "Regarder l'application (le jeu)"),
+    ("cursor", "Regarder autour du curseur"),
+    ("screen", "Regarder l'écran entier"),
+)
 DEFAULT_HOTKEY_QUESTION = (
     "Que vois-tu d'important sur mon écran, et quel est le meilleur choix à faire maintenant ?"
 )
@@ -248,8 +253,22 @@ class MainWindow(QMainWindow):
             buttons,
         )
         self.window_list.setMaximumHeight(16777215)
+        self.vision_box = QComboBox()
+        for key, label in VISION_CHOICES:
+            self.vision_box.addItem(label, key)
+        self.vision_box.setToolTip(
+            "Ce que regarde ALICIA quand tu lui parles : le jeu, la zone autour de ta souris "
+            "(pratique pour montrer un objet), ou tout l'écran"
+        )
+        self.vision_box.setCurrentIndex(
+            max(0, self.vision_box.findData(self.services.settings.capture.mode))
+        )
+        self.vision_box.currentIndexChanged.connect(
+            lambda _i: self.set_vision(self.vision_box.currentData())
+        )
         left = _panel(
             _section("VISION"),
+            self.vision_box,
             (self.preview, 1),
             self.preview_info,
         )
@@ -457,6 +476,32 @@ class MainWindow(QMainWindow):
         if index == 1:
             self.games_page.show_list()
 
+    # --- vision ---------------------------------------------------------------------------------
+
+    def _vision(self) -> str:
+        return self.services.analysis.vision_mode
+
+    def set_vision(self, mode: str, save: bool = True) -> None:
+        """Ce que regarde ALICIA : l'application, la zone du curseur ou l'écran entier."""
+        if mode not in dict(VISION_CHOICES) or mode == self._vision() and not save:
+            return
+        from dataclasses import replace
+
+        self.services.analysis.vision_mode = mode
+        capture = replace(self.services.settings.capture, mode=mode)
+        self.services.settings = replace(self.services.settings, capture=capture)
+        for box in (self.vision_box, getattr(self.settings_page, "vision_box", None)):
+            if box is not None and box.currentData() != mode:
+                box.blockSignals(True)
+                box.setCurrentIndex(max(0, box.findData(mode)))
+                box.blockSignals(False)
+        if hasattr(self, "orb"):
+            self.orb.vision = mode
+        if save:
+            self._save("capture", "mode", mode)
+        log.info("Vision : %s", dict(VISION_CHOICES)[mode])
+        self._notify("Vision : " + dict(VISION_CHOICES)[mode])
+
     # --- réglages -------------------------------------------------------------------------------
 
     @staticmethod
@@ -467,6 +512,8 @@ class MainWindow(QMainWindow):
 
     def _load_settings_page(self) -> None:
         model = self.services.model
+        capture = self.services.settings.capture
+        self.settings_page.load_vision(capture.mode, capture.cursor_box)
         self.settings_page.load(
             self.services.settings.voice,
             self.wake_box.isChecked(),
@@ -536,6 +583,16 @@ class MainWindow(QMainWindow):
             self._update_voice(tts_rate=f"{percent:+d}%", kokoro_speed=round(1 + percent / 100, 2))
         elif key == "output_device":
             self._update_voice(output_device=str(value or ""))
+        elif key == "vision":
+            self.set_vision(str(value))
+        elif key == "cursor_box":
+            from dataclasses import replace
+
+            width, height = (int(v) for v in str(value).split("x"))
+            capture = replace(self.services.settings.capture, cursor_box=(width, height))
+            self.services.settings = replace(self.services.settings, capture=capture)
+            self.services.analysis.settings = self.services.settings
+            self._save("capture", "cursor_box", str(value))
         elif key == "ui_mode":
             from dataclasses import replace
 
@@ -641,6 +698,8 @@ class MainWindow(QMainWindow):
         self.orb.update_requested.connect(self.update_now)
         self.orb.setup_requested.connect(self.open_setup)
         self.orb.wake_toggled.connect(self.wake_box.setChecked)
+        self.orb.vision = self.services.settings.capture.mode
+        self.orb.vision_chosen.connect(self.set_vision)
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
@@ -1218,7 +1277,7 @@ class MainWindow(QMainWindow):
 
                 self._action_done(AnalysisOutcome("action", None, None, "", 0, action=reply))
                 return
-        if self.observed is None and not self.start_observation():
+        if self._vision() == "window" and self.observed is None and not self.start_observation():
             return
         problem = self.services.model.check()
         if problem:
@@ -1380,10 +1439,10 @@ class MainWindow(QMainWindow):
             self._flash_error()
             return
         window = self.services.capture.foreground_window() or self.observed
-        if window is None:
+        if window is None and self._vision() == "window":
             self._set_status("Mets le jeu au premier plan, puis reparle.")
             return
-        if self.observed is None or self.observed.handle != window.handle:
+        if window is not None and (self.observed is None or self.observed.handle != window.handle):
             self.observed = window
             self._update_state()
         self.question.setText("🎙 …")
@@ -1497,11 +1556,11 @@ class MainWindow(QMainWindow):
             self._set_status("⚠ " + problem)
             return
         window = self.services.capture.foreground_window() or self.observed
-        if window is None:
+        if window is None and self._vision() == "window":
             log.warning("Raccourci : aucune fenêtre de jeu active ni sélectionnée")
             self._set_status("Raccourci : mets le jeu au premier plan, puis réappuie.")
             return
-        if self.observed is None or self.observed.handle != window.handle:
+        if window is not None and (self.observed is None or self.observed.handle != window.handle):
             self.observed = window
             log.info(
                 "Raccourci : fenêtre active « %s » (%s%s)",

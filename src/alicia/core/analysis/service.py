@@ -52,6 +52,7 @@ class AnalysisService:
         self.router = router
         self.transcriber = transcriber
         self.game_profile = settings.game_profile  # « auto » ou un profil choisi dans l'interface
+        self.vision_mode = settings.capture.mode  # window | cursor | screen (modifiable en direct)
         self.settings = settings
         self.capture = capture
         self.model = model
@@ -108,7 +109,7 @@ class AnalysisService:
                         return AnalysisOutcome(
                             op_id, None, None, "", total, local_transcript, action=reply
                         )
-            if window is None:
+            if window is None and self.vision_mode == "window":
                 raise AliciaError(
                     "Mets le jeu au premier plan, puis redemande-moi.",
                     detail="aucune fenêtre à capturer",
@@ -126,12 +127,14 @@ class AnalysisService:
                 "Analyse demandée (%s%s) — fenêtre « %s »",
                 mode,
                 ", recherche web autorisée" if web_search else "",
-                window.title,
+                window.title if window is not None else "—",
             )
             if audio is None:
                 log.debug("Question : %s", question)
             if frame is None:
-                frame = self.capture.capture(window)
+                frame = self.capture.capture(
+                    window, self.vision_mode, self.settings.capture.cursor_box
+                )
             if on_frame is not None:
                 on_frame(frame)
             if cancel is not None and cancel.is_set():
@@ -148,7 +151,7 @@ class AnalysisService:
                 question=question,
                 images=(image,),
                 system_prompt=build_system_prompt(
-                    profile.prompt_context(web_search), spoken=spoken
+                    profile.prompt_context(web_search) + vision_note(frame), spoken=spoken
                 ),
                 history=self.session.history(),
                 max_output_tokens=self.settings.ai.max_output_tokens,
@@ -234,3 +237,19 @@ class AnalysisService:
             log.info("Capture enregistrée : %s", path)
         except OSError as exc:
             log.warning("Capture non enregistrée : %s", exc)
+
+
+def vision_note(frame: Frame) -> str:
+    """Précise à l'IA ce qu'elle regarde (écran entier, zone du curseur)."""
+    if frame.mode == "cursor":
+        return (
+            "\n\nL'image est une zone autour du curseur de la souris du joueur. Le cercle rose "
+            "marque le curseur : c'est ce qu'il te montre (objet, sort, bouton, texte) ; "
+            "réponds d'abord à propos de cet élément."
+        )
+    if frame.mode == "screen":
+        note = "\n\nL'image montre l'écran entier du joueur, pas seulement le jeu."
+        if frame.cursor is not None:
+            note += " Le cercle rose marque son curseur de souris."
+        return note
+    return ""

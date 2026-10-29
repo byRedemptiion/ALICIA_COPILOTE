@@ -353,6 +353,7 @@ class OrbWindow(QWidget):
     wake_toggled = Signal(bool)
     setup_requested = Signal()
     layout_changed = Signal()
+    vision_chosen = Signal(str)
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -381,6 +382,7 @@ class OrbWindow(QWidget):
         self.games: list[tuple[str, str]] = []  # (clé, nom) proposés dans le menu « Jeu »
         self.current_game = "auto"
         self.wake_on = False
+        self.vision = "window"
         self._drag: QPoint | None = None
         self._placed = False
         self.size_px = size
@@ -539,6 +541,17 @@ class OrbWindow(QWidget):
             (None, None),
             ("Quitter ALICIA", self.quit_requested.emit),
         )
+        vision = menu.addMenu("Vision")
+        for key, label in (
+            ("window", "L'application (le jeu)"),
+            ("cursor", "Autour du curseur"),
+            ("screen", "L'écran entier"),
+        ):
+            action = QAction(label, vision)
+            action.setCheckable(True)
+            action.setChecked(key == self.vision)
+            action.triggered.connect(lambda _=False, k=key: self.vision_chosen.emit(k))
+            vision.addAction(action)
         if self.games:
             games = menu.addMenu("Jeu")
             for key, name in self.games:
