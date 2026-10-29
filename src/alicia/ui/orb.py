@@ -87,19 +87,14 @@ class Bubble(QWidget):
         self.setObjectName("aliciaBubble")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setStyleSheet(
-            STYLESHEET
-            + f"""
-            QFrame#bubble {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(14, 22, 74, 0.94), stop:1 rgba(5, 9, 38, 0.94));
-                border: 1px solid rgba(255, 61, 139, 0.75);
-                border-radius: 16px;
-            }}
-            QLabel#bubbleAsked {{ color: {GOLD}; font-size: 10pt; }}
-            QLabel#bubbleText {{ color: {TEXT}; font-size: 11.5pt; }}
-            """
-        )
+        # Apparence réglable (mode édition du rond)
+        self.bubble_width = BUBBLE_WIDTH
+        self.font_pt = 11.5
+        self.alpha = 0.94  # opacité du fond
+        self.side = "auto"  # auto | left | right | above | below
+        self.seconds = 4  # temps d'affichage après la fin de la voix
+        self.editing = False
+        self.apply_style()
         frame = QFrame(self)
         frame.setObjectName("bubble")
         inner = QVBoxLayout(frame)
@@ -117,7 +112,7 @@ class Bubble(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
-        self.setFixedWidth(BUBBLE_WIDTH)
+        self.setFixedWidth(self.bubble_width)
         self.setToolTip("Glisser : déplacer · double-clic : fermer · clic droit : recoller au rond")
         self._buffer = ""
         self._anchor = QRect()
@@ -129,6 +124,65 @@ class Bubble(QWidget):
         self._fade = QPropertyAnimation(self, b"windowOpacity", self)
         self._fade.setDuration(260)
         self._fade.finished.connect(self._fade_finished)
+
+    # --- apparence ------------------------------------------------------------------------------
+
+    def apply_style(self) -> None:
+        a = max(0.3, min(1.0, self.alpha))
+        self.setStyleSheet(
+            STYLESHEET
+            + f"""
+            QFrame#bubble {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(14, 22, 74, {a:.2f}), stop:1 rgba(5, 9, 38, {a:.2f}));
+                border: 1px solid rgba(255, 61, 139, 0.75);
+                border-radius: 16px;
+            }}
+            QLabel#bubbleAsked {{ color: {GOLD}; font-size: {self.font_pt * 0.87:.1f}pt; }}
+            QLabel#bubbleText {{ color: {TEXT}; font-size: {self.font_pt:.1f}pt; }}
+            """
+        )
+        self.setFixedWidth(int(self.bubble_width))
+        if self.isVisible():
+            self._relayout()
+
+    def layout_prefs(self) -> dict[str, object]:
+        return {
+            "bubble_width": int(self.bubble_width),
+            "bubble_font": self.font_pt,
+            "bubble_alpha": self.alpha,
+            "bubble_side": self.side,
+            "bubble_seconds": self.seconds,
+        }
+
+    def load_prefs(self, data: dict) -> None:  # type: ignore[type-arg]
+        try:
+            self.bubble_width = max(260, min(800, int(data.get("bubble_width", self.bubble_width))))
+            self.font_pt = max(8.0, min(22.0, float(data.get("bubble_font", self.font_pt))))
+            self.alpha = max(0.3, min(1.0, float(data.get("bubble_alpha", self.alpha))))
+            side = str(data.get("bubble_side", self.side))
+            self.side = side if side in ("auto", "left", "right", "above", "below") else "auto"
+            self.seconds = max(2, min(60, int(data.get("bubble_seconds", self.seconds))))
+        except (TypeError, ValueError):
+            pass
+        self.apply_style()
+
+    def after_voice_ms(self) -> int:
+        return int(self.seconds * 1000)
+
+    def linger_ms(self, text: str) -> int:
+        """Sans voix : le temps de lire (au moins le réglage, au plus 30 s)."""
+        return int(min(30000, max(self.seconds * 1000 + 2000, len(text) * 55)))
+
+    def show_sample(self) -> None:
+        """Mode édition : bulle d'exemple, qui reste affichée."""
+        self.asked.setText("TOI  ›  🎙 Quel objet je prends pour cette manche ?")
+        self.asked.setVisible(True)
+        self.set_answer(
+            "Prends **la Lame du crépuscule** : elle colle à ton héros. "
+            "Garde ensuite ton or pour le bouclier si l'équipe adverse plonge sur toi."
+        )
+        self.keep()
 
     # --- contenu --------------------------------------------------------------------------------
 
@@ -177,6 +231,8 @@ class Bubble(QWidget):
         self._place()
 
     def hide_after(self, ms: int) -> None:
+        if self.editing:
+            return  # en mode édition, la bulle d'exemple reste
         self._hide_timer.start(max(500, ms))
 
     def keep(self) -> None:
@@ -210,7 +266,7 @@ class Bubble(QWidget):
 
     def _relayout(self) -> None:
         # Hauteur calculée à la main : adjustSize() se trompe avec les textes à la ligne.
-        inner = BUBBLE_WIDTH - 32
+        inner = int(self.bubble_width) - 32
         height = 12 + 14 + 2 + max(self.text.heightForWidth(inner), 18)
         if not self.asked.isHidden():
             height += self.asked.heightForWidth(inner) + 6
@@ -255,6 +311,20 @@ class Bubble(QWidget):
         screen = QGuiApplication.screenAt(self._anchor.center()) or QGuiApplication.primaryScreen()
         area = screen.availableGeometry() if screen is not None else QRect(0, 0, 1920, 1080)
         gap = 10
+        if self.offset is None and self.side != "auto":
+            a = self._anchor
+            if self.side == "left":
+                x, y = a.left() - self.width() - gap, a.center().y() - self.height() // 2
+            elif self.side == "right":
+                x, y = a.right() + gap, a.center().y() - self.height() // 2
+            elif self.side == "above":
+                x, y = a.center().x() - self.width() // 2, a.top() - self.height() - gap
+            else:
+                x, y = a.center().x() - self.width() // 2, a.bottom() + gap
+            x = max(area.left() + 4, min(x, area.right() - self.width() - 4))
+            y = max(area.top() + 4, min(y, area.bottom() - self.height() - 4))
+            self.move(x, y)
+            return
         if self.offset is not None:  # place choisie par le joueur, gardée à l'écran
             point = self._anchor.topLeft() + self.offset
             x = max(area.left(), min(point.x(), area.right() - self.width()))
@@ -282,6 +352,7 @@ class OrbWindow(QWidget):
     update_requested = Signal()
     wake_toggled = Signal(bool)
     setup_requested = Signal()
+    layout_changed = Signal()
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -312,6 +383,60 @@ class OrbWindow(QWidget):
         self.wake_on = False
         self._drag: QPoint | None = None
         self._placed = False
+        self.size_px = size
+        self.edit_panel: EditPanel | None = None
+        self._load_prefs()
+
+    # --- taille et préférences d'affichage --------------------------------------------------
+
+    def _read_file(self) -> dict:  # type: ignore[type-arg]
+        if self.position_file is None:
+            return {}
+        try:
+            data = json.loads(self.position_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _load_prefs(self) -> None:
+        data = self._read_file()
+        if "orb_size" in data:
+            try:
+                self.set_orb_size(int(data["orb_size"]), save=False)
+            except (TypeError, ValueError):
+                pass
+        self.bubble.load_prefs(data)
+
+    def set_orb_size(self, size: int, save: bool = True) -> None:
+        size = max(120, min(480, int(size)))
+        center = self.frameGeometry().center()
+        self.size_px = size
+        self.core.setMinimumSize(size, size)
+        self.setFixedSize(size, size)
+        if self._placed:
+            self.move(center - QPoint(size // 2, size // 2))
+        self.bubble.follow(self.frameGeometry())
+        if save:
+            self._save_position()
+
+    def start_editing(self) -> None:
+        """Mode édition : bulle d'exemple et panneau de réglages à côté du rond."""
+        if self.edit_panel is None:
+            self.edit_panel = EditPanel(self)
+        self.bubble.editing = True
+        self.bubble.show_sample()
+        self.edit_panel.load()
+        self.edit_panel.show()
+        self.edit_panel.raise_()
+        self.edit_panel.activateWindow()
+
+    def stop_editing(self) -> None:
+        self.bubble.editing = False
+        self._save_position()
+        if self.edit_panel is not None:
+            self.edit_panel.hide()
+        self.bubble.fade_out()
+        self.layout_changed.emit()
 
     # --- position -------------------------------------------------------------------------------
 
@@ -341,7 +466,8 @@ class OrbWindow(QWidget):
             return
         try:
             self.position_file.parent.mkdir(parents=True, exist_ok=True)
-            data = {"x": self.x(), "y": self.y()}
+            data: dict[str, object] = {"x": self.x(), "y": self.y(), "orb_size": self.size_px}
+            data.update(self.bubble.layout_prefs())
             if self.bubble.offset is not None:
                 data["bubble_dx"] = self.bubble.offset.x()
                 data["bubble_dy"] = self.bubble.offset.y()
@@ -400,6 +526,7 @@ class OrbWindow(QWidget):
         actions = (
             ("Ouvrir le panneau complet", self.open_panel.emit),
             ("Couper la voix", self.stop_voice.emit),
+            ("Mode édition (taille, bulle, texte)…", self.start_editing),
             ("Masquer la bulle", self.bubble.fade_out),
             ("Recoller la bulle au rond", self.bubble.reset_offset),
             (
@@ -433,3 +560,127 @@ class OrbWindow(QWidget):
     def _reset_position(self) -> None:
         self.move(self._default_position())
         self._save_position()
+
+
+class EditPanel(QWidget):
+    """Réglages du mode bulle, appliqués en direct : taille du rond, bulle, texte, position."""
+
+    def __init__(self, orb: OrbWindow) -> None:
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        from PySide6.QtWidgets import QComboBox, QGridLayout, QPushButton, QSlider
+
+        self.orb = orb
+        self.setWindowTitle("ALICIA — mode édition")
+        self.setStyleSheet(STYLESHEET + "QWidget#editPanel { background: #060c30; }")
+        self.setObjectName("editPanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(18, 16, 18, 16)
+        grid.setVerticalSpacing(10)
+        grid.setHorizontalSpacing(14)
+        title = QLabel("MODE ÉDITION")
+        title.setObjectName("sectionTitle")
+        grid.addWidget(title, 0, 0, 1, 3)
+        hint = QLabel("Glisse le rond et la bulle où tu veux. Les réglages s'appliquent en direct.")
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        grid.addWidget(hint, 1, 0, 1, 3)
+
+        def slider(lo: int, hi: int) -> QSlider:
+            widget = QSlider(Qt.Orientation.Horizontal)
+            widget.setRange(lo, hi)
+            return widget
+
+        self.size = slider(120, 480)
+        self.width_ = slider(260, 800)
+        self.font = slider(8, 22)
+        self.alpha = slider(30, 100)
+        self.seconds = slider(2, 30)
+        self.values: dict[QSlider, QLabel] = {}
+        rows = (
+            ("Taille du rond", self.size, " px"),
+            ("Largeur de la bulle", self.width_, " px"),
+            ("Taille du texte", self.font, " pt"),
+            ("Opacité du fond", self.alpha, " %"),
+            ("Reste affichée", self.seconds, " s après la voix"),
+        )
+        for row, (label, widget, unit) in enumerate(rows, start=2):
+            value = QLabel("")
+            value.setObjectName("muted")
+            value.setMinimumWidth(120)
+            self.values[widget] = value
+            widget.valueChanged.connect(lambda v, lab=value, u=unit: lab.setText(f"{v}{u}"))
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(widget, row, 1)
+            grid.addWidget(value, row, 2)
+        self.side = QComboBox()
+        for key, text in (
+            ("auto", "Automatique (côté libre de l'écran)"),
+            ("left", "À gauche du rond"),
+            ("right", "À droite du rond"),
+            ("above", "Au-dessus du rond"),
+            ("below", "En dessous du rond"),
+        ):
+            self.side.addItem(text, key)
+        grid.addWidget(QLabel("Place de la bulle"), 7, 0)
+        grid.addWidget(self.side, 7, 1, 1, 2)
+        reset = QPushButton("Réinitialiser")
+        reset.setObjectName("ghost")
+        reset.clicked.connect(self.reset)
+        done = QPushButton("Terminer")
+        done.setObjectName("primary")
+        done.clicked.connect(self.orb.stop_editing)
+        grid.addWidget(reset, 8, 0)
+        grid.addWidget(done, 8, 2)
+        self.setMinimumWidth(560)
+
+        self.size.valueChanged.connect(lambda v: self.orb.set_orb_size(v, save=False))
+        self.width_.valueChanged.connect(lambda v: self._bubble(bubble_width=v))
+        self.font.valueChanged.connect(lambda v: self._bubble(font_pt=float(v)))
+        self.alpha.valueChanged.connect(lambda v: self._bubble(alpha=v / 100))
+        self.seconds.valueChanged.connect(lambda v: self._bubble(seconds=v))
+        self.side.currentIndexChanged.connect(self._side_changed)
+
+    def _bubble(self, **changes: object) -> None:
+        bubble = self.orb.bubble
+        for key, value in changes.items():
+            setattr(bubble, key, value)
+        bubble.apply_style()
+        bubble.show_sample()
+
+    def _side_changed(self) -> None:
+        self.orb.bubble.side = self.side.currentData()
+        self.orb.bubble.offset = None  # une place choisie ici remplace celle glissée à la main
+        self.orb.bubble.show_sample()
+
+    def load(self) -> None:
+        bubble = self.orb.bubble
+        self.size.setValue(self.orb.size_px)
+        self.width_.setValue(int(bubble.bubble_width))
+        self.font.setValue(int(round(bubble.font_pt)))
+        self.alpha.setValue(int(bubble.alpha * 100))
+        self.seconds.setValue(int(bubble.seconds))
+        self.side.setCurrentIndex(max(0, self.side.findData(bubble.side)))
+        for widget in self.values:
+            widget.valueChanged.emit(widget.value())
+        # À côté du rond, sans le cacher
+        screen = QGuiApplication.screenAt(self.orb.frameGeometry().center())
+        area = screen.availableGeometry() if screen is not None else QRect(0, 0, 1920, 1080)
+        self.adjustSize()
+        x = max(area.left() + 8, self.orb.x() - self.width() - 20)
+        y = min(self.orb.y() + self.orb.height() + 20, area.bottom() - self.height() - 8)
+        self.move(x, max(area.top() + 8, y))
+
+    def reset(self) -> None:
+        self.orb.bubble.offset = None
+        self.size.setValue(210)
+        self.width_.setValue(BUBBLE_WIDTH)
+        self.font.setValue(12)
+        self.alpha.setValue(94)
+        self.seconds.setValue(4)
+        self.side.setCurrentIndex(0)
+
+    def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self.orb.bubble.editing:
+            self.orb.stop_editing()
+        super().closeEvent(event)

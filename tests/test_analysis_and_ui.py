@@ -532,3 +532,33 @@ def test_voice_stop_silences_and_cancels(qt_app, settings):
     assert not window.busy
     assert "j'arrête" in window.status.text()
     window.close()
+
+
+def test_orb_edit_mode_changes_and_remembers_the_layout(qt_app, tmp_path):
+    from alicia.ui.orb import OrbWindow
+
+    position = tmp_path / "orb.json"
+    orb = OrbWindow(210, position)
+    orb.show()
+    orb.start_editing()
+    panel = orb.edit_panel
+    assert orb.bubble.isVisible() and panel.isVisible()
+    panel.size.setValue(300)
+    panel.width_.setValue(600)
+    panel.font.setValue(16)
+    panel.alpha.setValue(70)
+    panel.seconds.setValue(10)
+    panel.side.setCurrentIndex(panel.side.findData("below"))
+    assert orb.width() == 300 and orb.bubble.width() == 600
+    assert orb.bubble.y() > orb.y() + orb.height() - 1  # sous le rond
+    orb.bubble.hide_after(100)
+    assert not orb.bubble._hide_timer.isActive()  # la bulle d'exemple reste en édition
+    orb.stop_editing()
+    assert not panel.isVisible() and not orb.bubble.editing
+    orb.close()
+
+    again = OrbWindow(210, position)
+    assert again.size_px == 300 and again.bubble.bubble_width == 600
+    assert again.bubble.font_pt == 16 and again.bubble.side == "below"
+    assert again.bubble.after_voice_ms() == 10000
+    again.close()

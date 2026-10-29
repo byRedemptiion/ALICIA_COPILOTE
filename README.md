@@ -43,6 +43,7 @@ Au lancement, **seul le rond d'ALICIA s'affiche**, en haut à droite, toujours a
 
 - **Glisser** le rond pour le déplacer (la position est retenue) ; **double-clic** = panneau complet ; **clic droit** = menu (couper la voix, quitter…).
 - Dans le panneau complet, le bouton **◉ Mode bulle** y revient.
+- **Clic droit sur le rond → Mode édition** : taille du rond, largeur de la bulle, taille du texte, opacité, durée d'affichage et place de la bulle (gauche, droite, dessus, dessous), avec une bulle d'exemple et un aperçu en direct.
 - Pour voir le rond par-dessus le jeu, règle le jeu en **plein écran fenêtré** (« sans bordure »). En plein écran exclusif, le jeu passe devant : F9, F10 et la voix marchent quand même.
 - Pour démarrer sur le panneau complet : `mode = "full"` dans la section `[ui]` de `alicia.toml`.
 

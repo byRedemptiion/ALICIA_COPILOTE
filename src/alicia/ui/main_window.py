@@ -1013,17 +1013,13 @@ class MainWindow(QMainWindow):
     def _bubble_active(self) -> bool:
         return self.orb.isVisible()
 
-    def _bubble_linger(self, text: str) -> int:
-        """Durée d'affichage après la fin de la réponse (lecture à l'écran)."""
-        return int(min(20000, max(5000, len(text) * 55)))
-
     def _bubble_finish(self, text: str, spoken: bool) -> None:
         """Réponse finale : la bulle reste pendant la voix, puis s'efface."""
         if not self._bubble_active():
             return
         self.bubble.set_answer(text)
         if not spoken:
-            self.bubble.hide_after(self._bubble_linger(text))
+            self.bubble.hide_after(self.bubble.linger_ms(text))
 
     def toggle_logs(self) -> None:
         visible = not self.logs_panel.isVisible()
@@ -1477,7 +1473,7 @@ class MainWindow(QMainWindow):
                 self._core_settle()
             # Elle a fini de parler : la bulle s'efface peu après (sauf nouvelle question).
             if self._bubble_active() and not self.busy and self.bubble.isVisible():
-                self.bubble.hide_after(4000)
+                self.bubble.hide_after(self.bubble.after_voice_ms())
 
     def _show_sources(self, result) -> None:  # type: ignore[no-untyped-def]
         notes = []
