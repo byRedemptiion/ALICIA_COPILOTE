@@ -1,4 +1,4 @@
-# Architecture d'Alice (V0.1)
+# Architecture d'Alicia (V0.1)
 
 ## Flux d'une analyse
 
@@ -18,9 +18,9 @@ UI (PySide6) ──question──▶ AnalysisService ──capture()──▶ Ca
 
 ## Règles de conception
 
-- Le cœur (`alice/core`) n'importe ni Qt ni SDK de fournisseur. Win32 reste confiné à `capture/win32.py` et `capture/backends.py`.
+- Le cœur (`alicia/core`) n'importe ni Qt ni SDK de fournisseur. Win32 reste confiné à `capture/win32.py` et `capture/backends.py`.
 - Les fournisseurs d'IA passent par l'API REST avec `httpx`, sans SDK. Ajouter un fournisseur revient à écrire une sous-classe de `HttpVisionModel` (`_request`, `_parse_lines`, `_http_error`) et une ligne dans `factory.py`.
-- Les erreurs prévues sont des `AliceError` qui portent un message lisible pour l'UI (`user_message`) et un détail pour les logs (`detail`). Les erreurs de fournisseur sont normalisées : `auth`, `rate_limit`, `timeout`, `unavailable`, `bad_request`, `cancelled`.
+- Les erreurs prévues sont des `AliciaError` qui portent un message lisible pour l'UI (`user_message`) et un détail pour les logs (`detail`). Les erreurs de fournisseur sont normalisées : `auth`, `rate_limit`, `timeout`, `unavailable`, `bad_request`, `cancelled`.
 - Aucun repli silencieux : un seul nouvel essai automatique, uniquement sur `timeout`/`unavailable` et avant le premier mot. Il est journalisé.
 - Les secrets ne viennent que de l'environnement ou du `.env`, et sont encapsulés dans `Secret`, qui ne s'affiche jamais.
 - Les résultats périmés sont ignorés : chaque tâche porte un numéro de génération, et Arrêter/Annuler l'invalide.
@@ -38,10 +38,10 @@ En V0.1, la capture est faite à la demande : environ 50 à 150 ms pour démarre
 ## Arborescence
 
 ```
-src/alice/
-  __main__.py          point d'entrée (alice), --demo, --debug, --smoke-test
+src/alicia/
+  __main__.py          point d'entrée (alicia), --demo, --debug, --smoke-test
   app.py               composition des services
-  diag.py              alice-diag : list-windows, capture, ask, models
+  diag.py              alicia-diag : list-windows, capture, ask, models
   default.toml         réglages par défaut
   core/
     config.py          Settings (TOML + .env + environnement)

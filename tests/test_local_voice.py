@@ -4,15 +4,15 @@ import wave
 import numpy as np
 import pytest
 
-from alice.app import build_services
-from alice.core.ai.base import PreparedAudio
-from alice.core.ai.providers.fake import FakeModel
-from alice.core.audio.models import kokoro_paths
-from alice.core.audio.speaker import kokoro_synthesizer, make_synthesizer
-from alice.core.audio.stt import _HALLUCINATIONS, wav_to_float
-from alice.core.capture.backends import DEMO_WINDOW
-from alice.core.config import VoiceSettings, load_settings
-from alice.core.errors import AliceError, ConfigError
+from alicia.app import build_services
+from alicia.core.ai.base import PreparedAudio
+from alicia.core.ai.providers.fake import FakeModel
+from alicia.core.audio.models import kokoro_paths
+from alicia.core.audio.speaker import kokoro_synthesizer, make_synthesizer
+from alicia.core.audio.stt import _HALLUCINATIONS, wav_to_float
+from alicia.core.capture.backends import DEMO_WINDOW
+from alicia.core.config import VoiceSettings, load_settings
+from alicia.core.errors import AliciaError, ConfigError
 
 
 def wav(seconds=1.0, rate=16000):
@@ -59,7 +59,7 @@ def test_local_transcript_is_sent_as_text_not_audio(settings):
 def test_empty_transcript_stops_before_calling_ai(settings):
     model = FakeModel()
     services = build_services(settings, demo=True, model=model, transcriber=FakeTranscriber(""))
-    with pytest.raises(AliceError, match="rien compris"):
+    with pytest.raises(AliciaError, match="rien compris"):
         services.analysis.analyze(DEMO_WINDOW, "", audio=wav())
     assert model.requests == []
 
@@ -77,23 +77,23 @@ def test_wav_is_converted_for_whisper():
 
 
 def test_voice_engine_settings_are_validated(tmp_path):
-    (tmp_path / "alice.toml").write_text('[voice]\ntts_engine = "robot"\n')
+    (tmp_path / "alicia.toml").write_text('[voice]\ntts_engine = "robot"\n')
     with pytest.raises(ConfigError):
         load_settings(cwd=tmp_path, environ={}, user_dir=tmp_path / "u")
-    (tmp_path / "alice.toml").write_text('[voice]\ntts_engine = "kokoro"\nstt = "gemini"\n')
+    (tmp_path / "alicia.toml").write_text('[voice]\ntts_engine = "kokoro"\nstt = "gemini"\n')
     voice = load_settings(cwd=tmp_path, environ={}, user_dir=tmp_path / "u").voice
     assert (voice.tts_engine, voice.stt, voice.kokoro_voice) == ("kokoro", "gemini", "ff_siwis")
 
 
 def test_kokoro_missing_model_gives_install_hint(monkeypatch, tmp_path):
-    monkeypatch.setattr("alice.core.audio.models.models_dir", lambda: tmp_path / "none")
+    monkeypatch.setattr("alicia.core.audio.models.models_dir", lambda: tmp_path / "none")
     synth = make_synthesizer(VoiceSettings(tts_engine="kokoro"))
-    with pytest.raises(AliceError, match="prepare-voice"):
+    with pytest.raises(AliciaError, match="prepare-voice"):
         synth("Bonjour à toi.")
 
 
 @pytest.mark.skipif(not all(p.is_file() for p in kokoro_paths()), reason="modèle Kokoro absent")
 def test_kokoro_speaks_french_for_real():
-    samples = kokoro_synthesizer("ff_siwis", 1.05)("Bonjour, je suis Alice.")
+    samples = kokoro_synthesizer("ff_siwis", 1.05)("Bonjour, je suis Alicia.")
     assert samples.dtype == np.int16 and len(samples) > 24000 * 0.8
     assert np.abs(samples).max() > 1000

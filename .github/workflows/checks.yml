@@ -22,7 +22,7 @@ jobs:
       - run: uv sync --python 3.12 --frozen --extra dev
       - run: uv run --frozen ruff check src tests
       - run: uv run --frozen pytest -q
-      - run: uv run --frozen alice --smoke-test
+      - run: uv run --frozen alicia --smoke-test
       - name: Windows capture module loads
         if: runner.os == 'Windows'
         run: uv run --frozen python -c "import windows_capture; print('ok')"

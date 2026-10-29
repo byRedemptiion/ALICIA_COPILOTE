@@ -85,7 +85,7 @@ wheels = [
 ]
 
 [[package]]
-name = "alice-copilot"
+name = "alicia-copilot"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [

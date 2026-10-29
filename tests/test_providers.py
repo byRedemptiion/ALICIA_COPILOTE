@@ -5,18 +5,18 @@ import httpx
 import pytest
 from PIL import Image
 
-from alice.core.ai.base import AnalysisRequest, PreparedImage, Turn
-from alice.core.ai.image_prep import prepare_image
-from alice.core.ai.providers.gemini import GeminiModel
-from alice.core.ai.providers.ollama import OllamaModel
-from alice.core.config import GeminiSettings, OllamaSettings, Secret
-from alice.core.errors import ProviderError, ProviderErrorKind
+from alicia.core.ai.base import AnalysisRequest, PreparedImage, Turn
+from alicia.core.ai.image_prep import prepare_image
+from alicia.core.ai.providers.gemini import GeminiModel
+from alicia.core.ai.providers.ollama import OllamaModel
+from alicia.core.config import GeminiSettings, OllamaSettings, Secret
+from alicia.core.errors import ProviderError, ProviderErrorKind
 
 IMAGE = PreparedImage(b"\xff\xd8fakejpeg", "image/jpeg", 64, 32)
 REQUEST = AnalysisRequest(
     question="Quel objet ?",
     images=(IMAGE,),
-    system_prompt="Tu es Alice.",
+    system_prompt="Tu es Alicia.",
     history=(Turn("Bonjour ?", "Salut !"),),
     max_output_tokens=200,
 )
@@ -66,7 +66,7 @@ def test_gemini_streams_and_builds_expected_request():
     assert seen["url"].endswith("/models/gemini-test:streamGenerateContent?alt=sse")
     assert seen["key"] == "test-key"
     body = seen["body"]
-    assert body["systemInstruction"]["parts"][0]["text"] == "Tu es Alice."
+    assert body["systemInstruction"]["parts"][0]["text"] == "Tu es Alicia."
     assert [c["role"] for c in body["contents"]] == ["user", "model", "user"]
     last = body["contents"][-1]["parts"]
     assert last[0]["inline_data"]["mime_type"] == "image/jpeg"
@@ -323,7 +323,7 @@ def test_overloaded_model_is_skipped_for_a_while():
 
 
 def test_gemini_sends_search_tool_audio_and_parses_sources():
-    from alice.core.ai.base import PreparedAudio
+    from alicia.core.ai.base import PreparedAudio
 
     seen = {}
 
@@ -368,7 +368,7 @@ def test_search_refused_answers_without_and_says_so():
 
 
 def test_ollama_refuses_voice_questions_clearly():
-    from alice.core.ai.base import PreparedAudio
+    from alicia.core.ai.base import PreparedAudio
 
     request = AnalysisRequest(
         question="q",
@@ -413,7 +413,7 @@ def test_daily_quota_is_explained_and_model_skipped_until_reset():
 
 
 def test_per_minute_quota_gives_retry_delay():
-    from alice.core.ai.providers.gemini import quota_details
+    from alicia.core.ai.providers.gemini import quota_details
 
     body = json.dumps(
         {

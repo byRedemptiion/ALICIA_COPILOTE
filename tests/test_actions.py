@@ -1,12 +1,12 @@
 import pytest
 
-from alice.app import build_services
-from alice.core.actions.controller import ActionController
-from alice.core.actions.intents import parse_confirmation, parse_intent
-from alice.core.ai.providers.fake import FakeModel
-from alice.core.capture.backends import DEMO_WINDOW
-from alice.core.config import DEFAULT_APPS, ActionSettings, load_settings
-from alice.core.errors import AliceError
+from alicia.app import build_services
+from alicia.core.actions.controller import ActionController
+from alicia.core.actions.intents import parse_confirmation, parse_intent
+from alicia.core.ai.providers.fake import FakeModel
+from alicia.core.capture.backends import DEMO_WINDOW
+from alicia.core.config import DEFAULT_APPS, ActionSettings, load_settings
+from alicia.core.errors import AliciaError
 
 
 class FakeSystem:
@@ -55,7 +55,7 @@ class Clock:
     ("phrase", "name", "params"),
     [
         ("Éteins le PC", "shutdown", {}),
-        ("Alice, tu peux éteindre l'ordi ?", "shutdown", {}),
+        ("Alicia, tu peux éteindre l'ordi ?", "shutdown", {}),
         ("Redémarre le PC", "restart", {}),
         ("Mets le PC en veille", "sleep", {}),
         ("Verrouille le PC", "lock", {}),
@@ -148,7 +148,7 @@ def test_timer_fires_reminder(monkeypatch):
         def cancel(self):
             pass
 
-    monkeypatch.setattr("alice.core.actions.controller.threading.Timer", InstantTimer)
+    monkeypatch.setattr("alicia.core.actions.controller.threading.Timer", InstantTimer)
     reply = actions.route("Rappelle-moi dans 20 minutes de manger")
     assert "20 minutes" in reply.text and started == [1200]
     assert fired == ["Rappel : manger."]
@@ -158,7 +158,7 @@ def test_windows_error_is_reported_not_raised():
     actions, system = controller()
 
     def broken(percent):
-        raise AliceError("Volume indisponible.", detail="COM error")
+        raise AliciaError("Volume indisponible.", detail="COM error")
 
     system.set_volume = broken
     assert actions.route("Coupe le son").text == "Son coupé."
@@ -176,7 +176,7 @@ def test_actions_skip_capture_and_ai(tmp_path):
 
 
 def test_custom_apps_from_config(tmp_path):
-    (tmp_path / "alice.toml").write_text(
+    (tmp_path / "alicia.toml").write_text(
         '[actions.apps]\nobs = { launch = "C:/OBS/obs64.exe", process = "obs64.exe" }\n',
         encoding="utf-8",
     )

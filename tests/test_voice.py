@@ -6,12 +6,12 @@ import wave
 import numpy as np
 import pytest
 
-from alice.core.ai.prompts import TranscriptSplitter, split_transcript
-from alice.core.audio.devices import AudioError
-from alice.core.audio.recorder import to_prepared_audio
-from alice.core.audio.speaker import Speaker
-from alice.core.audio.text import clean_for_speech, split_sentences
-from alice.core.config import VoiceSettings
+from alicia.core.ai.prompts import TranscriptSplitter, split_transcript
+from alicia.core.audio.devices import AudioError
+from alicia.core.audio.recorder import to_prepared_audio
+from alicia.core.audio.speaker import Speaker
+from alicia.core.audio.text import clean_for_speech, split_sentences
+from alicia.core.config import VoiceSettings
 
 
 def test_clean_for_speech_removes_markdown_links_and_emojis():

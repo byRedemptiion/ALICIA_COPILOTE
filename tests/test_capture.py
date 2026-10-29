@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from alice.core.capture.backends import DEMO_WINDOW, DemoBackend
-from alice.core.capture.models import Rect, WindowInfo, image_from_bgra, is_black
-from alice.core.capture.service import CaptureService
-from alice.core.errors import CaptureError
+from alicia.core.capture.backends import DEMO_WINDOW, DemoBackend
+from alicia.core.capture.models import Rect, WindowInfo, image_from_bgra, is_black
+from alicia.core.capture.service import CaptureService
+from alicia.core.errors import CaptureError
 
 
 def bgra(color, size=(40, 60)):
@@ -88,8 +88,8 @@ def test_fullscreen_detection():
 def test_windows_capture_refuses_other_platforms(monkeypatch):
     import sys
 
-    from alice.core.capture.win32 import Win32
-    from alice.core.errors import UnsupportedPlatformError
+    from alicia.core.capture.win32 import Win32
+    from alicia.core.errors import UnsupportedPlatformError
 
     if sys.platform == "win32":
         pytest.skip("test des plateformes non Windows")

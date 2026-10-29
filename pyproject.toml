@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "alice-copilot"
+name = "alicia-copilot"
 version = "0.3.0"
-description = "Alice : copilote IA qui observe une fenêtre de jeu sous Windows et conseille le joueur"
+description = "Alicia : copilote IA qui observe une fenêtre de jeu sous Windows et conseille le joueur"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
@@ -27,11 +27,11 @@ dependencies = [
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 
 [project.scripts]
-alice = "alice.__main__:main"
-alice-diag = "alice.diag:main"
+alicia = "alicia.__main__:main"
+alicia-diag = "alicia.diag:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/alice"]
+packages = ["src/alicia"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

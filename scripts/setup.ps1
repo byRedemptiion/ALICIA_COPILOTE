@@ -1,6 +1,6 @@
-# Installation d'Alice sous Windows : uv, Python 3.12, dépendances, clé Gemini.
-# Lancé par Installer_Alice.bat. Ne modifie aucune politique PowerShell globale.
-# -Update : mise à jour des dépendances seulement (lancée par Lancer_Alice.bat).
+# Installation d'Alicia sous Windows : uv, Python 3.12, dépendances, clé Gemini.
+# Lancé par Installer_Alicia.bat. Ne modifie aucune politique PowerShell globale.
+# -Update : mise à jour des dépendances seulement (lancée par Lancer_Alicia.bat).
 param([switch]$Update)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -22,8 +22,8 @@ uv --version
 Step "Installation de Python 3.12 et des dépendances (première fois : quelques minutes)"
 uv sync --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE)." }
-Step "Modèles vocaux locaux (Whisper pour comprendre ta voix, Kokoro pour la voix d'Alice)"
-uv run --frozen alice-diag prepare-voice
+Step "Modèles vocaux locaux (Whisper pour comprendre ta voix, Kokoro pour la voix d'Alicia)"
+uv run --frozen alicia-diag prepare-voice
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Les modèles vocaux n'ont pas pu être téléchargés : la voix locale sera indisponible." -ForegroundColor Yellow
 }
@@ -54,12 +54,12 @@ if ($envText -match "(?m)^GEMINI_API_KEY=\S+") {
 
 if ((Get-Content ".env" -Raw) -match "(?m)^GEMINI_API_KEY=\S+") {
     Step "Test de la clé : modèles Gemini accessibles"
-    uv run --frozen alice-diag models
+    uv run --frozen alicia-diag models
     if ($LASTEXITCODE -ne 0) { Write-Host "La clé n'a pas été acceptée : voir le message ci-dessus." -ForegroundColor Yellow }
 }
 
 Step "Test de l'interface (hors écran, IA factice)"
-uv run --frozen alice --smoke-test
+uv run --frozen alicia --smoke-test
 if ($LASTEXITCODE -ne 0) { throw "Le test de l'interface a échoué." }
 
-Write-Host "`nInstallation terminée. Lance Alice avec Lancer_Alice.bat" -ForegroundColor Green
+Write-Host "`nInstallation terminée. Lance Alicia avec Lancer_Alicia.bat" -ForegroundColor Green

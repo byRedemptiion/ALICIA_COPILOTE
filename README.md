@@ -1,6 +1,6 @@
-# Alice — copilote IA pour jeux vidéo (Windows)
+# Alicia — copilote IA pour jeux vidéo (Windows)
 
-Alice regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle analyse la capture et te répond en quelques secondes. **Elle observe et conseille seulement** : aucun clic, aucune touche, aucune injection dans le jeu, aucune lecture de sa mémoire.
+Alicia regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle analyse la capture et te répond en quelques secondes. **Elle observe et conseille seulement** : aucun clic, aucune touche, aucune injection dans le jeu, aucune lecture de sa mémoire.
 
 **Version 0.3** : capture d'une fenêtre (même en plein écran), question écrite (F9) ou orale (F10 maintenu), recherche web, réponse affichée mot par mot et lue à voix haute, logs détaillés. La capture automatique, la mémoire de session et les interventions spontanées arrivent dans les versions suivantes ([feuille de route](docs/architecture.md#feuille-de-route)).
 
@@ -8,35 +8,35 @@ Alice regarde la fenêtre de ton jeu, et quand tu lui poses une question, elle a
 
 1. Récupérer le projet : `git clone https://github.com/byRedemptiion/ALICIA_COPILOTE` (ou **Code → Download ZIP** sur GitHub, puis décompresser).
 2. Créer une **clé Gemini gratuite** : <https://aistudio.google.com> → **Get API key** → **Create API key**. Aucune carte bancaire n'est demandée.
-3. Double-cliquer sur **`Installer_Alice.bat`**. Le script :
+3. Double-cliquer sur **`Installer_Alicia.bat`**. Le script :
    - installe uv (gestionnaire Python), Python 3.12 et les dépendances ;
    - te demande la clé et l'enregistre dans `.env` (fichier exclu de Git) ;
    - vérifie la clé et teste l'interface.
 
 ## Lancer
 
-Double-cliquer sur **`Lancer_Alice.bat`**.
+Double-cliquer sur **`Lancer_Alicia.bat`**.
 
 1. Dans **Fenêtre du jeu**, choisir le jeu (ex. `Overwatch — Overwatch.exe [plein écran]`), puis **Démarrer**.
-2. Taper une question, puis **Entrée** ou **Analyser** : Alice capture l'écran et répond. **Capturer** permet de vérifier l'aperçu sans appeler l'IA.
+2. Taper une question, puis **Entrée** ou **Analyser** : Alicia capture l'écran et répond. **Capturer** permet de vérifier l'aperçu sans appeler l'IA.
 3. Le **Journal** en bas affiche chaque étape : backend de capture, durée, temps avant le premier mot, erreurs.
 
-Pour essayer sans jeu : `Lancer_Alice.bat --demo` (inventaire fictif, clairement signalé).
+Pour essayer sans jeu : `Lancer_Alicia.bat --demo` (inventaire fictif, clairement signalé).
 
-### Parler à Alice : F10 (maintenir)
+### Parler à Alicia : F10 (maintenir)
 
-**Maintiens F10 en jeu, pose ta question à voix haute, relâche.** Alice capture l'écran, envoie ta voix et l'image à Gemini, affiche ta question transcrite puis **répond à voix haute**. Pour la couper, réappuie sur F10 ou clique sur « Couper la voix ».
+**Maintiens F10 en jeu, pose ta question à voix haute, relâche.** Alicia capture l'écran, envoie ta voix et l'image à Gemini, affiche ta question transcrite puis **répond à voix haute**. Pour la couper, réappuie sur F10 ou clique sur « Couper la voix ».
 
 - **Ta voix est comprise sur ton PC** par faster-whisper (modèle `large-v3-turbo`, sur le processeur : gratuit, privé, n'utilise pas la carte graphique du jeu). Plus rapide mais moins précis : `[voice] whisper_model = "small"`. Pour revenir à l'envoi direct de l'audio à Gemini : `[voice] stt = "gemini"`.
-- **Deux voix pour Alice, au choix dans le menu à côté de « Réponse vocale »** : Edge (voix Microsoft `fr-FR-DeniseNeural`, gratuite, en ligne) ou Kokoro (voix française `ff_siwis`, locale et hors ligne, calculée sur le processeur). Autres voix Edge : `uv run alice-diag voices`.
-- Les modèles locaux (Whisper ≈ 800 Mo, Kokoro ≈ 340 Mo) sont téléchargés une seule fois à l'installation, dans `%LOCALAPPDATA%\Alice\models`.
-- Micro ou haut-parleur précis : `uv run alice-diag devices`, puis `[voice] input_device` / `output_device` (une partie du nom suffit).
-- Tester sans jeu : `uv run alice-diag record` (micro), `uv run alice-diag transcribe micro.wav` (compréhension) et `uv run alice-diag say --engine kokoro` (voix).
+- **Deux voix pour Alicia, au choix dans le menu à côté de « Réponse vocale »** : Edge (voix Microsoft `fr-FR-DeniseNeural`, gratuite, en ligne) ou Kokoro (voix française `ff_siwis`, locale et hors ligne, calculée sur le processeur). Autres voix Edge : `uv run alicia-diag voices`.
+- Les modèles locaux (Whisper ≈ 800 Mo, Kokoro ≈ 340 Mo) sont téléchargés une seule fois à l'installation, dans `%LOCALAPPDATA%\Alicia\models`.
+- Micro ou haut-parleur précis : `uv run alicia-diag devices`, puis `[voice] input_device` / `output_device` (une partie du nom suffit).
+- Tester sans jeu : `uv run alicia-diag record` (micro), `uv run alicia-diag transcribe micro.wav` (compréhension) et `uv run alicia-diag say --engine kokoro` (voix).
 - Le micro n'est ouvert que pendant que tu maintiens F10 : rien n'est écouté en dehors, et aucun enregistrement n'est gardé sur le disque.
 
 ### Actions sur le PC (comme un Jarvis)
 
-Avec **F10** ou à l'écrit, Alice exécute certaines demandes **sur Windows, jamais dans le jeu** :
+Avec **F10** ou à l'écrit, Alicia exécute certaines demandes **sur Windows, jamais dans le jeu** :
 
 | Exemple | Action | Sécurité |
 | --- | --- | --- |
@@ -46,9 +46,9 @@ Avec **F10** ou à l'écrit, Alice exécute certaines demandes **sur Windows, ja
 | « Verrouille le PC », « mets le PC en veille », « ferme Discord » | Session, veille, fermeture d'appli | **confirmation** (« oui » / « non ») |
 | « Éteins le PC », « redémarre le PC » | Extinction / redémarrage | **confirmation + 60 s**, « annule » l'arrête |
 
-- Les demandes sont reconnues **sur ton PC, sans IA** (instantané, gratuit, hors ligne). Seules les actions de cette liste existent : Alice ne peut jamais lancer une commande libre.
+- Les demandes sont reconnues **sur ton PC, sans IA** (instantané, gratuit, hors ligne). Seules les actions de cette liste existent : Alicia ne peut jamais lancer une commande libre.
 - Un « non » l'emporte toujours, et une confirmation expire au bout de 20 s.
-- Ajouter une appli dans `alice.toml` :
+- Ajouter une appli dans `alicia.toml` :
 
 ```toml
 [actions.apps]
@@ -61,13 +61,13 @@ La case **Recherche web** laisse Gemini faire une recherche Google avant de rép
 
 ### Jouer en plein écran : le raccourci F9
 
-En plein écran, un jeu se réduit souvent dès que tu cliques sur une autre fenêtre : Alice ne peut alors plus le capturer. Reste dans le jeu et **appuie sur F9** : Alice capture la fenêtre active et lance l'analyse, avec la question tapée dans Alice ou, à défaut, une question générale. Quand la réponse est prête, Alice clignote dans la barre des tâches. Le raccourci se change dans `alice.toml` (`[hotkeys] analyze = "ctrl+F9"`) ; tant qu'Alice est ouverte, le jeu ne reçoit plus cette touche.
+En plein écran, un jeu se réduit souvent dès que tu cliques sur une autre fenêtre : Alicia ne peut alors plus le capturer. Reste dans le jeu et **appuie sur F9** : Alicia capture la fenêtre active et lance l'analyse, avec la question tapée dans Alicia ou, à défaut, une question générale. Quand la réponse est prête, Alicia clignote dans la barre des tâches. Le raccourci se change dans `alicia.toml` (`[hotkeys] analyze = "ctrl+F9"`) ; tant qu'Alicia est ouverte, le jeu ne reçoit plus cette touche.
 
 ### Overwatch et jeux en plein écran
 
-- Alice utilise la capture Windows Graphics Capture : elle fonctionne en fenêtré, en plein écran fenêtré et, sous Windows 11, en général aussi en plein écran.
-- Si la fenêtre sort noire en plein écran, Alice capture **l'écran entier où se trouve le jeu** et l'indique sous l'aperçu (« Repli après : … »).
-- Alice n'utilise que des API publiques de Windows, comme OBS ou Discord. Blizzard peut cependant considérer des conseils en direct en partie classée comme une aide extérieure : teste plutôt en **Stadium** (choix d'objets), en entraînement ou en partie personnalisée.
+- Alicia utilise la capture Windows Graphics Capture : elle fonctionne en fenêtré, en plein écran fenêtré et, sous Windows 11, en général aussi en plein écran.
+- Si la fenêtre sort noire en plein écran, Alicia capture **l'écran entier où se trouve le jeu** et l'indique sous l'aperçu (« Repli après : … »).
+- Alicia n'utilise que des API publiques de Windows, comme OBS ou Discord. Blizzard peut cependant considérer des conseils en direct en partie classée comme une aide extérieure : teste plutôt en **Stadium** (choix d'objets), en entraînement ou en partie personnalisée.
 
 ## Fournisseur d'IA
 
@@ -77,35 +77,35 @@ En plein écran, un jeu se réduit souvent dès que tu cliques sur une autre fen
 | Ollama (local) | `ALICE_AI_PROVIDER=ollama` + [Ollama](https://ollama.com) + `ollama pull qwen2.5vl:7b` | gratuit | hors ligne | partage le GPU avec le jeu, plus lent |
 | Factice | `ALICE_AI_PROVIDER=fake` | — | tests sans réseau | ne regarde pas l'image |
 
-Pour aller plus vite : créer un fichier `alice.toml` à la racine avec, par exemple :
+Pour aller plus vite : créer un fichier `alicia.toml` à la racine avec, par exemple :
 
 ```toml
 [ai.gemini]
 model = "gemini-flash-lite-latest"   # plus rapide, un peu moins précis
 ```
 
-`alice-diag models` liste les modèles accessibles avec ta clé. Tous les réglages et leur valeur par défaut sont dans [`src/alice/default.toml`](src/alice/default.toml).
+`alicia-diag models` liste les modèles accessibles avec ta clé. Tous les réglages et leur valeur par défaut sont dans [`src/alicia/default.toml`](src/alicia/default.toml).
 
 ## Diagnostic
 
-Les logs sont dans `%LOCALAPPDATA%\Alice\logs\alice.log` (bouton **Ouvrir le dossier des logs**). Coche **Logs détaillés** ou lance `Lancer_Alice.bat --debug` pour plus de détails. Les clés ne sont jamais écrites dans les logs ; les questions et réponses ne le sont qu'en mode détaillé.
+Les logs sont dans `%LOCALAPPDATA%\Alicia\logs\alicia.log` (bouton **Ouvrir le dossier des logs**). Coche **Logs détaillés** ou lance `Lancer_Alicia.bat --debug` pour plus de détails. Les clés ne sont jamais écrites dans les logs ; les questions et réponses ne le sont qu'en mode détaillé.
 
 Outils en ligne de commande (dans le dossier du projet) :
 
 ```powershell
-uv run alice-diag list-windows                      # fenêtres vues par Alice
-uv run alice-diag capture overwatch --out ow.png    # capture seule, sans IA
-uv run alice-diag capture overwatch --backend printwindow
-uv run alice-diag ask ow.png "Quel objet est le meilleur ?"
-uv run alice-diag models                            # modèles Gemini disponibles
+uv run alicia-diag list-windows                      # fenêtres vues par Alicia
+uv run alicia-diag capture overwatch --out ow.png    # capture seule, sans IA
+uv run alicia-diag capture overwatch --backend printwindow
+uv run alicia-diag ask ow.png "Quel objet est le meilleur ?"
+uv run alicia-diag models                            # modèles Gemini disponibles
 ```
 
 | Problème | Que faire |
 | --- | --- |
 | « Clé Gemini manquante / refusée » | Vérifier la ligne `GEMINI_API_KEY=` dans `.env`, puis relancer. |
 | « Quota Gemini atteint » | Attendre une minute (limite de l'offre gratuite). |
-| Capture noire ou refusée | Essayer le mode plein écran fenêtré du jeu ; envoyer `alice-diag capture … --debug` et le log. |
-| « Modèle introuvable » | `alice-diag models`, puis indiquer un modèle de la liste dans `alice.toml`. |
+| Capture noire ou refusée | Essayer le mode plein écran fenêtré du jeu ; envoyer `alicia-diag capture … --debug` et le log. |
+| « Modèle introuvable » | `alicia-diag models`, puis indiquer un modèle de la liste dans `alicia.toml`. |
 
 ## Développer
 
@@ -113,7 +113,7 @@ uv run alice-diag models                            # modèles Gemini disponible
 uv sync --python 3.12 --extra dev
 uv run pytest -q
 uv run ruff check src tests
-uv run alice --smoke-test     # parcours complet hors écran, IA factice
+uv run alicia --smoke-test     # parcours complet hors écran, IA factice
 ```
 
 Architecture et choix techniques : [docs/architecture.md](docs/architecture.md). Cahier des charges : [docs/cahier-des-charges.md](docs/cahier-des-charges.md).
