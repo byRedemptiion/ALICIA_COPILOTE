@@ -66,7 +66,12 @@ class HttpVisionModel:
         try:
             return self._run(request, on_delta, cancel, emitted)
         except ProviderError as exc:
-            if not exc.retryable or emitted[0] or (cancel and cancel.is_set()):
+            if (
+                not exc.retryable
+                or emitted[0]
+                or getattr(exc, "no_retry", False)
+                or (cancel and cancel.is_set())
+            ):
                 raise
             log.warning("Appel %s échoué (%s), unique nouvel essai", self.provider, exc.kind)
             return self._run(request, on_delta, cancel, emitted)
@@ -83,12 +88,28 @@ class HttpVisionModel:
         first_token_ms: int | None = None
         parts: list[str] = []
         last = Chunk()
+        # Étape atteinte, pour savoir où un délai dépassé s'est produit.
+        phase = "connexion et envoi"
+        events = 0
         try:
             with self._client.stream("POST", url, headers=headers, json=body) as response:
+                headers_ms = _ms(started)
+                log.info(
+                    "%s : réponse HTTP %d reçue en %d ms, attente du flux",
+                    self.label,
+                    response.status_code,
+                    headers_ms,
+                )
                 if response.status_code >= 400:
                     response.read()
                     raise self._http_error(response.status_code, response.text[:2000])
+                phase = f"attente du premier mot (en-têtes reçus en {headers_ms} ms)"
                 for chunk in self._parse_lines(response.iter_lines()):
+                    events += 1
+                    if events == 1:
+                        log.debug(
+                            "%s : premier événement du flux à %d ms", self.label, _ms(started)
+                        )
                     if cancel is not None and cancel.is_set():
                         raise ProviderError(ProviderErrorKind.CANCELLED, "Analyse annulée.")
                     if chunk.text:
@@ -104,11 +125,17 @@ class HttpVisionModel:
                         finish_reason=chunk.finish_reason or last.finish_reason,
                     )
         except httpx.TimeoutException as exc:
-            raise ProviderError(
+            if first_token_ms is not None:
+                phase = "pendant la réponse"
+            error = ProviderError(
                 ProviderErrorKind.TIMEOUT,
-                f"{self.label} n'a pas répondu à temps ({self.timeout_s:.0f} s).",
-                detail=repr(exc),
-            ) from exc
+                f"{self.label} n'a pas répondu à temps ({self.timeout_s:.0f} s, étape : {phase}).",
+                detail=f"{exc!r} — étape : {phase}, événements reçus : {events}, "
+                f"écoulé {_ms(started)} ms",
+            )
+            # Serveur joint mais modèle muet : un nouvel essai identique ne servirait à rien.
+            error.no_retry = phase != "connexion et envoi"  # type: ignore[attr-defined]
+            raise error from exc
         except httpx.TransportError as exc:
             raise ProviderError(
                 ProviderErrorKind.UNAVAILABLE,

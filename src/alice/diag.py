@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("image")
     ask.add_argument("question")
     sub.add_parser("models", help="modèles Gemini accessibles avec ta clé")
+    sub.add_parser("ping", help="question texte minimale à l'IA (sans image) : teste clé et réseau")
     args = parser.parse_args(argv)
 
     settings = load_settings()
@@ -92,6 +93,19 @@ def main(argv: list[str] | None = None) -> int:
         from alice.core.ai.base import AnalysisRequest
         from alice.core.ai.image_prep import prepare_image
         from alice.core.ai.prompts import build_system_prompt
+
+        if args.command == "ping":
+            print(f"Test de {model.provider}/{model.model} (texte seul)...")
+            request = AnalysisRequest(
+                question="Réponds seulement : OK",
+                images=(),
+                system_prompt="Réponds très brièvement.",
+                max_output_tokens=256,
+                temperature=0,
+            )
+            result = model.analyze(request, on_delta=lambda t: print(t, end="", flush=True))
+            print(f"\n[1er mot {result.first_token_ms} ms, total {result.latency_ms} ms]")
+            return 0
 
         image = prepare_image(
             Image.open(Path(args.image)),

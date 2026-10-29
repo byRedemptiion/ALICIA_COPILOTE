@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -12,6 +13,8 @@ from alice.core.ai.base import AnalysisRequest
 from alice.core.ai.providers.http_base import Chunk, HttpVisionModel, error_message, json_lines
 from alice.core.config import GeminiSettings
 from alice.core.errors import ProviderError, ProviderErrorKind
+
+log = logging.getLogger("alice.ai")
 
 KEY_HELP = (
     "Crée une clé gratuite sur https://aistudio.google.com (« Get API key »), "
@@ -39,6 +42,26 @@ class GeminiModel(HttpVisionModel):
         if not self.model:
             return "Aucun modèle Gemini configuré (section [ai.gemini] model)."
         return None
+
+    _thinking_rejected = False
+
+    def _run(self, request, on_delta, cancel, emitted):  # type: ignore[no-untyped-def]
+        try:
+            return super()._run(request, on_delta, cancel, emitted)
+        except ProviderError as exc:
+            # Le réglage de réflexion dépend de la génération du modèle (2.5 : budget, 3.x : niveau).
+            # Si le modèle le refuse, on le retire une fois pour toutes, et on le journalise.
+            if (
+                exc.status_code == 400
+                and "thinking" in exc.detail.lower()
+                and not self._thinking_rejected
+            ):
+                log.warning(
+                    "Réglage de réflexion refusé par %s, envoi sans : %s", self.model, exc.detail
+                )
+                self._thinking_rejected = True
+                return super()._run(request, on_delta, cancel, emitted)
+            raise
 
     def _headers(self) -> dict[str, str]:
         return {"x-goog-api-key": self.settings.api_key.get()}
@@ -69,7 +92,7 @@ class GeminiModel(HttpVisionModel):
             thinking["thinkingBudget"] = self.settings.thinking_budget
         if self.settings.thinking_level:
             thinking["thinkingLevel"] = self.settings.thinking_level
-        if thinking:
+        if thinking and not self._thinking_rejected:
             generation["thinkingConfig"] = thinking
 
         body = {

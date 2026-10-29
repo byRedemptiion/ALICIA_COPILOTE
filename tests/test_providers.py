@@ -222,3 +222,40 @@ def test_image_is_resized_and_jpeg_encoded():
 def test_small_image_is_not_upscaled():
     prepared = prepare_image(Image.new("RGB", (800, 600)), max_side=1568)
     assert (prepared.width, prepared.height) == (800, 600)
+
+
+def test_thinking_config_rejected_is_dropped_once_and_logged():
+    bodies = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "thinkingConfig" in body["generationConfig"]:
+            return httpx.Response(
+                400, json={"error": {"message": "thinking_level is not supported by this model"}}
+            )
+        return httpx.Response(200, text=sse(text_event("OK")))
+
+    model = gemini(handler, thinking_level="low")
+    assert model.analyze(REQUEST).text == "OK"
+    assert model.analyze(REQUEST).text == "OK"
+    assert len(bodies) == 3  # un refus, puis deux appels sans réglage
+
+
+def test_silent_model_timeout_is_not_retried_and_says_where():
+    calls = {"n": 0}
+
+    class Silent(httpx.SyncByteStream):
+        def __iter__(self):
+            raise httpx.ReadTimeout("The read operation timed out")
+            yield b""
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(200, stream=Silent())
+
+    with pytest.raises(ProviderError) as info:
+        gemini(handler).analyze(REQUEST)
+    assert info.value.kind is ProviderErrorKind.TIMEOUT
+    assert "premier mot" in info.value.user_message
+    assert calls["n"] == 1
