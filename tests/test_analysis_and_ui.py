@@ -66,13 +66,6 @@ def test_logs_are_written_with_operation_id(settings, tmp_path):
     assert "Quel objet ?" not in text  # question visible seulement en DEBUG
 
 
-@pytest.fixture
-def qt_app():
-    from PySide6.QtWidgets import QApplication
-
-    return QApplication.instance() or QApplication([])
-
-
 def run_until(app, window, timeout_ms=5000):
     from PySide6.QtCore import QEventLoop, QTimer
 

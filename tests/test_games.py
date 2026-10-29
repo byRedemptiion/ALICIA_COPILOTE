@@ -65,13 +65,6 @@ def test_store_refuses_a_game_without_name(tmp_path):
         GameStore(tmp_path / "games.toml").save(None, GameDraft(" ", [], [], [], ""))
 
 
-@pytest.fixture
-def qt_app():
-    from PySide6.QtWidgets import QApplication
-
-    return QApplication.instance() or QApplication([])
-
-
 def test_games_tab_lists_games_and_edits_sites(qt_app, tmp_path):
     from alicia.ui.games_page import GameCard, GamesPage
 

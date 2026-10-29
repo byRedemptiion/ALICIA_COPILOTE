@@ -16,3 +16,17 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "state"))
     monkeypatch.chdir(tmp_path)
     yield
+
+
+_QT_APP = None
+
+
+@pytest.fixture(scope="session")
+def qt_app():
+    """Une seule QApplication pour toute la session, gardée en vie jusqu'à la fin :
+    si elle était détruite avant les fenêtres, Qt plante à la sortie."""
+    global _QT_APP
+    from PySide6.QtWidgets import QApplication
+
+    _QT_APP = QApplication.instance() or QApplication([])
+    return _QT_APP
