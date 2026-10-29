@@ -27,6 +27,8 @@ SPEED = {
     "error": 0.02,
 }
 BARS = 72
+# Cadrage du portrait en mode bulle : le visage et le buste (fractions de l'image).
+FACE_CROP = (0.2, 0.07, 0.58, 0.58)
 
 
 def _round_pen(color: QColor, width: float) -> QPen:
@@ -36,10 +38,18 @@ def _round_pen(color: QColor, width: float) -> QPen:
 
 
 class AliciaCore(QWidget):
-    def __init__(self, parent: QWidget | None = None, portrait: str | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        portrait: str | None = None,
+        *,
+        show_labels: bool = True,
+        minimum: int = 300,
+    ) -> None:
         super().__init__(parent)
         self.portrait = self._load_portrait(portrait)
-        self.setMinimumSize(300, 300)
+        self.show_labels = show_labels
+        self.setMinimumSize(minimum, minimum)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.state = "idle"
         self.level_source: Callable[[], float] | None = None
@@ -119,10 +129,12 @@ class AliciaCore(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        label_space = 54.0
-        size = min(self.width(), self.height() - label_space) - 12
+        label_space = 54.0 if self.show_labels else 0.0
+        size = min(self.width(), self.height() - label_space) - (12 if self.show_labels else 4)
         radius = size / 2
-        center = QPointF(self.width() / 2, (self.height() - label_space) / 2 + 6)
+        center = QPointF(
+            self.width() / 2, (self.height() - label_space) / 2 + (6 if self.show_labels else 0)
+        )
         color = self._color
 
         def tint(alpha: int, lighter: int = 100) -> QColor:
@@ -175,10 +187,11 @@ class AliciaCore(QWidget):
         # Barres réactives au son
         painter.save()
         painter.translate(center)
-        base = radius * 0.5
+        compact = not self.show_labels
+        base = radius * (0.66 if compact else 0.5)
         for i, value in enumerate(self._bars):
             a = math.radians(i * 360 / BARS - 90)
-            length = radius * (0.03 + 0.17 * value)
+            length = radius * ((0.02 + 0.12 * value) if compact else (0.03 + 0.17 * value))
             painter.setPen(_round_pen(tint(int(90 + 160 * value), 120), 2.2))
             painter.drawLine(
                 QPointF(math.cos(a) * base, math.sin(a) * base),
@@ -187,7 +200,7 @@ class AliciaCore(QWidget):
         painter.restore()
 
         # Noyau : portrait d'ALICIA, qui « flotte » doucement et grossit un peu quand elle parle
-        core_r = radius * (0.47 + 0.025 * self._level)
+        core_r = radius * ((0.63 if compact else 0.47) + 0.025 * self._level)
         bob = math.sin(time.perf_counter() * 1.4) * radius * 0.012
         core_center = QPointF(center.x(), center.y() + bob)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -198,14 +211,28 @@ class AliciaCore(QWidget):
             clip = QPainterPath()
             clip.addEllipse(core_center, core_r, core_r)
             painter.setClipPath(clip)
-            side = core_r * 2.15  # léger zoom : le visage remplit le cercle
-            target = QRectF(core_center.x() - side / 2, core_center.y() - side * 0.47, side, side)
-            painter.drawPixmap(target, self.portrait, QRectF(self.portrait.rect()))
+            if compact:  # petit rond : on cadre sur le visage
+                w, h = self.portrait.width(), self.portrait.height()
+                fx, fy, fw, fh = FACE_CROP
+                source = QRectF(fx * w, fy * h, fw * w, fh * h)
+                side = core_r * 2
+                target = QRectF(core_center.x() - core_r, core_center.y() - core_r, side, side)
+            else:
+                source = QRectF(self.portrait.rect())
+                side = core_r * 2.15  # léger zoom : le visage remplit le cercle
+                target = QRectF(
+                    core_center.x() - side / 2, core_center.y() - side * 0.47, side, side
+                )
+            painter.drawPixmap(target, self.portrait, source)
             painter.restore()
         painter.setBrush(Qt.BrushStyle.NoBrush)
         for width, alpha in ((7, 50), (3.5, 120), (1.6, 255)):
             painter.setPen(QPen(tint(alpha, 115), width))
             painter.drawEllipse(core_center, core_r, core_r)
+
+        if not self.show_labels:
+            painter.end()
+            return
 
         # Nom et état sous les anneaux
         text_top = center.y() + radius + 4

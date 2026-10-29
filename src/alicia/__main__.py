@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.smoke_test:
         return _smoke(app, window)
 
-    window.show()
+    window.start()
     code = app.exec()
     log.info("Arrêt d'Alicia (code %d)", code)
     return code

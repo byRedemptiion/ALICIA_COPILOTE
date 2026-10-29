@@ -35,14 +35,17 @@ from alicia.app import Services
 from alicia.core.ai.base import PreparedAudio
 from alicia.core.analysis.service import AnalysisOutcome
 from alicia.core.capture.models import Frame, WindowInfo
+from alicia.core.config import state_dir
 from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import make_filter, make_formatter, set_level
 from alicia.ui.core_widget import AliciaCore
+from alicia.ui.orb import OrbWindow
 from alicia.ui.theme import CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
 log = logging.getLogger("alicia.ui")
 MAX_LOG_LINES = 3000
+NOTICES = ("⚠", "Patiente", "Mets le jeu", "Raccourci :", "Confirmation demandée")
 DEFAULT_HOTKEY_QUESTION = (
     "Que vois-tu d'important sur mon écran, et quel est le meilleur choix à faire maintenant ?"
 )
@@ -131,6 +134,7 @@ class MainWindow(QMainWindow):
         self.resize(1360, 840)
         self.setMinimumSize(1000, 640)
         self._build_ui()
+        self._build_orb()
         if self.core.portrait is not None:
             self.setWindowIcon(QIcon(self.core.portrait))
         self._attach_logs()
@@ -166,6 +170,12 @@ class MainWindow(QMainWindow):
         header.addStretch(1)
         header.addWidget(self.hotkey_label)
         header.addWidget(self.provider_label)
+        self.orb_button = QPushButton("◉  Mode bulle")
+        self.orb_button.setToolTip(
+            "Ne garder que le rond d'ALICIA à l'écran (ses réponses s'affichent à côté)"
+        )
+        self.orb_button.clicked.connect(self.show_orb)
+        header.addWidget(self.orb_button)
 
         # --- Colonne gauche : cible + vision -----------------------------------------------------
         self.window_list = QListWidget()
@@ -326,6 +336,56 @@ class MainWindow(QMainWindow):
         layout.addLayout(footer)
         self.setCentralWidget(root)
 
+    def _build_orb(self) -> None:
+        settings = self.services.settings
+        self.orb = OrbWindow(settings.orb_size, state_dir() / "orb.json")
+        self.bubble = self.orb.bubble
+        self.orb.open_panel.connect(self.show_panel)
+        self.orb.stop_voice.connect(self.stop_voice)
+        self.orb.quit_requested.connect(self.quit_app)
+        self.orb_mode = settings.ui_mode == "orb"
+
+    def start(self) -> None:
+        """Affichage au lancement, selon [ui] mode."""
+        if self.orb_mode:
+            self.show_orb()
+        else:
+            self.show_panel()
+
+    def show_orb(self) -> None:
+        self.orb_mode = True
+        self.hide()
+        self.orb.show()
+        self._core_settle()
+        log.info("Mode bulle : seul le rond d'ALICIA est affiché")
+
+    def show_panel(self) -> None:
+        self.orb_mode = False
+        self.orb.hide()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self._core_settle()
+
+    def quit_app(self) -> None:
+        self.close()
+        QApplication.quit()
+
+    def _bubble_active(self) -> bool:
+        return self.orb.isVisible()
+
+    def _bubble_linger(self, text: str) -> int:
+        """Durée d'affichage après la fin de la réponse (lecture à l'écran)."""
+        return int(min(20000, max(5000, len(text) * 55)))
+
+    def _bubble_finish(self, text: str, spoken: bool) -> None:
+        """Réponse finale : la bulle reste pendant la voix, puis s'efface."""
+        if not self._bubble_active():
+            return
+        self.bubble.set_answer(text)
+        if not spoken:
+            self.bubble.hide_after(self._bubble_linger(text))
+
     def toggle_logs(self) -> None:
         visible = not self.logs_panel.isVisible()
         self.logs_panel.setVisible(visible)
@@ -339,6 +399,8 @@ class MainWindow(QMainWindow):
         elif state == "speaking" and self.services.speaker is not None:
             source = lambda: getattr(self.services.speaker, "level", 0.0) * 2.5  # noqa: E731
         self.core.set_state(state, source)
+        if hasattr(self, "orb"):
+            self.orb.core.set_state(state, source)
 
     def _core_settle(self) -> None:
         """Retour au repos, sauf si ALICIA est occupée ou parle."""
@@ -377,6 +439,7 @@ class MainWindow(QMainWindow):
             self.services.actions.stop()
         self.stop_voice()
         self.stop_observation()
+        self.orb.close()
         logging.getLogger("alicia").removeHandler(self.log_handler)
         log.info("Fermeture de la fenêtre principale")
         super().closeEvent(event)
@@ -389,6 +452,9 @@ class MainWindow(QMainWindow):
 
     def _set_status(self, text: str) -> None:
         self.status.setText(text)
+        # En mode bulle, les avertissements et consignes passent par la bulle.
+        if hasattr(self, "orb") and self._bubble_active() and text.startswith(NOTICES):
+            self.bubble.notice(text.removeprefix("⚠ "))
 
     def _update_state(self) -> None:
         has_selection = self.selected_window() is not None
@@ -517,6 +583,8 @@ class MainWindow(QMainWindow):
         self._core("thinking")
         shown = "…" if audio is not None else (question.strip() or DEFAULT_HOTKEY_QUESTION)
         self.asked_label.setText(f"TOI  ›  {shown}")
+        if self._bubble_active():
+            self.bubble.ask("🎙 …" if audio is not None else shown)
         web_search = self.web_box.isChecked()
         spoken = self.voice_box.isChecked() and self.services.speaker is not None
         self.sources_label.setText("")
@@ -644,6 +712,8 @@ class MainWindow(QMainWindow):
         if asked:
             self.asked_label.setText(f"TOI  ›  {asked}")
         self.answer.setPlainText(reply.text)
+        if self._bubble_active():
+            self.bubble.ask(asked)
         self.sources_label.setText("")
         self.answer_info.setText(f"Action sur le PC : {reply.intent} · [{outcome.operation_id}]")
         if reply.awaiting_confirmation:
@@ -652,27 +722,31 @@ class MainWindow(QMainWindow):
             )
         else:
             self._set_status("Action traitée.")
-        self.core.set_state("action")
-        self._say(reply.text)
+        self._core("action")
+        self._bubble_finish(reply.text, self._say(reply.text))
         QTimer.singleShot(1800, self._core_settle)
         self.analysis_done.emit(outcome)
 
-    def _say(self, text: str) -> None:
+    def _say(self, text: str) -> bool:
         speaker = self.services.speaker
         if self.voice_box.isChecked() and speaker is not None and speaker.speak(text):
             self.stop_voice_button.setEnabled(True)
+            return True
+        return False
 
     def _flash_error(self) -> None:
         self._core("error")
         QTimer.singleShot(2500, self._core_settle)
 
     def _reminder(self, text: str) -> None:
-        self.core.set_state("action")
+        self._core("action")
         QTimer.singleShot(2500, self._core_settle)
         self.answer.setPlainText(text)
         self._set_status("⏰ " + text)
         QApplication.alert(self)
-        self._say(text)
+        if self._bubble_active():
+            self.bubble.ask("")
+        self._bubble_finish("⏰ " + text, self._say(text))
 
     def stop_voice(self) -> None:
         speaker = self.services.speaker
@@ -691,6 +765,9 @@ class MainWindow(QMainWindow):
                 self._flash_error()
             else:
                 self._core_settle()
+            # Elle a fini de parler : la bulle s'efface peu après (sauf nouvelle question).
+            if self._bubble_active() and not self.busy and self.bubble.isVisible():
+                self.bubble.hide_after(4000)
 
     def _show_sources(self, result) -> None:  # type: ignore[no-untyped-def]
         notes = []
@@ -779,11 +856,15 @@ class MainWindow(QMainWindow):
         elif kind == "transcript":
             self.question.setText(f"🎙 {value}")
             self.asked_label.setText(f"TOI  ›  🎙 {value}")
+            if self._bubble_active():
+                self.bubble.set_question(f"🎙 {value}")
         elif kind == "delta":
             cursor = self.answer.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.End)
             cursor.insertText(value)
             self.answer.setTextCursor(cursor)
+            if self._bubble_active():
+                self.bubble.append(value)
 
     def _analysis_done(self, outcome: AnalysisOutcome) -> None:
         if outcome.action is not None:
@@ -802,9 +883,7 @@ class MainWindow(QMainWindow):
         if outcome.transcript is not None:
             self.question.setText(f"🎙 {outcome.transcript}")
         self._show_sources(result)
-        if self.voice_box.isChecked() and self.services.speaker is not None:
-            if self.services.speaker.speak(result.text):
-                self.stop_voice_button.setEnabled(True)
+        self._bubble_finish(result.text, self._say(result.text))
         fallback = result.extra.get("fallback_from")
         if fallback:
             self._set_status(

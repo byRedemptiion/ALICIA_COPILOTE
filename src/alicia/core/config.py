@@ -167,6 +167,8 @@ class Settings:
     hotkey_talk: str = ""
     voice: VoiceSettings = field(default_factory=VoiceSettings)
     actions: ActionSettings = field(default_factory=ActionSettings)
+    ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
+    orb_size: int = 210
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
@@ -328,6 +330,11 @@ def load_settings(
         hotkey_analyze=str(_section(data, "hotkeys").get("analyze", "")).strip(),
         hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
         actions=_actions(_section(data, "actions")),
+        ui_mode=_choice(_section(data, "ui"), "mode", "orb", ("orb", "full")),
+        orb_size=min(
+            _number({"orb_size": _section(data, "ui").get("orb_size", 210)}, "orb_size", int, 120),
+            600,
+        ),
         voice=VoiceSettings(
             speak_answers=bool(voice.get("speak_answers", True)),
             stt=_choice(voice, "stt", "local", ("local", "gemini")),

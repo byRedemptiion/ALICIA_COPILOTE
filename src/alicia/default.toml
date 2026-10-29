@@ -40,6 +40,13 @@ timeout_s = 2.0
 [logging]
 level = "INFO"               # INFO | DEBUG
 
+[ui]
+# "orb" : seul le rond d'ALICIA reste à l'écran, toujours au-dessus ; ses paroles
+# s'affichent dans une bulle seulement quand elle te répond. Double-clic = panneau complet.
+# "full" : la fenêtre complète (choix de la fenêtre, aperçu, journal).
+mode = "orb"
+orb_size = 210               # diamètre du rond, en pixels (120 à 600)
+
 [hotkeys]
 # Raccourci global : pressé EN JEU, il capture la fenêtre active et lance l'analyse
 # (avec la question tapée dans Alicia, sinon une question générale). Vide = désactivé.

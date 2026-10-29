@@ -325,3 +325,47 @@ def test_alicia_core_paints_every_state(qt_app, state):
     core._tick()
     image = core.grab().toImage()
     assert not image.isNull() and image.width() == 420
+
+
+def test_orb_mode_shows_only_the_ring_and_a_bubble_while_answering(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    assert settings.ui_mode == "orb"  # mode par défaut
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.start()
+    assert window.orb.isVisible() and not window.isVisible()
+    assert not window.bubble.isVisible()  # aucun texte tant qu'on ne parle pas
+    window.window_list.setCurrentRow(0)
+    window.question.setText("Quel objet ?")
+    window.analyze_or_cancel()
+    assert window.bubble.isVisible()
+    assert "Quel objet" in window.bubble.asked.text()
+    run_until(qt_app, window)
+    assert "Image reçue" in window.bubble.text.text()
+    assert window.bubble._hide_timer.isActive()  # la bulle s'effacera d'elle-même
+    window.bubble._hide_timer.timeout.emit()
+    window.bubble._fade.setCurrentTime(window.bubble._fade.duration())
+    assert not window.bubble.isVisible()
+    window.show_panel()
+    assert window.isVisible() and not window.orb.isVisible()
+    window.close()
+
+
+def test_orb_warnings_go_to_the_bubble(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.start()
+    window.hotkey_analyze()  # aucune fenêtre active ni choisie
+    assert window.bubble.isVisible()
+    assert "premier plan" in window.bubble.text.text()
+    window.close()
+
+
+def test_long_answers_keep_their_end_in_the_bubble():
+    from alicia.ui.orb import MAX_BUBBLE_CHARS, _tail
+
+    text = "début " + "mot " * 400 + "conclusion finale"
+    short = _tail(text)
+    assert short.startswith("…") and short.endswith("conclusion finale")
+    assert len(short) <= MAX_BUBBLE_CHARS + 2
