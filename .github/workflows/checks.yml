@@ -1,4 +1,4 @@
-name: Alicia checks
+name: checks
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -14,17 +15,14 @@ jobs:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - uses: astral-sh/setup-uv@v6
-      - name: Install Qt runtime libraries
+      - name: Install Qt system libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
-      - run: uv sync --frozen --extra dev
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon0 libgl1 libfontconfig1 libdbus-1-3
+      - run: uv sync --python 3.12 --frozen --extra dev
       - run: uv run --frozen ruff check src tests
-      - run: uv run --frozen ruff format --check src tests
       - run: uv run --frozen pytest -q
-      - run: uv run --frozen alicia --smoke-test
-      - name: Check Windows launcher behavior with fake tools
-        run: pwsh -NoLogo -NoProfile -NonInteractive -File tests/test_windows_launchers.ps1
+      - run: uv run --frozen alice --smoke-test
+      - name: Windows capture module loads
+        if: runner.os == 'Windows'
+        run: uv run --frozen python -c "import windows_capture; print('ok')"

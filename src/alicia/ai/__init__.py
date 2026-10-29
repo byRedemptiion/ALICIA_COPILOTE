@@ -1,1 +1,0 @@
-"""Multimodal provider adapters."""
