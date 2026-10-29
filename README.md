@@ -27,9 +27,11 @@ Pour essayer sans jeu : `Lancer_Alice.bat --demo` (inventaire fictif, clairement
 
 **Maintiens F10 en jeu, pose ta question à voix haute, relâche.** Alice capture l'écran, envoie ta voix et l'image à Gemini, affiche ta question transcrite puis **répond à voix haute**. Pour la couper, réappuie sur F10 ou clique sur « Couper la voix ».
 
-- La voix d'Alice est une voix Microsoft Edge (`fr-FR-DeniseNeural`, gratuite, nécessite Internet). Pour en essayer d'autres : `uv run alice-diag voices`, puis `[voice] tts_voice` dans `alice.toml`.
+- **Ta voix est comprise sur ton PC** par faster-whisper (modèle `large-v3-turbo`, sur le processeur : gratuit, privé, n'utilise pas la carte graphique du jeu). Plus rapide mais moins précis : `[voice] whisper_model = "small"`. Pour revenir à l'envoi direct de l'audio à Gemini : `[voice] stt = "gemini"`.
+- **Deux voix pour Alice, au choix dans le menu à côté de « Réponse vocale »** : Edge (voix Microsoft `fr-FR-DeniseNeural`, gratuite, en ligne) ou Kokoro (voix française `ff_siwis`, locale et hors ligne, calculée sur le processeur). Autres voix Edge : `uv run alice-diag voices`.
+- Les modèles locaux (Whisper ≈ 800 Mo, Kokoro ≈ 340 Mo) sont téléchargés une seule fois à l'installation, dans `%LOCALAPPDATA%\Alice\models`.
 - Micro ou haut-parleur précis : `uv run alice-diag devices`, puis `[voice] input_device` / `output_device` (une partie du nom suffit).
-- Tester sans jeu : `uv run alice-diag record` (micro) et `uv run alice-diag say` (voix).
+- Tester sans jeu : `uv run alice-diag record` (micro), `uv run alice-diag transcribe micro.wav` (compréhension) et `uv run alice-diag say --engine kokoro` (voix).
 - Le micro n'est ouvert que pendant que tu maintiens F10 : rien n'est écouté en dehors, et aucun enregistrement n'est gardé sur le disque.
 
 ### Recherche web

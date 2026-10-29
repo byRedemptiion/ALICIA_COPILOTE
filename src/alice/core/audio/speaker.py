@@ -66,6 +66,53 @@ def edge_synthesizer(voice: str, rate: str) -> Synthesizer:
     return synthesize
 
 
+def kokoro_synthesizer(voice: str, speed: float, lang: str = "fr-fr") -> Synthesizer:
+    """Voix Kokoro locale (ONNX, processeur) : gratuite, hors ligne, ne prend pas le GPU."""
+    state: dict[str, object] = {}
+    lock = threading.Lock()
+
+    def engine():  # type: ignore[no-untyped-def]
+        with lock:
+            if "kokoro" not in state:
+                from alice.core.audio.models import kokoro_paths, kokoro_ready
+
+                if not kokoro_ready():
+                    raise AudioError(
+                        "La voix Kokoro n'est pas installée. Relance Installer_Alice.bat ou "
+                        "lance : alice-diag prepare-voice",
+                        detail="fichiers Kokoro absents",
+                    )
+                try:
+                    from kokoro_onnx import Kokoro
+                except ImportError as exc:
+                    raise AudioError("Module kokoro-onnx absent.", detail=repr(exc)) from exc
+                started = time.perf_counter()
+                model, voices = kokoro_paths()
+                state["kokoro"] = Kokoro(str(model), str(voices))
+                log.info("Kokoro chargé en %.1f s", time.perf_counter() - started)
+            return state["kokoro"]
+
+    def synthesize(text: str) -> np.ndarray:
+        kokoro = engine()
+        with lock:  # une synthèse à la fois : la session ONNX utilise déjà tous les cœurs prévus
+            try:
+                audio, rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001
+                raise AudioError("La voix Kokoro a échoué.", detail=repr(exc)) from exc
+        if rate != TTS_SAMPLE_RATE:
+            raise AudioError("Fréquence inattendue pour Kokoro.", detail=f"{rate} Hz")
+        return (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+
+    synthesize.warm_up = engine  # type: ignore[attr-defined]
+    return synthesize
+
+
+def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    if settings.tts_engine == "kokoro":
+        return kokoro_synthesizer(settings.kokoro_voice, settings.kokoro_speed)
+    return edge_synthesizer(settings.tts_voice, settings.tts_rate)
+
+
 class SoundDevicePlayer:
     """Lecture par blocs, arrêtable à tout moment."""
 
@@ -109,7 +156,7 @@ class Speaker:
         player: SoundDevicePlayer | None = None,
     ) -> None:
         self.settings = settings
-        self.synthesizer = synthesizer or edge_synthesizer(settings.tts_voice, settings.tts_rate)
+        self.synthesizer = synthesizer or make_synthesizer(settings)
         self.player = player or SoundDevicePlayer(settings.output_device)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -130,6 +177,20 @@ class Speaker:
         )
         self._thread.start()
         return True
+
+    def warm_up_async(self) -> None:
+        """Charge un moteur local (Kokoro) en arrière-plan pour que la 1re réponse parte vite."""
+        warm = getattr(self.synthesizer, "warm_up", None)
+        if warm is None:
+            return
+
+        def run() -> None:
+            try:
+                warm()
+            except AudioError as exc:
+                log.error("Préchargement de la voix : %s", exc.detail)
+
+        threading.Thread(target=run, name="alice-voice-load", daemon=True).start()
 
     def stop(self) -> None:
         if self.speaking:

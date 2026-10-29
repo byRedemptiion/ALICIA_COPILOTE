@@ -108,6 +108,11 @@ class CaptureSettings:
 @dataclass(frozen=True)
 class VoiceSettings:
     speak_answers: bool = True  # lire les réponses à voix haute
+    stt: str = "local"  # local (faster-whisper) | gemini (audio envoyé au modèle)
+    whisper_model: str = "large-v3-turbo"
+    tts_engine: str = "edge"  # edge | kokoro
+    kokoro_voice: str = "ff_siwis"
+    kokoro_speed: float = 1.05
     tts_voice: str = "fr-FR-DeniseNeural"
     tts_rate: str = "+8%"
     output_device: str = ""  # vide = sortie Windows par défaut ; sinon une partie du nom
@@ -162,6 +167,15 @@ def _number(section: dict[str, Any], key: str, kind: type, minimum: float) -> An
         raise ConfigError(f"Réglage « {key} » manquant ou invalide.") from exc
     if value < minimum:
         raise ConfigError(f"Réglage « {key} » trop petit (minimum {minimum}).")
+    return value
+
+
+def _choice(section: dict[str, Any], key: str, default: str, allowed: tuple[str, ...]) -> str:
+    value = str(section.get(key, default)).strip().lower()
+    if value not in allowed:
+        raise ConfigError(
+            f"Réglage « {key} » invalide : « {value} » (choix : {', '.join(allowed)})."
+        )
     return value
 
 
@@ -250,6 +264,11 @@ def load_settings(
         hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
         voice=VoiceSettings(
             speak_answers=bool(voice.get("speak_answers", True)),
+            stt=_choice(voice, "stt", "local", ("local", "gemini")),
+            whisper_model=str(voice.get("whisper_model", "large-v3-turbo")).strip(),
+            tts_engine=_choice(voice, "tts_engine", "edge", ("edge", "kokoro")),
+            kokoro_voice=str(voice.get("kokoro_voice", "ff_siwis")).strip(),
+            kokoro_speed=_number({"v": voice.get("kokoro_speed", 1.05)}, "v", float, 0.5),
             tts_voice=str(voice.get("tts_voice", "fr-FR-DeniseNeural")).strip(),
             tts_rate=str(voice.get("tts_rate", "+0%")).strip(),
             output_device=str(voice.get("output_device", "")).strip(),

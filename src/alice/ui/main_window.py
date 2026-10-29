@@ -13,6 +13,7 @@ from PySide6.QtGui import QDesktopServices, QFont, QImage, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -104,6 +105,11 @@ class MainWindow(QMainWindow):
         self.refresh_windows()
         self._update_state()
         self._setup_hotkey()
+        # Modèles locaux chargés en arrière-plan : la 1re question orale n'attend pas.
+        if self.services.transcriber is not None:
+            self.services.transcriber.warm_up_async()
+        if self.services.speaker is not None and self.services.settings.voice.speak_answers:
+            self.services.speaker.warm_up_async()
 
     # --- construction -------------------------------------------------------------------------
 
@@ -180,9 +186,17 @@ class MainWindow(QMainWindow):
         self.stop_voice_button = QPushButton("Couper la voix")
         self.stop_voice_button.clicked.connect(self.stop_voice)
         self.stop_voice_button.setEnabled(False)
+        self.engine_box = QComboBox()
+        self.engine_box.addItem("Voix Edge (en ligne)", "edge")
+        self.engine_box.addItem("Voix Kokoro (locale)", "kokoro")
+        self.engine_box.setCurrentIndex(
+            max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
+        )
+        self.engine_box.currentIndexChanged.connect(self._change_voice_engine)
         options = QHBoxLayout()
         options.addWidget(self.web_box)
         options.addWidget(self.voice_box)
+        options.addWidget(self.engine_box)
         options.addStretch(1)
         options.addWidget(self.stop_voice_button)
         answer_layout = QVBoxLayout(answer_box)
@@ -475,6 +489,21 @@ class MainWindow(QMainWindow):
             self._update_state()
         self.question.setText("🎙 …")
         self._start_analysis(window, "", audio)
+
+    def _change_voice_engine(self) -> None:
+        speaker = self.services.speaker
+        engine = self.engine_box.currentData()
+        if speaker is None or not hasattr(speaker, "synthesizer"):
+            return
+        from dataclasses import replace
+
+        from alice.core.audio.speaker import make_synthesizer
+
+        self.stop_voice()
+        speaker.settings = replace(speaker.settings, tts_engine=engine)
+        speaker.synthesizer = make_synthesizer(speaker.settings)
+        speaker.warm_up_async()
+        log.info("Voix d'Alice : %s", engine)
 
     def stop_voice(self) -> None:
         speaker = self.services.speaker

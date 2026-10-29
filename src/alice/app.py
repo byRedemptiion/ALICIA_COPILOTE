@@ -13,6 +13,7 @@ from alice.core.ai.factory import create_model
 from alice.core.analysis.service import AnalysisService
 from alice.core.audio.recorder import Recorder
 from alice.core.audio.speaker import Speaker
+from alice.core.audio.stt import LocalTranscriber
 from alice.core.capture.service import CaptureService
 from alice.core.config import Settings
 from alice.core.session.context import SessionContext
@@ -30,6 +31,7 @@ class Services:
     demo: bool
     speaker: Speaker | None = None
     recorder: Recorder | None = None
+    transcriber: LocalTranscriber | None = None
 
 
 def build_services(
@@ -39,6 +41,7 @@ def build_services(
     model: VisionModel | None = None,
     speaker: Speaker | None = None,
     recorder: Recorder | None = None,
+    transcriber: LocalTranscriber | None = None,
 ) -> Services:
     capture = (
         CaptureService.demo(settings.capture.keep_last_frames)
@@ -47,11 +50,15 @@ def build_services(
     )
     model = model or create_model(settings.ai)
     session = SessionContext(settings.ai.history_turns)
-    analysis = AnalysisService(settings, capture, model, session)
     voice = settings.voice
+    if transcriber is None and voice.stt == "local" and not demo:
+        transcriber = LocalTranscriber(voice.whisper_model)
+    analysis = AnalysisService(settings, capture, model, session, transcriber)
     speaker = speaker or Speaker(voice)
     recorder = recorder or Recorder(voice.sample_rate, voice.input_device, voice.max_record_s)
-    return Services(settings, capture, model, session, analysis, demo, speaker, recorder)
+    return Services(
+        settings, capture, model, session, analysis, demo, speaker, recorder, transcriber
+    )
 
 
 def log_startup(settings: Settings, log_file: str) -> None:
@@ -67,12 +74,15 @@ def log_startup(settings: Settings, log_file: str) -> None:
         settings.ai.gemini.model if settings.ai.provider == "gemini" else settings.ai.ollama.model
     )
     log.info(
-        "IA : %s/%s — clé Gemini %s — capture : %s (repli écran %s)",
+        "IA : %s/%s — clé Gemini %s — capture : %s (repli écran %s) — voix : %s / %s",
         settings.ai.provider,
         model if settings.ai.provider != "fake" else "fake",
         "présente" if settings.ai.gemini.api_key else "absente",
         settings.capture.backend,
         "oui" if settings.capture.monitor_fallback else "non",
+        f"compréhension {settings.voice.stt}"
+        + (f" ({settings.voice.whisper_model})" if settings.voice.stt == "local" else ""),
+        f"voix {settings.voice.tts_engine}",
     )
     if sys.platform == "win32":
         try:

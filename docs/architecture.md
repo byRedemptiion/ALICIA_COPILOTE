@@ -78,3 +78,9 @@ src/alice/
 | Voix | `edge-tts` (voix neuronales Microsoft) décodé par `miniaudio`, lu par `sounddevice` ; la phrase suivante est synthétisée pendant la lecture de la précédente ; arrêt en moins de 50 ms | [KoljaB/RealtimeTTS](https://github.com/KoljaB/RealtimeTTS) (EdgeEngine, découpage en phrases), [huburton/jarvis](https://github.com/huburton/jarvis) (lecture interruptible) |
 
 RealtimeTTS n'est pas utilisé directement : sa voix Edge passe par le lecteur externe `mpv` sous Windows. RealtimeSTT impose PyTorch (plusieurs Go) pour la détection de voix, inutile en push-to-talk.
+
+### Mise à jour : audio séparé du cerveau
+
+Depuis la demande d'une voix personnalisable, l'audio ne dépend plus du fournisseur d'IA :
+- **Compréhension** : faster-whisper en local (`large-v3-turbo`, int8, processeur), réglages et filtre d'hallucinations repris de huburton/jarvis. La question part ensuite **en texte** avec la capture, vers n'importe quel cerveau. L'ancien mode « audio direct à Gemini » reste disponible (`[voice] stt = "gemini"`).
+- **Voix** : Edge (en ligne) ou Kokoro-82M (`kokoro-onnx`, modèle Apache 2.0, voix `ff_siwis`), calculée en local sur le processeur. Une voix ElevenLabs pourra s'ajouter derrière la même interface `Synthesizer`.

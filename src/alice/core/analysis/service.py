@@ -19,7 +19,7 @@ from alice.core.ai.prompts import VOICE_QUESTION, TranscriptSplitter, build_syst
 from alice.core.capture.models import Frame, WindowInfo
 from alice.core.capture.service import CaptureService
 from alice.core.config import Settings
-from alice.core.errors import ProviderError, ProviderErrorKind
+from alice.core.errors import AliceError, ProviderError, ProviderErrorKind
 from alice.core.logging_setup import operation
 from alice.core.session.context import SessionContext
 from alice.games.profiles import resolve_profile
@@ -44,7 +44,9 @@ class AnalysisService:
         capture: CaptureService,
         model: VisionModel,
         session: SessionContext,
+        transcriber=None,  # type: ignore[no-untyped-def]  # LocalTranscriber (voix → texte), facultatif
     ) -> None:
+        self.transcriber = transcriber
         self.settings = settings
         self.capture = capture
         self.model = model
@@ -64,15 +66,37 @@ class AnalysisService:
         web_search: bool = False,
         spoken: bool = False,
     ) -> AnalysisOutcome:
-        if audio is not None:
-            question = VOICE_QUESTION
-        else:
-            question = question.strip() or "Que vois-tu d'important sur cet écran ?"
         with operation() as op_id:
             started = time.perf_counter()
+            local_transcript = None
+            if audio is not None and self.transcriber is not None:
+                local_transcript = self.transcriber.transcribe(audio)
+                if not local_transcript:
+                    raise AliceError(
+                        "Je n'ai rien compris : parle un peu plus fort ou plus près du micro, "
+                        "puis réessaie.",
+                        detail="transcription vide",
+                    )
+                if on_transcript is not None:
+                    on_transcript(local_transcript)
+                log.debug("Transcription : %s", local_transcript)
+                question, audio = local_transcript, None
+            if audio is not None:
+                question = VOICE_QUESTION
+            else:
+                question = question.strip() or "Que vois-tu d'important sur cet écran ?"
+            mode = (
+                f"question orale {audio.duration_s:.1f} s"
+                if audio
+                else (
+                    "question orale transcrite localement"
+                    if local_transcript
+                    else "question écrite"
+                )
+            )
             log.info(
                 "Analyse demandée (%s%s) — fenêtre « %s »",
-                f"question orale {audio.duration_s:.1f} s" if audio else "question écrite",
+                mode,
                 ", recherche web autorisée" if web_search else "",
                 window.title,
             )
@@ -156,7 +180,9 @@ class AnalysisService:
                 result.finish_reason,
             )
             log.debug("Réponse : %s", result.text)
-            return AnalysisOutcome(op_id, frame, result, profile.key, total, transcript)
+            return AnalysisOutcome(
+                op_id, frame, result, profile.key, total, transcript or local_transcript
+            )
 
     def _maybe_save(self, frame: Frame, op_id: str) -> None:
         if not self.settings.capture.save_captures:

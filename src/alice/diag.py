@@ -44,7 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("models", help="modèles Gemini accessibles avec ta clé")
     sub.add_parser("devices", help="micros et sorties audio détectés")
     sub.add_parser("voices", help="voix françaises disponibles pour la réponse vocale")
+    sub.add_parser("prepare-voice", help="télécharge Whisper et la voix Kokoro (installation)")
+    hear = sub.add_parser("transcribe", help="transcrit un fichier WAV avec faster-whisper")
+    hear.add_argument("wav")
     say = sub.add_parser("say", help="teste la réponse vocale")
+    say.add_argument("--engine", choices=["edge", "kokoro"], help="moteur à tester")
     say.add_argument("text", nargs="?", default="Bonjour, je suis Alice. Je t'entends bien ?")
     rec = sub.add_parser("record", help="teste le micro : enregistre N secondes en WAV")
     rec.add_argument("--seconds", type=float, default=4.0)
@@ -56,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(settings.log_dir, "DEBUG" if args.debug else settings.log_level)
 
     try:
-        if args.command in ("devices", "voices", "say", "record"):
+        if args.command in ("devices", "voices", "say", "record", "prepare-voice", "transcribe"):
             return _audio_command(args, settings)
         if args.command in ("list-windows", "capture"):
             from dataclasses import replace
@@ -159,10 +163,33 @@ def _audio_command(args, settings) -> int:  # type: ignore[no-untyped-def]
             if voice["Locale"].startswith("fr-"):
                 print(f"{voice['ShortName']:<36} {voice['Gender']}")
         return 0
+    if args.command == "prepare-voice":
+        from alice.core.audio.models import download_kokoro, download_whisper
+
+        if settings.voice.stt == "local":
+            download_whisper(settings.voice.whisper_model)
+        download_kokoro()
+        print("Modèles vocaux prêts.")
+        return 0
+    if args.command == "transcribe":
+        from alice.core.ai.base import PreparedAudio
+        from alice.core.audio.stt import LocalTranscriber
+
+        data = open(args.wav, "rb").read()  # noqa: SIM115
+        transcriber = LocalTranscriber(settings.voice.whisper_model)
+        transcriber.load()
+        started = time.perf_counter()
+        text = transcriber.transcribe(PreparedAudio(data, "audio/wav", 0.0))
+        print(f"« {text} »  ({time.perf_counter() - started:.2f} s)")
+        return 0
     if args.command == "say":
+        from dataclasses import replace
+
         from alice.core.audio.speaker import Speaker
 
-        speaker = Speaker(settings.voice)
+        voice = replace(settings.voice, tts_engine=args.engine or settings.voice.tts_engine)
+        print(f"Voix : {voice.tts_engine}")
+        speaker = Speaker(voice)
         state = {}
         speaker.on_state = lambda s, m: state.update(state=s, message=m)
         started = time.perf_counter()

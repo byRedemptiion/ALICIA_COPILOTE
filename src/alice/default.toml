@@ -51,6 +51,16 @@ talk = "F10"
 
 [voice]
 speak_answers = true         # lire les réponses à voix haute (case à cocher dans Alice)
+# Compréhension de ta voix :
+#   "local"  = faster-whisper sur ton processeur (gratuit, privé, n'importe quel cerveau IA)
+#   "gemini" = l'audio est envoyé à Gemini avec la capture (un seul appel)
+stt = "local"
+# Modèle Whisper : "large-v3-turbo" (précis) ou "small" (plus rapide, moins précis)
+whisper_model = "large-v3-turbo"
+# Voix d'Alice : "edge" (voix Microsoft en ligne) ou "kokoro" (voix locale, hors ligne)
+tts_engine = "edge"
+kokoro_voice = "ff_siwis"    # voix française de Kokoro
+kokoro_speed = 1.05
 # Voix Microsoft Edge (gratuite, nécessite Internet). Autres voix FR : fr-FR-VivienneMultilingualNeural,
 # fr-FR-HenriNeural, fr-FR-EloiseNeural. Liste complète : alice-diag voices
 tts_voice = "fr-FR-DeniseNeural"

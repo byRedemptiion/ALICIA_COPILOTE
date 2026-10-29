@@ -22,6 +22,11 @@ uv --version
 Step "Installation de Python 3.12 et des dépendances (première fois : quelques minutes)"
 uv sync --python 3.12 --frozen
 if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE)." }
+Step "Modèles vocaux locaux (Whisper pour comprendre ta voix, Kokoro pour la voix d'Alice)"
+uv run --frozen alice-diag prepare-voice
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Les modèles vocaux n'ont pas pu être téléchargés : la voix locale sera indisponible." -ForegroundColor Yellow
+}
 Copy-Item "uv.lock" ".venv\uv.lock.installed" -Force
 if ($Update) {
     Write-Host "`nDépendances à jour." -ForegroundColor Green

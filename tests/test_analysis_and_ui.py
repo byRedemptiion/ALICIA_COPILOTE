@@ -279,3 +279,16 @@ def test_web_search_flag_and_sources_reach_the_ui(qt_app, settings):
     assert model.requests[-1].web_search is True
     assert "Guide Stadium" in window.sources_label.text()
     window.close()
+
+
+def test_voice_engine_can_be_switched_from_the_ui(qt_app, settings):
+    from alice.core.audio.speaker import Speaker
+    from alice.core.config import VoiceSettings
+    from alice.ui.main_window import MainWindow
+
+    speaker = Speaker(VoiceSettings(), synthesizer=lambda text: None)
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel(), speaker=speaker))
+    window.engine_box.setCurrentIndex(window.engine_box.findData("kokoro"))
+    assert speaker.settings.tts_engine == "kokoro"
+    assert getattr(speaker.synthesizer, "warm_up", None) is not None
+    window.close()
