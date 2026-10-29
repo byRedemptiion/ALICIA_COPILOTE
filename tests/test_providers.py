@@ -300,3 +300,23 @@ def test_all_models_overloaded_reports_last_error():
     with pytest.raises(ProviderError) as info:
         model.analyze(REQUEST)
     assert "gemini-lite" in info.value.user_message
+
+
+def test_overloaded_model_is_skipped_for_a_while():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        if "gemini-test:" in request.url.path:
+            return httpx.Response(503, json={"error": {"message": "high demand"}})
+        return httpx.Response(200, text=sse(text_event("OK")))
+
+    model = gemini(handler, fallback_models=("gemini-lite",))
+    model.analyze(REQUEST)
+    second = model.analyze(REQUEST)
+    assert second.extra["fallback_from"] == "gemini-test"
+    assert [p.split("/")[-1].split(":")[0] for p in seen] == [
+        "gemini-test",
+        "gemini-lite",
+        "gemini-lite",
+    ]

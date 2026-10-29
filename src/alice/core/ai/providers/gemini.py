@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -15,6 +16,7 @@ from alice.core.config import GeminiSettings
 from alice.core.errors import ProviderError, ProviderErrorKind
 
 log = logging.getLogger("alice.ai")
+OVERLOAD_PAUSE_S = 120  # un modèle saturé est évité pendant ce délai
 
 KEY_HELP = (
     "Crée une clé gratuite sur https://aistudio.google.com (« Get API key »), "
@@ -29,6 +31,7 @@ class GeminiModel(HttpVisionModel):
         self, settings: GeminiSettings, timeout_s: float, client: httpx.Client | None = None
     ) -> None:
         super().__init__(timeout_s, client)
+        self._overloaded_until = {}
         self.settings = settings
         self.model = settings.model
 
@@ -44,12 +47,24 @@ class GeminiModel(HttpVisionModel):
         return None
 
     _thinking_rejected = False
+    _overloaded_until: dict[str, float]
 
     def analyze(self, request, on_delta=None, cancel=None):  # type: ignore[no-untyped-def]
         """Essaie le modèle principal puis les modèles de secours, en le journalisant."""
-        models = [self.settings.model, *self.settings.fallback_models]
-        if len(models) == 1:
+        all_models = [self.settings.model, *self.settings.fallback_models]
+        if len(all_models) == 1:
             return super().analyze(request, on_delta, cancel)
+        now = time.monotonic()
+        models = [m for m in all_models if self._overloaded_until.get(m, 0) <= now]
+        skipped = [m for m in all_models if m not in models]
+        if not models:  # tous récemment saturés : on retente quand même dans l'ordre
+            models, skipped = all_models, []
+        if skipped:
+            log.info(
+                "Modèle(s) saturé(s) récemment, ignoré(s) %d s : %s",
+                OVERLOAD_PAUSE_S,
+                ", ".join(skipped),
+            )
         problem = self.check()
         if problem:
             raise ProviderError(ProviderErrorKind.AUTH, problem)
@@ -73,6 +88,8 @@ class GeminiModel(HttpVisionModel):
                             or exc.status_code == 404
                         )
                     )
+                    if exc.kind in (ProviderErrorKind.UNAVAILABLE, ProviderErrorKind.RATE_LIMIT):
+                        self._overloaded_until[model] = time.monotonic() + OVERLOAD_PAUSE_S
                     if not switchable or index == len(models) - 1:
                         raise
                     log.warning(
@@ -83,11 +100,12 @@ class GeminiModel(HttpVisionModel):
                         exc.detail,
                     )
                     continue
-                if index > 0:
-                    result.extra["fallback_from"] = models[0]
+                if model != all_models[0]:
+                    result.extra["fallback_from"] = all_models[0]
+                self._overloaded_until.pop(model, None)
                 return result
         finally:
-            self.model = models[0]
+            self.model = all_models[0]
         raise AssertionError("inatteignable")
 
     def _run(self, request, on_delta, cancel, emitted):  # type: ignore[no-untyped-def]
