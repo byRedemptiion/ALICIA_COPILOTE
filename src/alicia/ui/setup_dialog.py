@@ -106,7 +106,7 @@ class SetupDialog(QDialog):
         obox = QVBoxLayout(self.ollama_box)
         obox.setContentsMargins(16, 12, 16, 12)
         ollama_help = QLabel(
-            "Installe Ollama puis un modèle qui voit les images (par ex. « ollama pull gemma3 »). "
+            "Installe Ollama puis un modèle qui voit les images (par ex. « ollama pull qwen2.5vl:7b »). "
             "Gratuit et hors ligne, mais il faut une bonne carte graphique, et c'est plus lent "
             "et moins précis que Gemini."
         )

@@ -171,7 +171,7 @@ def _setup_ai_command() -> int:
     set_value("ai", "provider", provider)
     if provider == "ollama":
         print(
-            "IA : Ollama (locale). Installe un modèle qui voit les images, ex. : ollama pull gemma3"
+            "IA : Ollama (locale). Installe un modèle qui voit les images, ex. : ollama pull qwen2.5vl:7b"
         )
         return 0
     if not key:
