@@ -23,6 +23,10 @@ Double-cliquer sur **`Lancer_Alice.bat`**.
 
 Pour essayer sans jeu : `Lancer_Alice.bat --demo` (inventaire fictif, clairement signalé).
 
+### Jouer en plein écran : le raccourci F9
+
+En plein écran, un jeu se réduit souvent dès que tu cliques sur une autre fenêtre : Alice ne peut alors plus le capturer. Reste dans le jeu et **appuie sur F9** : Alice capture la fenêtre active et lance l'analyse, avec la question tapée dans Alice ou, à défaut, une question générale. Quand la réponse est prête, Alice clignote dans la barre des tâches. Le raccourci se change dans `alice.toml` (`[hotkeys] analyze = "ctrl+F9"`) ; tant qu'Alice est ouverte, le jeu ne reçoit plus cette touche.
+
 ### Overwatch et jeux en plein écran
 
 - Alice utilise la capture Windows Graphics Capture : elle fonctionne en fenêtré, en plein écran fenêtré et, sous Windows 11, en général aussi en plein écran.

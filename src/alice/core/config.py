@@ -109,6 +109,7 @@ class Settings:
     capture: CaptureSettings
     log_level: str
     game_profile: str
+    hotkey_analyze: str = ""
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
@@ -225,6 +226,7 @@ def load_settings(
         ),
         log_level=level,
         game_profile=str(_section(data, "game").get("profile", "auto")).strip().lower(),
+        hotkey_analyze=str(_section(data, "hotkeys").get("analyze", "")).strip(),
         sources=tuple(sources),
         captures_dir=cwd / "captures",
     )

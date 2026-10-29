@@ -36,5 +36,11 @@ timeout_s = 2.0
 [logging]
 level = "INFO"               # INFO | DEBUG
 
+[hotkeys]
+# Raccourci global : pressé EN JEU, il capture la fenêtre active et lance l'analyse
+# (avec la question tapée dans Alice, sinon une question générale). Vide = désactivé.
+# Exemples : "F9", "ctrl+F9", "alt+shift+A". Le jeu ne reçoit plus cette touche.
+analyze = "F9"
+
 [game]
 profile = "auto"             # auto | generic | overwatch

@@ -35,7 +35,9 @@ class CaptureService:
         refresher: Callable[[WindowInfo], WindowInfo],
         chain: Callable[[WindowInfo], Sequence[CaptureBackend]],
         keep_last: int = 5,
+        foreground: Callable[[], WindowInfo | None] | None = None,
     ) -> None:
+        self._foreground = foreground
         self._lister = lister
         self._refresher = refresher
         self._chain = chain
@@ -59,7 +61,13 @@ class CaptureService:
                 backends.append(PrintWindowBackend(win32))
             return backends
 
-        return cls(win32.list_windows, win32.check_still_valid, chain, settings.keep_last_frames)
+        return cls(
+            win32.list_windows,
+            win32.check_still_valid,
+            chain,
+            settings.keep_last_frames,
+            foreground=win32.foreground_window,
+        )
 
     @classmethod
     def demo(cls, keep_last: int = 5) -> CaptureService:
@@ -73,9 +81,23 @@ class CaptureService:
         log.debug("%d fenêtres listées en %d ms", len(windows), _ms(started))
         return windows
 
+    def foreground_window(self) -> WindowInfo | None:
+        """Fenêtre active (hors Alice), ou None si inconnue."""
+        if self._foreground is None:
+            return None
+        try:
+            return self._foreground()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Fenêtre active introuvable : %r", exc)
+            return None
+
     def capture(self, window: WindowInfo) -> Frame:
         started = time.perf_counter()
-        window = self._refresher(window)
+        try:
+            window = self._refresher(window)
+        except AliceError as exc:
+            log.error("Capture refusée pour « %s » : %s", window.title, exc.detail)
+            raise
         attempts: list[str] = []
         notes: list[str] = []
         for backend in self._chain(window):

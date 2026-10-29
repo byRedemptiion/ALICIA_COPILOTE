@@ -10,6 +10,7 @@ from PIL import Image
 from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont, QImage, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
@@ -37,6 +38,9 @@ from alice.ui.workers import LogBridge, QtLogHandler, Task
 
 log = logging.getLogger("alice.ui")
 MAX_LOG_LINES = 3000
+DEFAULT_HOTKEY_QUESTION = (
+    "Que vois-tu d'important sur mon écran, et quel est le meilleur choix à faire maintenant ?"
+)
 
 
 def pixmap_from_image(image: Image.Image) -> QPixmap:
@@ -97,6 +101,7 @@ class MainWindow(QMainWindow):
         self._attach_logs()
         self.refresh_windows()
         self._update_state()
+        self._setup_hotkey()
 
     # --- construction -------------------------------------------------------------------------
 
@@ -106,8 +111,11 @@ class MainWindow(QMainWindow):
         model = self.services.model
         self.provider_label = QLabel(f"IA : {model.provider} / {model.model}")
         self.provider_label.setStyleSheet("color:#777;")
+        self.hotkey_label = QLabel("")
+        self.hotkey_label.setStyleSheet("color:#4a9; padding-right:12px;")
         header = QHBoxLayout()
         header.addWidget(self.status, 1)
+        header.addWidget(self.hotkey_label)
         header.addWidget(self.provider_label)
 
         # Fenêtres
@@ -205,6 +213,8 @@ class MainWindow(QMainWindow):
         logging.getLogger("alice").addHandler(self.log_handler)
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self.hotkey is not None:
+            self.hotkey.stop()
         self.stop_observation()
         logging.getLogger("alice").removeHandler(self.log_handler)
         log.info("Fermeture de la fenêtre principale")
@@ -326,8 +336,9 @@ class MainWindow(QMainWindow):
             self._set_status("⚠ " + problem)
             self.answer.setPlainText(problem)
             return
-        window = self.observed
-        question = self.question.text()
+        self._start_analysis(self.observed, self.question.text())  # type: ignore[arg-type]
+
+    def _start_analysis(self, window: WindowInfo, question: str) -> None:
         cancel = threading.Event()
         self.cancel_event = cancel
         self.busy = True
@@ -346,6 +357,55 @@ class MainWindow(QMainWindow):
             )
 
         self._run(work, self._analysis_done, self._failed, self._analysis_progress)
+
+    # --- raccourci global ---------------------------------------------------------------------
+
+    def _setup_hotkey(self) -> None:
+        self.hotkey = None
+        text = self.services.settings.hotkey_analyze
+        if not text:
+            self.hotkey_label.setText("Raccourci en jeu : désactivé")
+            return
+        from alice.ui.hotkey import GlobalHotkey
+
+        try:
+            hotkey = GlobalHotkey(text)
+        except AliceError as exc:
+            log.error("Raccourci invalide : %s", exc.user_message)
+            self.hotkey_label.setText(f"Raccourci invalide : {text}")
+            return
+        hotkey.pressed.connect(self.hotkey_analyze)
+        if hotkey.start():
+            self.hotkey = hotkey
+            self.hotkey_label.setText(f"En jeu : {text} = capture + analyse")
+        else:
+            self.hotkey_label.setText(f"Raccourci {text} indisponible (voir journal)")
+
+    def hotkey_analyze(self) -> None:
+        """Appui sur le raccourci en jeu : capture la fenêtre active et lance l'analyse."""
+        if self.busy:
+            log.info("Raccourci ignoré : une analyse est déjà en cours")
+            return
+        problem = self.services.model.check()
+        if problem:
+            self._set_status("⚠ " + problem)
+            return
+        window = self.services.capture.foreground_window() or self.observed
+        if window is None:
+            log.warning("Raccourci : aucune fenêtre de jeu active ni sélectionnée")
+            self._set_status("Raccourci : mets le jeu au premier plan, puis réappuie.")
+            return
+        if self.observed is None or self.observed.handle != window.handle:
+            self.observed = window
+            log.info(
+                "Raccourci : fenêtre active « %s » (%s%s)",
+                window.title,
+                window.exe_name or "?",
+                ", plein écran" if window.fullscreen else "",
+            )
+        self._update_state()
+        question = self.question.text().strip() or DEFAULT_HOTKEY_QUESTION
+        self._start_analysis(window, question)
 
     def open_log_folder(self) -> None:
         folder = self.services.settings.log_dir
@@ -410,6 +470,7 @@ class MainWindow(QMainWindow):
             f"profil {outcome.profile} · [{outcome.operation_id}]"
         )
         self._set_status("Réponse prête.")
+        QApplication.alert(self)  # fait clignoter Alice dans la barre des tâches
         self.analysis_done.emit(outcome)
 
     def _failed(self, exc: Exception) -> None:

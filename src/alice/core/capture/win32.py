@@ -290,8 +290,21 @@ class Win32:
             raise CaptureError("La fenêtre sélectionnée a changé. Actualise la liste.")
         current = self.describe(window.handle)
         if current.minimized:
-            raise CaptureError("La fenêtre du jeu est réduite : restaure-la avant de capturer.")
+            raise CaptureError(
+                "La fenêtre du jeu est réduite : en plein écran, le jeu se réduit dès que tu "
+                "cliques sur Alice. Appuie sur le raccourci (F9) directement en jeu pour capturer "
+                "et analyser sans le quitter.",
+                detail=f"fenêtre réduite (IsIconic), taille {current.rect}",
+            )
         return current
+
+    def foreground_window(self) -> WindowInfo | None:
+        """Fenêtre au premier plan (le jeu, quand le raccourci est pressé en jeu)."""
+        self.user32.GetForegroundWindow.restype = wintypes.HWND
+        hwnd = self.user32.GetForegroundWindow()
+        if not hwnd or self.process_id(hwnd) == os.getpid():
+            return None
+        return self.describe(int(hwnd))
 
     # --- PrintWindow (repli) ----------------------------------------------------------------
 

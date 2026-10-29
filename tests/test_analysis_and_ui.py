@@ -129,3 +129,44 @@ def test_ui_stop_discards_late_result(qt_app, settings):
     assert window.answer.toPlainText() in ("",) or "Image reçue" not in window.answer.toPlainText()
     assert window.start_button.text() == "Démarrer"
     window.close()
+
+
+def test_parse_hotkey():
+    from alice.core.errors import ConfigError
+    from alice.ui.hotkey import MOD_ALT, MOD_CONTROL, MOD_SHIFT, parse_hotkey
+
+    assert parse_hotkey("F9") == (0, 0x78)
+    assert parse_hotkey("ctrl+F9") == (MOD_CONTROL, 0x78)
+    assert parse_hotkey("Alt + Shift + a") == (MOD_ALT | MOD_SHIFT, ord("A"))
+    for bad in ("", "hyper+F9", "F99", "ctrl+Entrée"):
+        with pytest.raises(ConfigError):
+            parse_hotkey(bad)
+
+
+def test_hotkey_analyzes_observed_window_with_default_question(qt_app, settings):
+    from alice.ui.main_window import DEFAULT_HOTKEY_QUESTION, MainWindow
+
+    model = FakeModel()
+    window = MainWindow(build_services(settings, demo=True, model=model))
+    window.hotkey_analyze()  # aucune fenêtre active ni choisie
+    assert "premier plan" in window.status.text()
+    window.window_list.setCurrentRow(0)
+    window.start_observation()
+    window.hotkey_analyze()
+    outcome = run_until(qt_app, window)
+    assert not isinstance(outcome, Exception)
+    assert model.requests[-1].question == DEFAULT_HOTKEY_QUESTION
+    window.close()
+
+
+def test_minimized_window_error_points_to_hotkey(tmp_path):
+    from alice.core.capture.service import CaptureService
+    from alice.core.errors import CaptureError
+
+    def refuse(window):
+        raise CaptureError("La fenêtre du jeu est réduite … F9", detail="IsIconic")
+
+    service = CaptureService(lambda: [], refuse, lambda w: [])
+    with pytest.raises(CaptureError) as info:
+        service.capture(DEMO_WINDOW)
+    assert "F9" in info.value.user_message
