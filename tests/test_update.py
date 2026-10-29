@@ -62,7 +62,7 @@ def install(tmp_path):
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "alicia-copilot"\n', "utf-8")
     (tmp_path / "uv.lock").write_text("ancien lock\n", "utf-8")
     (tmp_path / ".env").write_text("GEMINI_API_KEY=ma-cle\n", "utf-8")
-    (tmp_path / "README.md").write_text("pareil\n", "utf-8")
+    (tmp_path / "README.md").write_bytes(b"pareil\n")  # octets exacts (Windows : \\r\\n)
     return tmp_path
 
 
