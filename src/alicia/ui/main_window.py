@@ -186,8 +186,8 @@ class MainWindow(QMainWindow):
         self.hotkey_label.setObjectName("chip")
         self.nav_console = QPushButton("◈  ALICIA")
         self.nav_games = QPushButton("▦  JEUX")
-        self.nav_keys = QPushButton("⌨  RACCOURCIS")
-        self.nav_keys.setToolTip("Changer la touche pour parler à ALICIA ; commandes vocales")
+        self.nav_keys = QPushButton("⚙  RÉGLAGES")
+        self.nav_keys.setToolTip("Micro, voix d'ALICIA, IA, raccourcis et commandes vocales")
         for button, index in ((self.nav_console, 0), (self.nav_games, 1), (self.nav_keys, 2)):
             button.setObjectName("nav")
             button.setCheckable(True)
@@ -294,6 +294,7 @@ class MainWindow(QMainWindow):
         self.voice_box.setToolTip("ALICIA lit ses réponses à voix haute")
         self.voice_box.setChecked(self.services.settings.voice.speak_answers)
         self.voice_box.toggled.connect(lambda on: None if on else self.stop_voice())
+        self.voice_box.toggled.connect(lambda on: self._save("voice", "speak_answers", on))
         self.wake_box = QCheckBox("Réveil « Alicia »")
         self.wake_box.setToolTip(
             "Commence ta phrase par « Alicia » pour lui parler sans F10. "
@@ -304,6 +305,7 @@ class MainWindow(QMainWindow):
         )
         self.wake_box.setEnabled(self.services.recorder is not None)
         self.wake_box.toggled.connect(self.set_wake)
+        self.wake_box.toggled.connect(lambda on: self._save("voice", "wake_word", on))
         self.engine_box = QComboBox()
         self.engine_box.addItem("Edge (en ligne)", "edge")
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
@@ -425,7 +427,18 @@ class MainWindow(QMainWindow):
         self.shortcuts_page = ShortcutsPage(self.hotkey_texts)
         self.shortcuts_page.change_requested.connect(self.change_hotkey)
         self.shortcuts_page.capturing.connect(self._suspend_hotkeys)
-        self.pages.addWidget(self.shortcuts_page)
+        from alicia.ui.settings_page import SettingsPage
+
+        self.settings_page = SettingsPage(
+            self.shortcuts_page,
+            input_devices=lambda: self._devices(output=False),
+            output_devices=lambda: self._devices(output=True),
+        )
+        self.settings_page.setting_changed.connect(self.change_setting)
+        self.settings_page.test_mic.connect(self.test_microphone)
+        self.settings_page.test_voice.connect(self.test_voice)
+        self.settings_page.open_ai.connect(self.open_setup)
+        self.pages.addWidget(self.settings_page)
 
         layout.addLayout(header)
         layout.addWidget(self.pages, 1)
@@ -439,8 +452,151 @@ class MainWindow(QMainWindow):
         self.nav_console.setChecked(index == 0)
         self.nav_games.setChecked(index == 1)
         self.nav_keys.setChecked(index == 2)
+        if index == 2:
+            self._load_settings_page()
         if index == 1:
             self.games_page.show_list()
+
+    # --- réglages -------------------------------------------------------------------------------
+
+    @staticmethod
+    def _devices(output: bool) -> list[str]:
+        from alicia.core.audio.devices import device_names
+
+        return device_names(output=output)
+
+    def _load_settings_page(self) -> None:
+        model = self.services.model
+        self.settings_page.load(
+            self.services.settings.voice,
+            self.wake_box.isChecked(),
+            self.services.settings.ui_mode,
+            f"{model.provider} / {model.model}",
+        )
+
+    def _save(self, section: str, key: str, value: object) -> None:
+        from alicia.core.user_config import set_value
+
+        try:
+            set_value(section, key, value)
+        except (OSError, ValueError) as exc:
+            log.error("Réglage non enregistré (%s.%s) : %r", section, key, exc)
+
+    def _update_voice(self, **changes: object) -> None:
+        """Change des réglages de voix en direct et les enregistre."""
+        from dataclasses import replace
+
+        voice = replace(self.services.settings.voice, **changes)  # type: ignore[arg-type]
+        self.services.settings = replace(self.services.settings, voice=voice)
+        for key, value in changes.items():
+            self._save("voice", key, value)
+        speaker = self.services.speaker
+        if speaker is not None and hasattr(speaker, "synthesizer"):
+            from alicia.core.audio.speaker import SoundDevicePlayer, make_synthesizer
+
+            self.stop_voice()
+            speaker.settings = voice
+            if {"tts_engine", "tts_voice", "tts_rate", "kokoro_speed"} & changes.keys():
+                speaker.synthesizer = make_synthesizer(voice)
+                speaker.warm_up_async()
+            if "output_device" in changes:
+                speaker.player = SoundDevicePlayer(voice.output_device)
+
+    def _restart_wake(self) -> None:
+        if self.wake is not None:
+            self.wake.stop()
+            self.wake = None
+        if self.wake_box.isChecked():
+            self.set_wake(True)
+
+    def change_setting(self, key: str, value: object) -> None:
+        log.info("Réglage : %s = %s", key, value)
+        if key == "input_device":
+            self._update_voice(input_device=str(value or ""))
+            if self.services.recorder is not None:
+                self.services.recorder.device = str(value or "")
+            self._restart_wake()
+        elif key == "wake_word":
+            self.wake_box.setChecked(bool(value))  # applique et enregistre
+        elif key == "wake_sensitivity":
+            self._update_voice(wake_sensitivity=int(value))  # type: ignore[call-overload]
+            self._restart_wake()
+        elif key == "speak_answers":
+            self.voice_box.setChecked(bool(value))
+        elif key == "tts_engine":
+            index = self.engine_box.findData(value)
+            self.engine_box.blockSignals(True)
+            self.engine_box.setCurrentIndex(max(0, index))
+            self.engine_box.blockSignals(False)
+            self._update_voice(tts_engine=str(value))
+        elif key == "tts_voice":
+            self._update_voice(tts_voice=str(value))
+        elif key == "speed":
+            percent = int(value)  # type: ignore[call-overload]
+            self._update_voice(tts_rate=f"{percent:+d}%", kokoro_speed=round(1 + percent / 100, 2))
+        elif key == "output_device":
+            self._update_voice(output_device=str(value or ""))
+        elif key == "ui_mode":
+            from dataclasses import replace
+
+            self.services.settings = replace(self.services.settings, ui_mode=str(value))
+            self._save("ui", "mode", value)
+
+    def test_voice(self) -> None:
+        speaker = self.services.speaker
+        if speaker is None or not speaker.speak(
+            "Salut, c'est ALICIA ! Si tu m'entends bien, tout est prêt pour jouer."
+        ):
+            self._set_status("⚠ Voix indisponible : vérifie la sortie audio choisie.")
+            return
+        self.stop_voice_button.setEnabled(True)
+
+    def test_microphone(self) -> None:
+        """Enregistre 3 s, affiche le niveau en direct, puis la transcription locale."""
+        recorder = self.services.recorder
+        page = self.settings_page
+        if recorder is None or recorder.recording:
+            page.mic_result.setText("Micro indisponible pour l'instant.")
+            return
+        if self.wake is not None:
+            self.wake.stop()  # le test a le micro pour lui seul
+        try:
+            recorder.start()
+        except AliciaError as exc:
+            page.mic_result.setText("⚠ " + exc.user_message)
+            self._restart_wake()
+            return
+        page.mic_test.setEnabled(False)
+        page.mic_result.setText(f"🎙 Parle maintenant… ({recorder.device_label or 'micro'})")
+        meter = QTimer(self)
+        meter.timeout.connect(lambda: page.show_mic_level(recorder.level * 3))
+        meter.start(50)
+
+        def finish() -> None:
+            meter.stop()
+            page.show_mic_level(0)
+            page.mic_test.setEnabled(True)
+            try:
+                audio = recorder.stop()
+            except AliciaError as exc:
+                page.mic_result.setText("⚠ " + exc.user_message)
+                self._restart_wake()
+                return
+            self._restart_wake()
+            transcriber = self.services.transcriber
+            if transcriber is None:
+                page.mic_result.setText(f"✓ Son capté ({audio.duration_s:.1f} s).")
+                return
+            page.mic_result.setText("✓ Son capté, je transcris…")
+            self._background(
+                lambda: transcriber.transcribe(audio),
+                lambda text: page.mic_result.setText(
+                    f"✓ J'ai compris : « {text} »" if text else "Son capté, mais aucun mot compris."
+                ),
+                lambda exc: page.mic_result.setText(f"⚠ Transcription impossible : {exc!r}"),
+            )
+
+        QTimer.singleShot(3000, finish)
 
     def _active_game_key(self) -> str:
         """Le jeu choisi, sinon celui reconnu dans la fenêtre observée."""
@@ -631,6 +787,7 @@ class MainWindow(QMainWindow):
                 on_stop=self.voice_bridge.wake_stop.emit,
                 device=voice.input_device,
                 sample_rate=voice.sample_rate,
+                sensitivity=voice.wake_sensitivity,
             )
         try:
             self.wake.start()
@@ -1252,18 +1409,8 @@ class MainWindow(QMainWindow):
         log.info("Jeu choisi : %s", self.game_box.currentText())
 
     def _change_voice_engine(self) -> None:
-        speaker = self.services.speaker
         engine = self.engine_box.currentData()
-        if speaker is None or not hasattr(speaker, "synthesizer"):
-            return
-        from dataclasses import replace
-
-        from alicia.core.audio.speaker import make_synthesizer
-
-        self.stop_voice()
-        speaker.settings = replace(speaker.settings, tts_engine=engine)
-        speaker.synthesizer = make_synthesizer(speaker.settings)
-        speaker.warm_up_async()
+        self._update_voice(tts_engine=engine)
         log.info("Voix d'Alicia : %s", engine)
 
     def _action_done(self, outcome: AnalysisOutcome) -> None:

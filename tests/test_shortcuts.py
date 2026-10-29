@@ -68,7 +68,7 @@ def test_changing_the_talk_key_is_saved_and_checked(qt_app, tmp_path, monkeypatc
     settings = load_settings(cwd=tmp_path, environ={"ALICE_AI_PROVIDER": "fake"})
     window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
     window.show_page(2)
-    assert window.pages.currentWidget() is window.shortcuts_page
+    assert window.pages.currentWidget() is window.settings_page
     window.change_hotkey("talk", "mouse4")
     assert window.hotkey_texts["talk"] == "mouse4"
     saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))

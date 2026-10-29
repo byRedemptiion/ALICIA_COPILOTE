@@ -65,3 +65,21 @@ def list_devices() -> list[str]:
             kinds.append("sortie")
         lines.append(f"{index:>3}  {'/'.join(kinds):<12}  {device['name']}")
     return lines
+
+
+def device_names(*, output: bool) -> list[str]:
+    """Noms des micros (ou sorties) de l'API audio par défaut, sans doublons, pour un menu."""
+    sd = sounddevice()
+    key = "max_output_channels" if output else "max_input_channels"
+    try:
+        host = sd.query_hostapis(sd.default.hostapi)
+        indexes = list(host["devices"])
+    except Exception:  # noqa: BLE001 - API indisponible : tous les périphériques
+        indexes = list(range(len(sd.query_devices())))
+    names: list[str] = []
+    for index in indexes:
+        device = sd.query_devices(index)
+        name = str(device["name"]).strip()
+        if device[key] > 0 and name and name not in names and "mappeur" not in name.lower():
+            names.append(name)
+    return names

@@ -144,6 +144,7 @@ class VoiceSettings:
     sample_rate: int = 16000
     wake_word: bool = True  # dire « Alicia… » pour lui parler sans toucher au clavier
     wake_model: str = "base"  # petit Whisper dédié au mot de réveil
+    wake_sensitivity: int = 3  # 1 = peu sensible (pièce bruyante) … 5 = très sensible
 
 
 @dataclass(frozen=True)
@@ -383,6 +384,7 @@ def load_settings(
             sample_rate=_number(voice, "sample_rate", int, 8000),
             wake_word=bool(voice.get("wake_word", True)),
             wake_model=str(voice.get("wake_model", "base")).strip() or "base",
+            wake_sensitivity=max(1, min(5, int(voice.get("wake_sensitivity", 3)))),
         ),
         sources=tuple(sources),
         captures_dir=cwd / "captures",

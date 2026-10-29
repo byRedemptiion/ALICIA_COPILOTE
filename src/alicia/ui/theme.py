@@ -213,6 +213,32 @@ QCheckBox::indicator:checked {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {RED}, stop:1 {PINK});
     border-color: {PINK};
 }}
+QProgressBar {{
+    background: rgba(2, 10, 16, 0.85);
+    border: 1px solid {BORDER};
+    border-radius: 5px;
+}}
+QProgressBar::chunk {{
+    border-radius: 4px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {CYAN}, stop:1 {PINK});
+}}
+QSlider::groove:horizontal {{
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(2, 10, 16, 0.85);
+    border: 1px solid {BORDER};
+}}
+QSlider::sub-page:horizontal {{
+    border-radius: 3px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {RED}, stop:1 {PINK});
+}}
+QSlider::handle:horizontal {{
+    width: 16px;
+    margin: -6px 0;
+    border-radius: 8px;
+    background: {TEXT};
+    border: 2px solid {PINK};
+}}
 QRadioButton {{
     spacing: 10px;
     color: {TEXT};

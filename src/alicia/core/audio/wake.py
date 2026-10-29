@@ -57,6 +57,8 @@ IGNORE_SILENCE_S = 0.5
 FOLLOW_UP_S = 6.0  # « Alicia » seul : temps laissé pour dire la suite
 MAX_COMMAND_S = 15.0
 MIN_LEVEL = 0.012
+# Sensibilité du réveil (réglages) → volume minimal d'une phrase.
+SENSITIVITY_LEVELS = {1: 0.03, 2: 0.02, 3: 0.012, 4: 0.008, 5: 0.005}
 
 
 def _normalize(text: str) -> list[str]:
@@ -124,6 +126,7 @@ class WakeListener:
         device: str = "",
         sample_rate: int = 16000,
         name: str = WAKE_NAME,
+        sensitivity: int = 3,
     ) -> None:
         self.detector = detector
         self.on_wake = on_wake
@@ -136,6 +139,7 @@ class WakeListener:
         self.device = device
         self.sample_rate = sample_rate
         self.name = name
+        self.min_level = SENSITIVITY_LEVELS.get(sensitivity, MIN_LEVEL)
         self.level = 0.0
         self._queue: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=400)
         self._stream = None
@@ -235,7 +239,7 @@ class WakeListener:
             if self.state != self.IDLE:
                 self.reset()
             return
-        threshold = max(self._floor * 3.0, MIN_LEVEL)
+        threshold = max(self._floor * 3.0, self.min_level)
         loud = rms > threshold
 
         if self.state == self.IDLE:
