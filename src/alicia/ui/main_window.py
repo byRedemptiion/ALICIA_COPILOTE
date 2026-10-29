@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import logging
+import sys
 import threading
 from typing import Any
 
@@ -45,6 +46,7 @@ from alicia.games.store import GameStore
 from alicia.ui.core_widget import AliciaCore
 from alicia.ui.games_page import GamesPage
 from alicia.ui.orb import OrbWindow
+from alicia.ui.shortcuts_page import ShortcutsPage
 from alicia.ui.theme import CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
@@ -182,7 +184,9 @@ class MainWindow(QMainWindow):
         self.hotkey_label.setObjectName("chip")
         self.nav_console = QPushButton("◈  ALICIA")
         self.nav_games = QPushButton("▦  JEUX")
-        for button, index in ((self.nav_console, 0), (self.nav_games, 1)):
+        self.nav_keys = QPushButton("⌨  RACCOURCIS")
+        self.nav_keys.setToolTip("Changer la touche pour parler à ALICIA ; commandes vocales")
+        for button, index in ((self.nav_console, 0), (self.nav_games, 1), (self.nav_keys, 2)):
             button.setObjectName("nav")
             button.setCheckable(True)
             button.clicked.connect(lambda _=False, i=index: self.show_page(i))
@@ -195,6 +199,7 @@ class MainWindow(QMainWindow):
         header.addSpacing(24)
         header.addWidget(self.nav_console)
         header.addWidget(self.nav_games)
+        header.addWidget(self.nav_keys)
         header.addStretch(1)
         header.addWidget(self.hotkey_label)
         header.addWidget(self.provider_label)
@@ -413,6 +418,12 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(console)
         self.pages.addWidget(self.games_page)
+        settings = self.services.settings
+        self.hotkey_texts = {"analyze": settings.hotkey_analyze, "talk": settings.hotkey_talk}
+        self.shortcuts_page = ShortcutsPage(self.hotkey_texts)
+        self.shortcuts_page.change_requested.connect(self.change_hotkey)
+        self.shortcuts_page.capturing.connect(self._suspend_hotkeys)
+        self.pages.addWidget(self.shortcuts_page)
 
         layout.addLayout(header)
         layout.addWidget(self.pages, 1)
@@ -425,6 +436,7 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         self.nav_console.setChecked(index == 0)
         self.nav_games.setChecked(index == 1)
+        self.nav_keys.setChecked(index == 2)
         if index == 1:
             self.games_page.show_list()
 
@@ -507,6 +519,8 @@ class MainWindow(QMainWindow):
                 on_command=self.voice_bridge.wake_command.emit,
                 on_cancel=self.voice_bridge.wake_cancel.emit,
                 paused=self._wake_paused,
+                stop_only=self._wake_stop_only,
+                on_stop=self.voice_bridge.wake_stop.emit,
                 device=voice.input_device,
                 sample_rate=voice.sample_rate,
             )
@@ -521,13 +535,24 @@ class MainWindow(QMainWindow):
             self.orb.wake_on = False
 
     def _wake_paused(self) -> bool:
-        """Pas d'écoute pendant une analyse, F10 maintenue ou quand ALICIA parle (écho)."""
-        recorder, speaker = self.services.recorder, self.services.speaker
-        return bool(
-            self.busy
-            or (recorder is not None and recorder.recording)
-            or (speaker is not None and getattr(speaker, "speaking", False))
-        )
+        """Micro réservé à la touche « parler » pendant qu'elle est maintenue."""
+        recorder = self.services.recorder
+        return bool(recorder is not None and recorder.recording)
+
+    def _wake_stop_only(self) -> bool:
+        """Pendant qu'ALICIA analyse ou parle, seul « Alicia, stop » est écouté."""
+        speaker = self.services.speaker
+        return bool(self.busy or (speaker is not None and getattr(speaker, "speaking", False)))
+
+    def voice_stop(self) -> None:
+        """« Alicia, stop » : elle se tait et annule l'analyse en cours."""
+        self.stop_voice()
+        if self.busy:
+            self.analyze_or_cancel()  # occupée : ce bouton annule
+        self._core_settle()
+        self._set_status("D'accord, j'arrête.")
+        if self._bubble_active() and self.bubble.isVisible():
+            self.bubble.fade_out()
 
     def _wake_heard(self) -> None:
         self._core("listening")
@@ -778,6 +803,7 @@ class MainWindow(QMainWindow):
         self.voice_bridge.wake.connect(self._wake_heard)
         self.voice_bridge.wake_command.connect(self._wake_command)
         self.voice_bridge.wake_cancel.connect(self._wake_cancel)
+        self.voice_bridge.wake_stop.connect(self.voice_stop)
         if self.services.actions is not None:
             self.services.actions.on_reminder = self.voice_bridge.reminder.emit
         if self.services.speaker is not None:
@@ -976,21 +1002,71 @@ class MainWindow(QMainWindow):
     # --- raccourci global ---------------------------------------------------------------------
 
     def _setup_hotkey(self) -> None:
-        self.hotkey = self._make_hotkey(self.services.settings.hotkey_analyze, False)
+        from alicia.ui.hotkey import hotkey_label
+
+        self.hotkey = self._make_hotkey(self.hotkey_texts["analyze"], False)
         self.talk_hotkey = None
         if self.services.recorder is not None:
-            self.talk_hotkey = self._make_hotkey(self.services.settings.hotkey_talk, True)
+            self.talk_hotkey = self._make_hotkey(self.hotkey_texts["talk"], True)
         parts = []
         if self.hotkey is not None:
             self.hotkey.pressed.connect(self.hotkey_analyze)
-            parts.append(f"{self.hotkey.text} = analyse")
+            parts.append(f"{hotkey_label(self.hotkey.text)} = analyse")
         if self.talk_hotkey is not None:
             self.talk_hotkey.pressed.connect(self.talk_pressed)
             self.talk_hotkey.released.connect(self.talk_released)
-            parts.append(f"{self.talk_hotkey.text} maintenu = parler")
+            parts.append(f"{hotkey_label(self.talk_hotkey.text)} maintenu = parler")
         self.hotkey_label.setText(
             "En jeu : " + " · ".join(parts) if parts else "Raccourcis en jeu indisponibles"
         )
+        for action, hotkey in (("analyze", self.hotkey), ("talk", self.talk_hotkey)):
+            text = self.hotkey_texts[action]
+            if hotkey is not None:
+                state = "✓ actif"
+            elif not text:
+                state = "désactivé"
+            elif sys.platform == "win32":
+                state = "⚠ indisponible : touche déjà prise par un autre programme ?"
+            else:
+                state = "raccourcis globaux : Windows seulement"
+            self.shortcuts_page.set_state(action, state, text)
+
+    def _stop_hotkeys(self) -> None:
+        for hotkey in (self.hotkey, self.talk_hotkey):
+            if hotkey is not None:
+                hotkey.stop()
+        self.hotkey = self.talk_hotkey = None
+
+    def _suspend_hotkeys(self, capturing: bool) -> None:
+        """Pendant qu'on choisit une touche, F9/F10 ne déclenchent rien."""
+        if capturing:
+            self._stop_hotkeys()
+        else:
+            self._setup_hotkey()
+
+    def change_hotkey(self, action: str, text: str) -> None:
+        from alicia.core.user_config import set_value
+        from alicia.ui.hotkey import hotkey_label, parse_hotkey
+
+        other = "analyze" if action == "talk" else "talk"
+        try:
+            parse_hotkey(text)
+        except AliciaError as exc:
+            self.shortcuts_page.set_state(action, "⚠ " + exc.user_message)
+            return
+        if text.lower() == self.hotkey_texts[other].lower():
+            self.shortcuts_page.set_state(
+                action, f"⚠ {hotkey_label(text)} sert déjà à l'autre raccourci."
+            )
+            return
+        self._stop_hotkeys()
+        self.hotkey_texts[action] = text
+        try:
+            set_value("hotkeys", action, text)
+        except (OSError, ValueError) as exc:
+            log.error("Raccourci non enregistré : %r", exc)
+        self._setup_hotkey()
+        log.info("Raccourci « %s » : %s", action, text)
 
     def _make_hotkey(self, text: str, track_release: bool):  # type: ignore[no-untyped-def]
         if not text:

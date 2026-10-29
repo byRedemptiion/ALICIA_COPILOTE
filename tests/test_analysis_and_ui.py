@@ -519,3 +519,16 @@ def test_wake_word_events_drive_the_interface(qt_app, settings):
     window.orb.wake_toggled.emit(False)
     assert not window.wake_box.isChecked()
     window.close()
+
+
+def test_voice_stop_silences_and_cancels(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel(delay_s=0.5)))
+    window.window_list.setCurrentRow(0)
+    window.analyze_or_cancel()
+    assert window.busy and window._wake_stop_only()
+    window.voice_bridge.wake_stop.emit()
+    assert not window.busy
+    assert "j'arrête" in window.status.text()
+    window.close()

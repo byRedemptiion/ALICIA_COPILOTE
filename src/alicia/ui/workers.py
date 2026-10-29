@@ -48,6 +48,7 @@ class VoiceBridge(QObject):
     wake = Signal()  # « Alicia » entendu
     wake_command = Signal(object)  # PreparedAudio : la demande qui suit le mot de réveil
     wake_cancel = Signal(str)  # mot de réveil sans demande exploitable
+    wake_stop = Signal()  # « Alicia, stop »
 
 
 class QtLogHandler(logging.Handler):

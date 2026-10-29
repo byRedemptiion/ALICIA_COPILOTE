@@ -81,6 +81,15 @@ def find_wake(text: str, name: str = WAKE_NAME) -> tuple[bool, str]:
     return False, ""
 
 
+STOP_WORDS = {"stop", "stoppe", "stopp", "arrete", "arretes", "chut", "silence", "tais", "suffit"}
+
+
+def is_stop(rest: str) -> bool:
+    """« stop », « arrête », « tais-toi », « chut », « ça suffit » juste après le nom."""
+    words = rest.split()[:3]
+    return any(word in STOP_WORDS for word in words)
+
+
 def strip_wake_word(text: str, name: str = WAKE_NAME) -> str:
     """« Alicia, lance Discord » → « lance Discord » (texte d'origine conservé)."""
     tokens = list(re.finditer(r"\S+", text))
@@ -110,6 +119,8 @@ class WakeListener:
         on_cancel: Callable[[str], None] | None = None,
         *,
         paused: Callable[[], bool] | None = None,
+        stop_only: Callable[[], bool] | None = None,
+        on_stop: Callable[[], None] | None = None,
         device: str = "",
         sample_rate: int = 16000,
         name: str = WAKE_NAME,
@@ -119,6 +130,9 @@ class WakeListener:
         self.on_command = on_command
         self.on_cancel = on_cancel or (lambda _reason: None)
         self.paused = paused or (lambda: False)
+        # Pendant qu'ALICIA parle ou analyse : seul « Alicia, stop » est écouté.
+        self.stop_only = stop_only or (lambda: False)
+        self.on_stop = on_stop or (lambda: None)
         self.device = device
         self.sample_rate = sample_rate
         self.name = name
@@ -279,6 +293,13 @@ class WakeListener:
                 "oui" if woke else "non",
                 time.perf_counter() - started,
             )
+            if woke and is_stop(rest):
+                log.info("« Alicia, stop » entendu")
+                self.on_stop()
+                woke = False  # rien d'autre à faire de cette phrase
+            elif woke and self.stop_only():
+                log.debug("Réveil ignoré : ALICIA est occupée (seul « stop » est écouté)")
+                woke = False
             if not woke:
                 self.state = self.IDLE if ended else self.IGNORING
                 if ended:

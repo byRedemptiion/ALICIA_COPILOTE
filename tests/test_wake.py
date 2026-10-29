@@ -95,3 +95,26 @@ def test_nothing_is_heard_while_paused():
     )
     feed(listener, np.concatenate([silence(1), tone(2.5), silence(1.2)]))
     assert not calls
+
+
+@pytest.mark.parametrize(
+    "text", ["Alicia stop", "Alicia, tais-toi !", "Alicia arrête", "Ok Alicia, chut"]
+)
+def test_alicia_stop_interrupts_even_while_she_talks(text):
+    stops = []
+    listener = WakeListener(
+        lambda _s: text,
+        on_wake=lambda: pytest.fail("pas de nouvelle demande"),
+        on_command=lambda a: pytest.fail("pas de nouvelle demande"),
+        stop_only=lambda: True,
+        on_stop=lambda: stops.append(1),
+    )
+    feed(listener, np.concatenate([silence(1), tone(1.0), silence(1)]))
+    assert stops == [1]
+
+
+def test_other_requests_wait_while_she_talks():
+    listener, events = make("Alicia, lance Discord")
+    listener.stop_only = lambda: True
+    feed(listener, np.concatenate([silence(1), tone(2.5), silence(1.2)]))
+    assert events == {"wake": 0, "commands": [], "cancel": []}

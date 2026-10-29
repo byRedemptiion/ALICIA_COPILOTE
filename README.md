@@ -45,7 +45,8 @@ Au lancement, **seul le rond d'ALICIA s'affiche**, en haut à droite, toujours a
 Plus besoin de F10 : **commence ta phrase par « Alicia »**. « Alicia, lance Discord », « Alicia, quel objet je prends ? », « Alicia, éteins le PC ». Tu peux aussi dire « Alicia » seul, attendre que le rond passe au cyan, puis faire ta demande.
 
 - Tout reste **sur ton PC** : un petit modèle Whisper local repère son nom au début des phrases ; tant qu'il n'est pas dit, rien n'est envoyé ni gardé.
-- L'écoute se met en pause pendant qu'elle parle, qu'elle analyse ou que F10 est maintenue.
+- **« Alicia, stop »** (ou « tais-toi », « chut ») la coupe pendant qu'elle parle et annule l'analyse en cours. Pendant qu'elle parle ou réfléchit, c'est la seule phrase qu'elle écoute.
+- **Onglet RACCOURCIS** : change la touche pour lui parler (F10) ou celle de l'analyse (F9) — clique, puis appuie sur la nouvelle touche, ou sur un **bouton latéral de souris** (4/5, le jeu le reçoit toujours). La liste des commandes vocales y est aussi.
 - Case **Réveil « Alicia »** dans le panneau, ou **clic droit sur le rond**, pour la couper (par exemple en vocal avec des amis qui disent son nom).
 - Premier lancement : le petit modèle (~140 Mo) se télécharge tout seul en arrière-plan.
 
