@@ -1,8 +1,9 @@
-"""Vision en direct : ALICIA garde en mémoire une capture récente de l'écran.
+"""Vision en direct : ALICIA a toujours une capture récente de l'écran sous la main.
 
-Une capture est faite à intervalle régulier (1 s par défaut), selon le mode de vision.
-Quand tu commences à parler (F10 ou « Alicia… »), l'image de cet instant est déjà prête :
-pas d'attente de capture, et l'IA voit l'écran tel qu'il était quand tu as parlé.
+Économe : l'écran est capturé dès que tu commences à parler (début de voix au micro ou
+appui sur F10), plus une capture de fond espacée (10 s par défaut) pour la mémoire de
+partie. Ainsi l'IA voit l'écran tel qu'il était quand tu as parlé, sans capturer en
+continu (une capture par seconde pendant des heures chauffe le PC pour rien).
 
 Les images restent en mémoire (les 3 dernières) : rien n'est envoyé à l'IA ni enregistré
 tant que tu ne poses pas de question.
@@ -16,6 +17,7 @@ import time
 from collections.abc import Callable
 
 from alicia.core.capture.models import Frame, WindowInfo
+from alicia.core.capture.service import quiet_logs
 from alicia.core.errors import AliciaError
 
 log = logging.getLogger("alicia.capture")
@@ -35,6 +37,7 @@ class LiveCapture:
         self.on_frame = on_frame  # ex. mémoire de partie
         self._target = target
         self.interval_s = max(0.3, interval_s)
+        self._wake = threading.Event()  # capture demandée tout de suite
         self.latest: Frame | None = None
         self.latest_at = 0.0  # time.monotonic() de la dernière capture réussie
         self.frames = 0
@@ -52,14 +55,34 @@ class LiveCapture:
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="alicia-live", daemon=True)
         self._thread.start()
-        log.info("Vision en direct : une capture toutes les %.1f s (en mémoire)", self.interval_s)
+        log.info(
+            "Vision en direct : capture quand tu parles, sinon toutes les %.0f s (en mémoire)",
+            self.interval_s,
+        )
 
     def stop(self) -> None:
         self._stop.set()
+        self._wake.set()
         if self._thread is not None:
             self._thread.join(2.0)
         self._thread = None
         log.info("Vision en direct coupée")
+
+    def trigger(self) -> float:
+        """Capture dès que possible (début de phrase). Renvoie l'instant de la demande,
+        à passer à ``since``. Appelable depuis n'importe quel thread."""
+        self._wake.set()
+        return time.monotonic()
+
+    def since(self, mark: float, wait_s: float = 0.0) -> Frame | None:
+        """La capture faite après ``mark`` (en l'attendant au plus ``wait_s`` secondes)."""
+        deadline = time.monotonic() + wait_s
+        while True:
+            if self.latest is not None and self.latest_at >= mark:
+                return self.latest
+            if time.monotonic() >= deadline:
+                return None
+            time.sleep(0.02)
 
     def fresh(self, max_age_s: float = 3.0) -> Frame | None:
         """La dernière capture si elle a moins de ``max_age_s`` secondes."""
@@ -90,9 +113,11 @@ class LiveCapture:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            started = time.monotonic()
+            self._wake.clear()
             try:
-                self.grab_once()
+                with quiet_logs():
+                    self.grab_once()
             except Exception:  # noqa: BLE001 - la vision en direct ne doit jamais planter ALICIA
                 log.exception("Vision en direct : erreur inattendue")
-            self._stop.wait(max(0.05, self.interval_s - (time.monotonic() - started)))
+            self._wake.wait(self.interval_s)  # capture de fond… ou tout de suite si tu parles
+            self._stop.wait(0.2)  # au plus 5 captures par seconde, même si tu parles beaucoup

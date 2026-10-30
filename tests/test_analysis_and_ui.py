@@ -599,13 +599,19 @@ def test_speech_uses_the_screen_from_when_you_started_talking(qt_app, settings):
     audio = PreparedAudio(b"RIFF", "audio/wav", 1.0)
     services = build_services(settings, demo=True, model=FakeModel(), recorder=FakeRecorder(audio))
     window = MainWindow(services)
-    window.live = LiveCapture(services.capture.capture, lambda: (DEMO_WINDOW, "window", (800, 500)))
-    before = window.live.grab_once()
-    window.talk_pressed()
-    assert window._speech_frame is before
+    window.live = LiveCapture(
+        services.capture.capture, lambda: (DEMO_WINDOW, "window", (800, 500)), interval_s=30
+    )
+    window.live.start()
+    window.live.since(0.0, wait_s=2.0)
+    window.talk_pressed()  # capture demandée à l'appui
+    assert window._speech_mark is not None
+    pressed = window.live.since(window._speech_mark, wait_s=2.0)
+    assert pressed is not None
     window.talk_released()
     outcome = run_until(qt_app, window)
-    assert outcome.frame is before  # pas de nouvelle capture : l'image du début de la phrase
+    assert outcome.frame is pressed  # l'image du début de la phrase, pas une nouvelle
+    window.live.stop()
     window.close()
 
 

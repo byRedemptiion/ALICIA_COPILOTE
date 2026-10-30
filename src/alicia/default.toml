@@ -51,7 +51,7 @@ cursor_box = "1280x800"      # taille de la zone autour du curseur
 # Vision en direct : une capture récente est toujours prête (en mémoire, jamais envoyée
 # sans question). Quand tu parles, l'IA voit l'écran du moment où tu as commencé.
 live = true
-live_interval_s = 1.0
+live_interval_s = 10.0
 # Mémoire de partie : une petite image toutes les 30 s (pendant la vision en direct), pour
 # répondre à « il y a une heure… ». Effacées après 20 h, 10 000 images au plus.
 memory = true

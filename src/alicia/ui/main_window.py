@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
         self.live = None  # LiveCapture : capture récente toujours prête
         self._speech_frame: Frame | None = None
+        self._speech_mark: float | None = None  # capture demandée au début de ta phrase
         self._expect_reply = False  # elle attend « oui / non / annule » après une action
         self._awaiting_answer = False  # elle écoute cette réponse en ce moment
         self._shown_frame: Frame | None = None
@@ -607,8 +608,16 @@ class MainWindow(QMainWindow):
     def _live_frame(self, max_age_s: float = 3.0) -> Frame | None:
         return self.live.fresh(max_age_s) if self.live is not None else None
 
+    def _speech_started(self) -> None:
+        """Tu commences à parler (micro ou F10) : l'écran de cet instant est capturé."""
+        if self.live is not None:
+            self._speech_mark = self.live.trigger()
+
     def _take_speech_frame(self) -> Frame | None:
         frame, self._speech_frame = self._speech_frame, None
+        mark, self._speech_mark = self._speech_mark, None
+        if frame is None and mark is not None and self.live is not None:
+            frame = self.live.since(mark, wait_s=1.0)
         if frame is not None:
             log.info("Vision en direct : image du début de ta phrase utilisée")
         return frame
@@ -1085,6 +1094,7 @@ class MainWindow(QMainWindow):
                 paused=self._wake_paused,
                 stop_only=self._wake_stop_only,
                 on_stop=self.voice_bridge.wake_stop.emit,
+                on_speech=self._speech_started,
                 device=voice.input_device,
                 sample_rate=voice.sample_rate,
                 sensitivity=voice.wake_sensitivity,
@@ -1121,7 +1131,8 @@ class MainWindow(QMainWindow):
 
     def _wake_heard(self) -> None:
         self.stop_voice()  # « Alicia » pendant qu'elle parle : elle se tait et t'écoute
-        self._speech_frame = self._live_frame()
+        if self._speech_mark is None:
+            self._speech_frame = self._live_frame()
         self._core("listening")
         self._set_status("🎙 Je t'écoute…")
         if self._bubble_active():
@@ -1696,7 +1707,8 @@ class MainWindow(QMainWindow):
             self._set_status("⚠ " + exc.user_message)
             return
         self._core("listening")
-        self._speech_frame = self._live_frame()  # l'écran au moment où tu commences à parler
+        self._speech_frame = None
+        self._speech_started()  # l'écran au moment où tu commences à parler
         self._set_status("🎙 Je t'écoute… relâche la touche quand tu as fini.")
 
     def talk_released(self) -> None:

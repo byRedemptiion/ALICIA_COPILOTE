@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import threading
 import time
 import uuid
 from collections import deque
@@ -22,6 +24,22 @@ from alicia.core.config import CaptureSettings
 from alicia.core.errors import AliciaError, CaptureError
 
 log = logging.getLogger("alicia.capture")
+_quiet = threading.local()
+
+
+@contextlib.contextmanager
+def quiet_logs():
+    """Captures de fond (vision en direct) : réussites au niveau DEBUG, pour ne pas écrire
+    une ligne de journal par seconde sur le disque."""
+    _quiet.on = True
+    try:
+        yield
+    finally:
+        _quiet.on = False
+
+
+def _ok_level() -> int:
+    return logging.DEBUG if getattr(_quiet, "on", False) else logging.INFO
 
 
 class CaptureService:
@@ -184,7 +202,8 @@ class CaptureService:
             image = mark_cursor(image, point)
         frame = replace(frame, image=image, window=window or screen, cursor=point, mode=mode)
         self.recent[-1] = frame
-        log.info(
+        log.log(
+            _ok_level(),
             "Vision %s : %dx%d%s",
             "autour du curseur" if mode == "cursor" else "écran entier",
             frame.width,
@@ -236,7 +255,8 @@ class CaptureService:
                 notes=tuple(notes),
             )
             self.recent.append(frame)
-            log.info(
+            log.log(
+                _ok_level(),
                 "Capture ok via %s : %dx%d en %d ms (grab %d ms)%s",
                 backend.name,
                 frame.width,

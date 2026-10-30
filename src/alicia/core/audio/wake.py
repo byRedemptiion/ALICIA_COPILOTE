@@ -132,6 +132,7 @@ class WakeListener:
         paused: Callable[[], bool] | None = None,
         stop_only: Callable[[], bool] | None = None,
         on_stop: Callable[[], None] | None = None,
+        on_speech: Callable[[], None] | None = None,
         device: str = "",
         sample_rate: int = 16000,
         name: str | None = None,
@@ -145,6 +146,8 @@ class WakeListener:
         # Pendant qu'ALICIA parle ou analyse : seul « Alicia, stop » est écouté.
         self.stop_only = stop_only or (lambda: False)
         self.on_stop = on_stop or (lambda: None)
+        # Début d'une phrase (avant de savoir si c'est « Alicia ») : capture de l'écran.
+        self.on_speech = on_speech or (lambda: None)
         self.device = device
         self.sample_rate = sample_rate
         self.name = name or current().wake_name
@@ -270,6 +273,10 @@ class WakeListener:
                     self.state = self.CHECKING
                     self._buffer = list(self._preroll)
                     self._silence = 0.0
+                    try:
+                        self.on_speech()
+                    except Exception:  # noqa: BLE001 - simple confort
+                        log.debug("Début de phrase : rappel en erreur", exc_info=True)
             else:
                 self._loud = 0
                 self._floor = 0.95 * self._floor + 0.05 * rms  # bruit de fond (ventilos, jeu)

@@ -208,3 +208,44 @@ def test_clock_time_and_no_past():
     moment = find_past_moment("qu'est-ce que j'avais à 23h15 ?", now)
     assert (moment.day, moment.hour, moment.minute) == (29, 23, 15)
     assert find_past_moment("quel objet je prends ?", now) is None
+
+
+def test_live_capture_on_demand_and_quiet():
+    import time
+
+    from alicia.core.capture.live import LiveCapture
+
+    calls = []
+
+    def capture(window, mode, box):
+        from alicia.core.capture.service import _ok_level
+
+        calls.append(_ok_level())
+        from datetime import UTC, datetime
+
+        from PIL import Image
+
+        from alicia.core.capture.models import Frame
+
+        return Frame(
+            image=Image.new("RGB", (4, 4)),
+            window=None,
+            backend="test",
+            captured_at=datetime.now(UTC),
+            duration_ms=1,
+            capture_id="x",
+        )
+
+    live = LiveCapture(capture, lambda: (None, "screen", (10, 10)), interval_s=30)
+    live.start()
+    try:
+        assert live.since(0.0, wait_s=2.0) is not None  # 1re capture au démarrage
+        first = len(calls)
+        time.sleep(0.4)
+        assert len(calls) == first  # pas de capture continue
+        mark = live.trigger()
+        assert live.since(mark, wait_s=2.0) is not None  # capture dès que tu parles
+        assert len(calls) == first + 1
+        assert all(level == 10 for level in calls)  # DEBUG : pas une ligne par capture
+    finally:
+        live.stop()

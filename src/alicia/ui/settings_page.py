@@ -141,9 +141,9 @@ class SettingsPage(QScrollArea):
         )
         self.live_interval = QComboBox()
         for seconds, label in (
-            (0.5, "Toutes les 0,5 s"),
-            (1.0, "Toutes les secondes"),
-            (2.0, "Toutes les 2 s"),
+            (5.0, "Quand tu parles + toutes les 5 s"),
+            (10.0, "Quand tu parles + toutes les 10 s"),
+            (30.0, "Quand tu parles + toutes les 30 s"),
         ):
             self.live_interval.addItem(label, seconds)
         grid.addWidget(self.live_box, 4, 0, 1, 2)

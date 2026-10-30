@@ -141,7 +141,7 @@ class CaptureSettings:
     mode: str = "window"  # window (application) | cursor (zone autour du curseur) | screen
     cursor_box: tuple[int, int] = (1280, 800)  # taille de la zone autour du curseur (px)
     live: bool = True  # vision en direct : capture récente toujours prête (en mémoire)
-    live_interval_s: float = 1.0
+    live_interval_s: float = 10.0  # capture de fond ; sinon capture au début de chaque phrase
     memory: bool = True  # mémoire de partie : petites captures datées sur le disque
     memory_interval_s: float = 30.0
     memory_hours: float = 20.0
@@ -384,7 +384,7 @@ def load_settings(
             mode=_choice(capture, "mode", "window", VISION_MODES),
             cursor_box=_box(capture.get("cursor_box", "1280x800")),
             live=bool(capture.get("live", True)),
-            live_interval_s=max(0.3, min(10.0, float(capture.get("live_interval_s", 1.0)))),
+            live_interval_s=max(5.0, min(60.0, float(capture.get("live_interval_s", 10.0)))),
             memory=bool(capture.get("memory", True)),
             memory_interval_s=max(5.0, float(capture.get("memory_interval_s", 30.0))),
             memory_hours=max(0.5, min(720.0, float(capture.get("memory_hours", 20.0)))),
