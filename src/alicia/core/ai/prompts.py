@@ -41,7 +41,27 @@ puis, à la ligne suivante, ta réponse. Si l'audio est vide ou incompréhensibl
 TRANSCRIPT_PREFIX = "Question :"
 
 
-def build_system_prompt(game_context: str | None = None, *, spoken: bool = False) -> str:
+BRAIN_RULES = {
+    "rapide": "",
+    "reflechi": (
+        "\nCerveau réfléchi : cette question demande de réfléchir. Prends le temps de comparer "
+        "les options, de croiser ce que tu vois avec ce que tu sais du jeu (et la recherche "
+        "web si disponible), puis donne une conclusion nette : ton choix, les 2 ou 3 raisons "
+        "qui comptent, et quoi faire maintenant. Reste clair et pas trop long : le joueur "
+        "joue.\n"
+    ),
+}
+BRAIN_ROLES = {
+    "rapide": "Conversation, réactions immédiates, questions simples sur l'écran (« c'est quoi "
+    "cet objet ? »), actions courtes. Doit répondre en 1 à 3 secondes.",
+    "reflechi": "Stratégie, build, comparaison approfondie d'équipements, analyse de partie, "
+    "raisonnement sur plusieurs informations, recherche. Peut prendre plus de temps.",
+}
+
+
+def build_system_prompt(
+    game_context: str | None = None, *, spoken: bool = False, brain: str = "rapide"
+) -> str:
     from alicia.core.persona import current, player
 
     prompt = BASE_SYSTEM_PROMPT.replace("{identity}", current().identity)
@@ -66,6 +86,7 @@ def build_system_prompt(game_context: str | None = None, *, spoken: bool = False
             "sans aucun contenu romantique ou sexuel) :\n"
             f"<personnalite>\n{character}\n</personnalite>\n"
         )
+    prompt += BRAIN_RULES.get(brain, "")
     if spoken:
         prompt += "\n" + VOICE_RULES
     if game_context:

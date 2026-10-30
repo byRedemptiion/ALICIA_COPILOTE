@@ -40,7 +40,7 @@ RedirectionGuard=no
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
-fr.WelcomeLabel2=Tu vas installer COP'IA'LOTE, ton copilote de jeu (profil ALICIA ou VERIS) : il regarde ton écran, t'écoute (F10 ou « Alicia… ») et te conseille, sans jamais jouer à ta place.%n%nIl faut une connexion Internet : l'installation télécharge Python et les voix (environ 2 Go la première fois).
+fr.WelcomeLabel2=Tu vas installer COP'IA'LOTE, ton copilote de jeu (profil ALICIA ou VIIRUS) : il regarde ton écran, t'écoute (F10 ou « Alicia… ») et te conseille, sans jamais jouer à ta place.%n%nIl faut une connexion Internet : l'installation télécharge Python et les voix (environ 2 Go la première fois).
 
 [Files]
 Source: "..\pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
@@ -70,6 +70,8 @@ Type: filesandordirs; Name: "{app}"
 ; Raccourcis renommés selon le profil choisi (VERIS…) par COP'IA'LOTE lui-même.
 Type: files; Name: "{autodesktop}\VERIS.lnk"
 Type: files; Name: "{autoprograms}\VERIS.lnk"
+Type: files; Name: "{autodesktop}\VIIRUS.lnk"
+Type: files; Name: "{autoprograms}\VIIRUS.lnk"
 
 [Code]
 var

@@ -230,7 +230,7 @@ class PlayerSettings:
 
 @dataclass(frozen=True)
 class DuoSettings:
-    enabled: bool = False  # ALICIA chez l'un, VERIS chez l'autre : ils se parlent
+    enabled: bool = False  # ALICIA chez l'un, VIIRUS chez l'autre : ils se parlent
     code: Secret = field(default_factory=lambda: Secret(None))  # DUO_CODE dans .env
     max_turns: int = 4  # répliques au total quand les robots discutent entre eux
     hear_peer: bool = True  # entendre aussi l'autre robot sur ce PC, avec sa voix

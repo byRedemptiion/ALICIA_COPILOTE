@@ -168,7 +168,9 @@ class SettingsPage(QWidget):
         for persona in PERSONAS.values():
             self.persona_box.addItem(persona.title, persona.key)
         self.persona_box.setCurrentIndex(max(0, self.persona_box.findData(current_persona().key)))
-        self.persona_box.setProperty("keep_names", True)  # « ALICIA » et « VERIS », jamais renommés
+        self.persona_box.setProperty(
+            "keep_names", True
+        )  # « ALICIA » et « VIIRUS », jamais renommés
         self.persona_box.currentIndexChanged.connect(
             lambda _i: self._emit("persona", self.persona_box.currentData())
         )
@@ -391,7 +393,7 @@ class SettingsPage(QWidget):
         self.engine_box.addItem("Edge — voix Microsoft en ligne (plus naturelle)", "edge")
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
-        self.engine_box.addItem("VERIS — voix robot de VERIS MOD (sur ton PC)", "veris")
+        self.engine_box.addItem("VIIRUS — voix robot (de VERIS MOD, sur ton PC)", "veris")
         self.engine_box.addItem("ALICIA — voix C, petite fille (sur ton PC)", "voixc")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
@@ -533,33 +535,50 @@ class SettingsPage(QWidget):
         self._tab_layouts["duo"].addWidget(duo)
 
         # --- Général -------------------------------------------------------------------------------
-        ai_panel, grid = _panel()
-        grid.addWidget(_title("IA & CLÉS"), 0, 0, 1, 3)
-        self.ai_label = QLabel("")
+        # --- IA & clés : cerveau rapide / cerveau réfléchi ------------------------------------
+        self.brain_labels: dict[str, dict[str, QLabel]] = {}
+
+        def brain_card(kind: str, title: str) -> QGridLayout:
+            from alicia.core.ai.prompts import BRAIN_ROLES
+
+            card, grid = _panel()
+            grid.addWidget(_title(title), 0, 0, 1, 3)
+            labels = {
+                "provider": QLabel("—"),
+                "model": QLabel("—"),
+                "state": _muted("● pas encore testé"),
+            }
+            self.brain_labels[kind] = labels
+            grid.addWidget(QLabel("Fournisseur"), 1, 0)
+            grid.addWidget(labels["provider"], 1, 1)
+            grid.addWidget(QLabel("Modèle"), 2, 0)
+            grid.addWidget(labels["model"], 2, 1)
+            grid.addWidget(QLabel("Rôle"), 3, 0)
+            grid.addWidget(_muted(BRAIN_ROLES[kind]), 3, 1, 1, 2)
+            show_prompt = QPushButton("Voir le prompt")
+            show_prompt.clicked.connect(lambda _=False: self._emit("brain_prompt", kind))
+            grid.addWidget(QLabel("Prompt"), 4, 0)
+            grid.addWidget(
+                _muted("personnalité du profil + règles + consignes de ce cerveau"), 4, 1
+            )
+            grid.addWidget(show_prompt, 4, 2)
+            test = QPushButton("Tester")
+            test.clicked.connect(lambda _=False: self._emit("brain_test", kind))
+            grid.addWidget(QLabel("État"), 5, 0)
+            grid.addWidget(labels["state"], 5, 1)
+            grid.addWidget(test, 5, 2)
+            self._tab_layouts["ai"].addWidget(card)
+            return grid
+
+        grid = brain_card("rapide", "⚡  CERVEAU RAPIDE")
+        self.ai_label = self.brain_labels["rapide"]["provider"]
         change_ai = QPushButton("Changer d'IA / gérer mes clés")
         change_ai.clicked.connect(self.open_ai.emit)
-        grid.addWidget(QLabel("IA utilisée"), 1, 0)
-        grid.addWidget(self.ai_label, 1, 1)
         grid.addWidget(change_ai, 1, 2)
-        grid.addWidget(
-            _muted(
-                "Gemini, ChatGPT ou Ollama. Plusieurs clés par fournisseur : bouton « + » dans "
-                "la fenêtre des clés, puis coche celle à utiliser. L'IA du duo se choisit dans "
-                "l'onglet Duo."
-            ),
-            2,
-            0,
-            1,
-            3,
-        )
-        self._tab_layouts["ai"].addWidget(ai_panel)
-
-        brains, grid = _panel()
-        grid.addWidget(_title("DEUX CERVEAUX"), 0, 0, 1, 3)
         self.ollama_model = QComboBox()
         self.ollama_model.setEditable(True)
         for name, label in (
-            ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go, voit bien l'écran (actuel)"),
+            ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go, voit bien l'écran"),
             ("qwen3-vl:8b", "qwen3-vl:8b — 6 Go, plus récent"),
             ("lfm3-omni:2b", "lfm3-omni:2b — 2,4 Go, ultra rapide, réflexion limitée"),
         ):
@@ -570,11 +589,14 @@ class SettingsPage(QWidget):
         self.ollama_model.lineEdit().editingFinished.connect(
             lambda: self._emit("ollama_model", self._combo_value(self.ollama_model))
         )
-        grid.addWidget(QLabel("Modèle Ollama"), 1, 0)
-        grid.addWidget(self.ollama_model, 1, 1, 1, 2)
+        self.ollama_row = QLabel("Modèle Ollama")
+        grid.addWidget(self.ollama_row, 6, 0)
+        grid.addWidget(self.ollama_model, 6, 1, 1, 2)
+
+        grid = brain_card("reflechi", "🧠  CERVEAU RÉFLÉCHI")
         self.deep_box = QComboBox()
         for key, label in (
-            ("", "Aucun : la même IA pour tout"),
+            ("", "Aucun : le cerveau rapide répond à tout"),
             ("gemini", "Gemini (en ligne, rien sur ton PC) — conseillé en jeu"),
             ("openai", "ChatGPT (en ligne, réflexion moyenne)"),
             ("ollama", "Ollama sur ton PC (gros modèle : hors jeu)"),
@@ -584,29 +606,38 @@ class SettingsPage(QWidget):
             lambda _i: self._emit("deep_provider", self.deep_box.currentData())
         )
         self.deep_model = QLineEdit()
-        self.deep_model.setPlaceholderText(
-            "modèle (vide = celui par défaut ; Ollama : qwen3.8:27b)"
-        )
+        self.deep_model.setPlaceholderText("modèle (optionnel)")
+        self.deep_model.setToolTip("Vide = le modèle par défaut (Ollama : qwen3.8:27b)")
         self.deep_model.editingFinished.connect(
             lambda: self._emit("deep_model", self.deep_model.text())
         )
-        grid.addWidget(QLabel("Cerveau réfléchi"), 2, 0)
-        grid.addWidget(self.deep_box, 2, 1)
-        grid.addWidget(self.deep_model, 2, 2)
+        grid.addWidget(QLabel("Choisir"), 6, 0)
+        grid.addWidget(self.deep_box, 6, 1)
+        grid.addWidget(self.deep_model, 6, 2)
+
+        routing, grid = _panel()
+        grid.addWidget(_title("QUI RÉPOND ?"), 0, 0, 1, 3)
         grid.addWidget(
             _muted(
-                "Le cerveau rapide (l'IA utilisée) répond à tout. Les questions de réflexion "
-                "(« analyse ma partie », « meilleure stratégie », « mon build », « réfléchis "
-                "bien… ») partent au cerveau réfléchi. En jeu, préfère Gemini ou ChatGPT : un "
-                "gros modèle Ollama (18 Go) ne tient pas en VRAM à côté du jeu et ferait "
-                "chauffer le processeur."
+                "Le profil (ALICIA ou VIIRUS) garde toujours sa personnalité : seul le cerveau "
+                "change. Par défaut, le <b>cerveau rapide</b> répond. Une question avec "
+                "« analyse », « stratégie », « build », « compare », « réfléchis », « pourquoi », "
+                "« plan », « meilleure option », « comment battre »… part au <b>cerveau "
+                "réfléchi</b>. Sous chaque réponse, on voit lequel a répondu, et le journal "
+                "note « [VIIRUS] [Cerveau rapide] modèle, durée, raison du routage ».<br>"
+                "En jeu, préfère Gemini ou ChatGPT pour le réfléchi : un gros modèle Ollama "
+                "(18 Go) ne tient pas en VRAM à côté du jeu et ferait chauffer le processeur. "
+                "Plusieurs clés par fournisseur : bouton « + » dans la fenêtre des clés ; l'IA "
+                "du duo se choisit dans l'onglet Duo."
             ),
-            3,
+            1,
             0,
             1,
             3,
         )
-        self._tab_layouts["ai"].addWidget(brains)
+        for label in routing.findChildren(QLabel):
+            label.setTextFormat(Qt.TextFormat.RichText)
+        self._tab_layouts["ai"].addWidget(routing)
 
         general, grid = _panel()
         grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
@@ -779,6 +810,13 @@ class SettingsPage(QWidget):
             self.deep_model.setText(ai.deep_model)
         finally:
             self._loading = False
+
+    def show_brain(self, kind: str, provider: str, model: str, state: str | None = None) -> None:
+        labels = self.brain_labels[kind]
+        labels["provider"].setText(provider)
+        labels["model"].setText(model)
+        if state is not None:
+            labels["state"].setText(state)
 
     def show_tab(self, key: str) -> None:
         """Affiche l'onglet ``key`` (general, profile, ai, voice, vision, keys, stream, duo, games)."""

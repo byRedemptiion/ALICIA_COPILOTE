@@ -1,7 +1,7 @@
-"""Raccourcis Windows au nom et à l'icône du profil choisi (ALICIA, VERIS…).
+"""Raccourcis Windows au nom et à l'icône du profil choisi (ALICIA, VIIRUS…).
 
 Au démarrage, le raccourci du bureau et celui du menu Démarrer prennent le nom et l'icône
-du profil : « VERIS » avec l'icône de VERIS chez l'un, « ALICIA » chez l'autre. Seuls les
+du profil : « VIIRUS » avec l'icône de VIIRUS chez l'un, « ALICIA » chez l'autre. Seuls les
 raccourcis qui lancent COP'IA'LOTE sont renommés ; les autres fichiers ne sont jamais touchés.
 """
 
@@ -73,7 +73,7 @@ def sync_shortcuts(persona: Persona, root: Path | None, cache: Path) -> bool:
     powershell = shutil.which("powershell")
     if not target.is_file() or icon is None or powershell is None:
         return False
-    old = {p.title for p in PERSONAS.values()} | {"ALICIA", "Alicia", "COP'IA'LOTE"}
+    old = {p.title for p in PERSONAS.values()} | {"ALICIA", "Alicia", "VERIS", "COP'IA'LOTE"}
     env = dict(
         os.environ,
         COPIA_TARGET=str(target),

@@ -48,6 +48,11 @@ _DEEP = None
 
 def wants_deep_thinking(question: str) -> bool:
     """Questions qui méritent le cerveau réfléchi : stratégie, build, analyse, plan…"""
+    return deep_reason(question) is not None
+
+
+def deep_reason(question: str) -> str | None:
+    """Le mot qui fait passer la question au cerveau réfléchi (pour les journaux), ou None."""
     import re
     import unicodedata
 
@@ -61,4 +66,5 @@ def wants_deep_thinking(question: str) -> bool:
         )
     plain = unicodedata.normalize("NFKD", question.casefold())
     plain = "".join(c for c in plain if not unicodedata.combining(c))
-    return bool(_DEEP.search(plain))
+    match = _DEEP.search(plain)
+    return match.group(0) if match else None

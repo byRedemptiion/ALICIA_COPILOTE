@@ -30,7 +30,7 @@ STATE_COLORS = {
     "error": QColor(255, 40, 70),
 }
 _PERSONA = current_persona()
-globals().update(_PERSONA.colors)  # VERIS : violet néon à la place du rose et de l'or
+globals().update(_PERSONA.colors)  # VIIRUS : violet néon à la place du rose et de l'or
 for _state, _rgb in _PERSONA.states.items():
     STATE_COLORS[_state] = QColor(*_rgb)
 
@@ -43,7 +43,7 @@ STATE_LABELS = {
     "error": "ERREUR",
 }
 
-PROJECT_NAME = "COP'IA'LOTE"  # le projet ; le personnage (ALICIA, VERIS…) est un profil
+PROJECT_NAME = "COP'IA'LOTE"  # le projet ; le personnage (ALICIA, VIIRUS…) est un profil
 FONT_FAMILY = "Bahnschrift"  # police « DIN » fournie avec Windows ; repli automatique sinon
 
 

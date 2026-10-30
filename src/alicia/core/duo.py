@@ -1,4 +1,4 @@
-"""Duo : deux robots COP'IA'LOTE (ALICIA chez l'un, VERIS chez l'autre) qui se parlent.
+"""Duo : deux robots COP'IA'LOTE (ALICIA chez l'un, VIIRUS chez l'autre) qui se parlent.
 
 Les deux PC échangent de courts messages par un relais public gratuit (ntfy.sh), sans
 compte ni serveur à installer. Tout est **chiffré et signé avec le code de duo** que vous
@@ -216,7 +216,7 @@ class DuoLink:
                 log.exception("Duo : message reçu inexploitable")
 
 
-# --- « Veris, dis bonjour à Alicia » ----------------------------------------------------------
+# --- « Viirus, dis bonjour à Alicia » ----------------------------------------------------------
 
 
 def _plain(text: str) -> str:

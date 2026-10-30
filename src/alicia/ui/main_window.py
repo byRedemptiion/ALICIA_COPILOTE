@@ -173,7 +173,7 @@ class MainWindow(QMainWindow):
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
         self.live = None  # LiveCapture : capture récente toujours prête
         self.overlay = None  # OverlayServer : ALICIA sur le stream (OBS)
-        self.duo_link = None  # DuoLink : l'autre robot (ALICIA ↔ VERIS)
+        self.duo_link = None  # DuoLink : l'autre robot (ALICIA ↔ VIIRUS)
         self.duo_peer = ""  # nom de l'autre robot, appris à la connexion
         self.duo_conv: dict | None = None  # type: ignore[type-arg]  # discussion en cours
         self._duo_pending: list[dict] = []  # type: ignore[type-arg]
@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
         if not icon.isNull():
             self.setWindowIcon(icon)
             self.orb.setWindowIcon(icon)
-        rename_widgets(self)  # VERIS : son nom partout à la place d'ALICIA
+        rename_widgets(self)  # VIIRUS : son nom partout à la place d'ALICIA
         rename_widgets(self.orb)
         self.tray = self._build_tray(icon)
         self._attach_logs()
@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
             button.setCheckable(True)
             button.clicked.connect(lambda _=False, i=index: self.show_page(i))
         self.nav_console.setChecked(True)
-        # Trois colonnes de même largeur : COP'IA'LOTE | VERIS · JEUX (au centre) | bulle, ⚙
+        # Trois colonnes de même largeur : COP'IA'LOTE | VIIRUS · JEUX (au centre) | bulle, ⚙
         header = QGridLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.addWidget(brand, 0, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -381,7 +381,7 @@ class MainWindow(QMainWindow):
         self.engine_box.addItem("Edge (en ligne)", "edge")
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
         self.engine_box.addItem("OpenAI (réaliste)", "openai")
-        self.engine_box.addItem("VERIS (robot)", "veris")
+        self.engine_box.addItem("VIIRUS (robot)", "veris")
         self.engine_box.addItem("ALICIA (voix C)", "voixc")
         self.engine_box.setCurrentIndex(
             max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
@@ -739,6 +739,7 @@ class MainWindow(QMainWindow):
             self.services.settings.ui_mode,
             f"{model.provider} / {model.model}",
         )
+        self._show_brains()
 
     def _save(self, section: str, key: str, value: object) -> None:
         from alicia.core.user_config import set_value
@@ -924,6 +925,10 @@ class MainWindow(QMainWindow):
             else:
                 self._save("ai", key, text)
             self._reload_ai()
+        elif key == "brain_prompt":
+            self.show_brain_prompt(str(value))
+        elif key == "brain_test":
+            self.test_brain(str(value))
         elif key in ("personality_load", "personality_edit", "personality_remove"):
             self._personality_action(key)
         elif key == "player_test":
@@ -988,7 +993,7 @@ class MainWindow(QMainWindow):
             self.change_persona(str(value))
 
     def change_persona(self, key: str) -> None:
-        """ALICIA ↔ VERIS : enregistré, avec sa voix, puis appliqué au redémarrage."""
+        """ALICIA ↔ VIIRUS : enregistré, avec sa voix, puis appliqué au redémarrage."""
         from PySide6.QtWidgets import QMessageBox
 
         from alicia.core.persona import PERSONAS
@@ -1282,7 +1287,7 @@ class MainWindow(QMainWindow):
         self.settings_page.show_duo(text)
 
     def _duo_router(self, text: str):  # type: ignore[no-untyped-def]
-        """« Veris, demande à Alicia… » (porte-parole) ou « discute avec Alicia… » (robots)."""
+        """« Viirus, demande à Alicia… » (porte-parole) ou « discute avec Alicia… » (robots)."""
         from alicia.core.actions.controller import ActionReply
         from alicia.core.duo import parse_duo_request
         from alicia.core.persona import PERSONAS
@@ -1516,7 +1521,7 @@ class MainWindow(QMainWindow):
             return
         self._duo_last_relay = (time.monotonic(), text)
         log.info("Duo : message reçu de %s", name)
-        # C'est l'autre robot qui te parle : sa tête, sa voix (ALICIA chez toi, VERIS chez lui)
+        # C'est l'autre robot qui te parle : sa tête, sa voix (ALICIA chez toi, VIIRUS chez lui)
         peer = self._peer_voice(name) if self.services.settings.duo.hear_peer else None
         line = text if peer is not None else f"Message de {name} : {text}"
         self.asked_label.setText(f"{name.upper()}  ›")
@@ -1539,9 +1544,10 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _persona_named(name: str):  # type: ignore[no-untyped-def]
-        from alicia.core.persona import PERSONAS
+        from alicia.core.persona import OLD_TITLES, PERSONAS
 
-        return next((p for p in PERSONAS.values() if p.title == name.upper()), None)
+        title = OLD_TITLES.get(name.upper(), name.upper())
+        return next((p for p in PERSONAS.values() if p.title == title), None)
 
     # --- discussion entre robots (seulement si autorisée) -------------------------------------
 
@@ -1647,7 +1653,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1800, self._core_settle)
 
     def _peer_voice(self, name: str):  # type: ignore[no-untyped-def]
-        """Voix de l'autre robot sur ce PC (ALICIA : sa voix Edge, VERIS : sa voix robot)."""
+        """Voix de l'autre robot sur ce PC (ALICIA : sa voix Edge, VIIRUS : sa voix robot)."""
         from dataclasses import replace
 
         from alicia.core.audio.speaker import Speaker
@@ -1828,7 +1834,7 @@ class MainWindow(QMainWindow):
             from alicia.core.shortcuts import sync_shortcuts_async
             from alicia.core.update import install_root
 
-            # Raccourci du bureau au nom et à l'icône du profil (VERIS, ALICIA…)
+            # Raccourci du bureau au nom et à l'icône du profil (VIIRUS, ALICIA…)
             sync_shortcuts_async(current_persona(), install_root(), state_dir() / "icons")
             self.prepare_ollama()
             self.set_memory(self.services.settings.capture.memory, save=False)
@@ -1940,6 +1946,74 @@ class MainWindow(QMainWindow):
         self._update_state()
         self.prepare_ollama()
 
+    _PROVIDER_NAMES = {
+        "gemini": "Gemini (Google, en ligne)",
+        "openai": "ChatGPT (OpenAI, en ligne)",
+        "ollama": "Ollama (sur ton PC)",
+        "fake": "IA factice (démo)",
+    }
+
+    def _show_brains(self) -> None:
+        """Réglages → IA & clés : fournisseur et modèle de chaque cerveau."""
+        page = self.settings_page
+        fast = self.services.model
+        page.show_brain(
+            "rapide", self._PROVIDER_NAMES.get(fast.provider, fast.provider), fast.model
+        )
+        page.ollama_row.setVisible(fast.provider == "ollama")
+        page.ollama_model.setVisible(fast.provider == "ollama")
+        deep = self.services.analysis.deep_model
+        if deep is None:
+            page.show_brain("reflechi", "Aucun (le cerveau rapide répond à tout)", "—")
+        else:
+            page.show_brain(
+                "reflechi", self._PROVIDER_NAMES.get(deep.provider, deep.provider), deep.model
+            )
+
+    def show_brain_prompt(self, kind: str) -> None:
+        """Le prompt exact envoyé à ce cerveau (sans le contexte du jeu, ajouté à chaque question)."""
+        from PySide6.QtWidgets import QDialog, QPlainTextEdit, QVBoxLayout
+
+        from alicia.core.ai.prompts import build_system_prompt
+
+        name = "cerveau rapide" if kind == "rapide" else "cerveau réfléchi"
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Prompt du {name} — {current_persona().title}")
+        dialog.resize(760, 560)
+        dialog.setStyleSheet(STYLESHEET)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            f"Ce que reçoit le {name} de {current_persona().title} avant chaque question. "
+            "S'y ajoutent à chaque fois : le jeu détecté et ses sites, la description de ce "
+            "qui est capturé, et l'historique récent."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("muted")
+        text = QPlainTextEdit(build_system_prompt(None, spoken=True, brain=kind))
+        text.setReadOnly(True)
+        layout.addWidget(intro)
+        layout.addWidget(text, 1)
+        dialog.exec()
+
+    def test_brain(self, kind: str) -> None:
+        model = self.services.model if kind == "rapide" else self.services.analysis.deep_model
+        page = self.settings_page
+        if model is None:
+            page.show_brain(kind, page.brain_labels[kind]["provider"].text(), "—", "● aucun")
+            return
+        labels = page.brain_labels[kind]
+        labels["state"].setText("● test en cours…")
+
+        def done(problem: str | None) -> None:
+            labels["state"].setText(f"⚠ {problem}" if problem else "✓ connecté, prêt")
+            log.info("Test du %s : %s", kind, problem or "OK")
+
+        def failed(exc: Exception) -> None:
+            message = exc.user_message if isinstance(exc, AliciaError) else str(exc)
+            labels["state"].setText(f"⚠ {message}")
+
+        self._background(model.check, done, failed)
+
     def _reload_ai(self) -> None:
         """Relit les réglages d'IA et recrée les deux cerveaux, sans redémarrer."""
         from dataclasses import replace
@@ -1969,6 +2043,7 @@ class MainWindow(QMainWindow):
             self.services.model.model,
             f"{deep.provider}/{deep.model}" if deep is not None else "aucun",
         )
+        self._show_brains()
         self.prepare_ollama()
 
     def prepare_ollama(self) -> None:
@@ -2796,7 +2871,7 @@ class MainWindow(QMainWindow):
     def _action_done(self, outcome: AnalysisOutcome) -> None:
         reply = outcome.action
         assert reply is not None
-        if reply.intent in ("duo_relay", "duo_chat"):  # « Veris, demande à Alicia… »
+        if reply.intent in ("duo_relay", "duo_chat"):  # « Viirus, demande à Alicia… »
             self._core_settle()
             if reply.intent == "duo_relay":
                 self.duo_relay(reply.text)
@@ -3014,7 +3089,9 @@ class MainWindow(QMainWindow):
         first = (
             f"1er mot {result.first_token_ms} ms · " if result.first_token_ms is not None else ""
         )
+        brain = result.extra.get("brain", "")
         self.answer_info.setText(
+            f"{current_persona().title} · {brain + ' · ' if brain else ''}"
             f"{result.provider}/{result.model} · {first}total {outcome.total_ms} ms · "
             f"profil {outcome.profile} · [{outcome.operation_id}]"
         )

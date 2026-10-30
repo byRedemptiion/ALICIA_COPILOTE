@@ -26,6 +26,8 @@ from alicia.core.persona import current as current_persona
 from alicia.core.session.context import SessionContext
 from alicia.games.profiles import resolve_profile
 
+BRAIN_LABELS = {"rapide": "Cerveau rapide", "reflechi": "Cerveau réfléchi"}
+
 log = logging.getLogger("alicia.analysis")
 
 
@@ -157,12 +159,21 @@ class AnalysisService:
             )
             profile = resolve_profile(frame.window, self.game_profile)
             past_images, past_note = self._past_images(question if audio is None else "")
+            # Cerveau rapide ou réfléchi : la personnalité (ALICIA / VIIRUS) reste la même.
+            model, brain, reason = self.model, "rapide", ""
+            if self.deep_model is not None and audio is None:
+                from alicia.core.ai.factory import deep_reason
+
+                found = deep_reason(question)
+                if found:
+                    model, brain, reason = self.deep_model, "reflechi", found
             request = AnalysisRequest(
                 question=question,
                 images=(image, *past_images),
                 system_prompt=build_system_prompt(
                     profile.prompt_context(web_search) + vision_note(frame) + past_note,
                     spoken=spoken,
+                    brain=brain,
                 ),
                 history=self.session.history(),
                 max_output_tokens=self.settings.ai.max_output_tokens,
@@ -179,13 +190,15 @@ class AnalysisService:
                 if web_search and profile.sources
                 else "",
             )
-            model = self.model
-            if self.deep_model is not None and audio is None:
-                from alicia.core.ai.factory import wants_deep_thinking
-
-                if wants_deep_thinking(question):
-                    model = self.deep_model  # stratégie, build, analyse : le cerveau réfléchi
-                    log.info("Question de réflexion : cerveau réfléchi")
+            brain_label = BRAIN_LABELS[brain]
+            log.info(
+                "[%s] [%s] %s/%s%s",
+                current_persona().title,
+                brain_label,
+                model.provider,
+                model.model,
+                f" — raison du routage : « {reason} »" if reason else "",
+            )
             log.info(
                 "Appel IA %s/%s — image %dx%d, %d Ko, profil %s, historique %d",
                 model.provider,
@@ -229,6 +242,15 @@ class AnalysisService:
             if "search_disabled" in result.extra:
                 log.warning("Réponse produite sans recherche web (refusée par le fournisseur)")
             total = int((time.perf_counter() - started) * 1000)
+            result.extra["brain"] = brain_label
+            log.info(
+                "[%s] [%s] réponse en %d ms (%s/%s)",
+                current_persona().title,
+                brain_label,
+                total,
+                result.provider,
+                result.model,
+            )
             log.info(
                 "Réponse IA : %d caractères, 1er mot %s ms, IA %d ms, total %d ms, jetons %s/%s, fin %s",
                 len(result.text),

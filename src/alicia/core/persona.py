@@ -1,4 +1,4 @@
-"""Personnages : le même programme, deux visages (ALICIA ou VERIS).
+"""Personnages : le même programme, deux visages (ALICIA ou VIIRUS).
 
 Chacun choisit le sien dans Réglages → Général (``[ui] persona`` dans alicia.toml) :
 nom, mot de réveil, portrait, couleurs et voix changent ; le code et les mises à jour
@@ -56,13 +56,24 @@ ALICIA = Persona(
     voice_engine="voixc",
 )
 
-VERIS = Persona(
+# VIIRUS (ex-VERIS) : la clé interne reste « veris » pour garder les réglages de chacun.
+VIIRUS = Persona(
     key="veris",
-    name="Veris",
-    title="VERIS",
-    wake_name="veris",
+    name="Viirus",
+    title="VIIRUS",
+    wake_name="viirus",
     wake_forms=frozenset(
         {
+            "viirus",
+            "virus",
+            "viruss",
+            "virusse",
+            "viruse",
+            "vyrus",
+            "vayrus",
+            "vairus",
+            "viros",
+            "virusz",
             "veris",
             "verise",
             "verisse",
@@ -81,7 +92,7 @@ VERIS = Persona(
     icon="veris.ico",
     face_crop=(0.06, 0.09, 0.9, 0.9),  # le cercle néon du médaillon
     identity=(
-        "Tu es VERIS, un petit robot copilote assis virtuellement à côté du joueur "
+        "Tu es VIIRUS, un petit robot copilote assis virtuellement à côté du joueur "
         "(tu parles de toi au masculin)."
     ),
     voice_engine="veris",
@@ -112,7 +123,11 @@ VERIS = Persona(
     },
 )
 
-PERSONAS: dict[str, Persona] = {p.key: p for p in (ALICIA, VERIS)}
+VERIS = VIIRUS  # ancien nom, gardé pour le code existant
+PERSONAS: dict[str, Persona] = {p.key: p for p in (ALICIA, VIIRUS)}
+# Anciens noms ou noms tapés à la main → profil
+_ALIASES = {"viirus": "veris", "virus": "veris"}
+OLD_TITLES = {"VERIS": "VIIRUS"}  # un robot pas encore mis à jour s'annonce encore « VERIS »
 
 _current: Persona = ALICIA
 
@@ -123,7 +138,8 @@ def current() -> Persona:
 
 def set_current(key: str) -> Persona:
     global _current
-    _current = PERSONAS.get((key or "").strip().lower(), ALICIA)
+    key = (key or "").strip().lower()
+    _current = PERSONAS.get(_ALIASES.get(key, key), ALICIA)
     return _current
 
 

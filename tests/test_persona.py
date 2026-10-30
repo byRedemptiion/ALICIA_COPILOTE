@@ -24,7 +24,7 @@ def test_default_is_alicia():
 
 
 def test_veris_identity_and_wake_word(veris):
-    assert "Tu es VERIS" in build_system_prompt()
+    assert "Tu es VIIRUS" in build_system_prompt()
     assert find_wake("Véris, lance Discord") == (True, "lance discord")
     assert find_wake("Ok Verisse quel objet") == (True, "quel objet")
     assert find_wake("Alicia, lance Discord")[0] is False
@@ -34,10 +34,10 @@ def test_veris_identity_and_wake_word(veris):
 def test_names_in_interface(veris, qt_app):
     from alicia.ui.naming import named
 
-    assert named("Mettre à jour ALICIA") == "Mettre à jour VERIS"
-    assert named("CE QU'ALICIA SAIT DU JEU") == "CE QUE VERIS SAIT DU JEU"
-    assert named("le rond d'ALICIA") == "le rond de VERIS"
-    assert named("A · L · I · C · I · A") == "V · E · R · I · S"
+    assert named("Mettre à jour ALICIA") == "Mettre à jour VIIRUS"
+    assert named("CE QU'ALICIA SAIT DU JEU") == "CE QUE VIIRUS SAIT DU JEU"
+    assert named("le rond d'ALICIA") == "le rond de VIIRUS"
+    assert named("A · L · I · C · I · A") == "V · I · I · R · U · S"
     assert named(r"%APPDATA%\Alicia\.env") == r"%APPDATA%\Alicia\.env"
 
 
@@ -88,7 +88,7 @@ def test_veris_is_masculine_in_the_interface(veris, qt_app):
     from alicia.ui.naming import named
 
     assert named("ALICIA se réveille toute seule quand elle t'entend") == (
-        "VERIS se réveille tout seul quand il t'entend"
+        "VIIRUS se réveille tout seul quand il t'entend"
     )
 
 
@@ -174,14 +174,14 @@ def test_profile_list_shows_alicia_and_veris(veris, qt_app, tmp_path, monkeypatc
         build_services(load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True)
     )
     box = window.settings_page.persona_box
-    assert [box.itemText(i) for i in range(box.count())] == ["ALICIA", "VERIS"]
+    assert [box.itemText(i) for i in range(box.count())] == ["ALICIA", "VIIRUS"]
     assert box.currentData() == "veris"
     window.close()
 
 
 @pytest.mark.parametrize(
     ("key", "identity", "wake"),
-    [("alicia", "Tu es Alicia", "alicia"), ("veris", "Tu es VERIS", "veris")],
+    [("alicia", "Tu es Alicia", "alicia"), ("veris", "Tu es VIIRUS", "viirus")],
 )
 def test_each_profile_loads_its_own_identity(key, identity, wake, tmp_path, monkeypatch):
     from alicia.core import personality
@@ -199,3 +199,12 @@ def test_each_profile_loads_its_own_identity(key, identity, wake, tmp_path, monk
         assert persona.current().wake_name == wake
     finally:
         persona.set_current("alicia")
+
+
+def test_viirus_replaces_veris(veris):
+    from alicia.core.audio.wake import find_wake
+
+    assert persona.current().title == "VIIRUS"
+    assert find_wake("Virus, dis à Nova de garder l'objet")[0]
+    assert find_wake("Viirus, monte le son") == (True, "monte le son")
+    assert persona.set_current("viirus").key == "veris"  # ancien réglage « veris » gardé

@@ -175,7 +175,7 @@ def robot_voice(
     highpass_hz: float = 200.0,
     presence_hz: float = 3500.0,
 ) -> np.ndarray:
-    """Voix de VERIS à partir d'une voix générée ``ratio`` fois plus lente : on la raccourcit
+    """Voix de VIIRUS à partir d'une voix générée ``ratio`` fois plus lente : on la raccourcit
     (la hauteur monte d'autant, la durée redevient normale), puis passe-haut 200 Hz,
     +3 dB vers 3,5 kHz et volume normalisé. Tout dans le domaine fréquentiel (numpy seul)."""
     audio = samples.astype(np.float32)
@@ -206,7 +206,7 @@ def veris_synthesizer(
     highpass_hz: float = 200.0,
     presence_hz: float = 3500.0,
 ) -> Synthesizer:
-    """La voix de VERIS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique.
+    """La voix de VIIRUS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique.
     Avec d'autres réglages : la « voix C » d'ALICIA (petite fille)."""
     base = kokoro_synthesizer("ff_siwis", max(0.5, speed / ratio))
     # Sans les fichiers Kokoro : même traitement sur la voix Edge ralentie d'autant.

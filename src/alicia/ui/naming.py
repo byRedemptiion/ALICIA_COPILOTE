@@ -1,4 +1,4 @@
-"""Le nom du personnage dans les textes de l'interface (« ALICIA » → « VERIS »)."""
+"""Le nom du personnage dans les textes de l'interface (« ALICIA » → « VIIRUS »)."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def named(text: str) -> str:
         return (prefix or "") + name
 
     text = _NAME.sub(swap, text)
-    if not persona.feminine:  # VERIS : « il se réveille tout seul »
+    if not persona.feminine:  # VIIRUS : « il se réveille tout seul »
         for pattern, value in _MASCULINE:
             text = pattern.sub(value, text)
     return text
@@ -69,7 +69,7 @@ def rename_widgets(root: QWidget) -> None:
         if isinstance(widget, QComboBox):
             for index in range(widget.count()):
                 if widget.itemData(index) in ("veris", "voixc"):
-                    continue  # voix de VERIS / voix C d'ALICIA : leur vrai nom
+                    continue  # voix de VIIRUS / voix C d'ALICIA : leur vrai nom
                 widget.setItemText(index, named(widget.itemText(index)))
         if widget.windowTitle():
             widget.setWindowTitle(named(widget.windowTitle()))
@@ -115,7 +115,7 @@ def app_icon() -> QIcon:
 
 
 def set_taskbar_identity() -> None:
-    """Windows : ALICIA / VERIS a sa propre icône dans la barre des tâches (pas celle de
+    """Windows : ALICIA / VIIRUS a sa propre icône dans la barre des tâches (pas celle de
     Python), et ses fenêtres y sont regroupées."""
     if sys.platform != "win32":
         return
