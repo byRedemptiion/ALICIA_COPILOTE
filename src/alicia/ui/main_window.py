@@ -1877,7 +1877,11 @@ class MainWindow(QMainWindow):
         self.provider_label.setText(f"IA · {model.provider} / {model.model}")
         log.info("IA choisie : %s/%s", model.provider, model.model)
         problem = model.check()
-        self._notify("⚠ " + problem if problem else "IA prête ✓ Maintiens F10 ou dis « Alicia… »")
+        self._notify(
+            "⚠ " + problem
+            if problem
+            else f"IA prête ✓ Maintiens F10 ou dis « {current_persona().name}… »"
+        )
         self._update_state()
         self.prepare_ollama()
 
@@ -1953,7 +1957,9 @@ class MainWindow(QMainWindow):
 
         def done(result: str) -> None:
             if result == "pulled":
-                self._notify("IA locale prête ✓ Maintiens F10 ou dis « Alicia… »")
+                self._notify(
+                    f"IA locale prête ✓ Maintiens F10 ou dis « {current_persona().name}… »"
+                )
             elif result == "started":
                 self._notify("Ollama démarré ✓ IA locale prête")
 
@@ -2671,7 +2677,9 @@ class MainWindow(QMainWindow):
             return
         if self.busy:
             log.info("Parole ignorée : une analyse est déjà en cours")
-            self._set_status("Patiente : Alicia analyse encore la question précédente.")
+            self._set_status(
+                f"Patiente : {current_persona().name} analyse encore la question précédente."
+            )
             return
         problem = self.services.model.check()
         if problem:

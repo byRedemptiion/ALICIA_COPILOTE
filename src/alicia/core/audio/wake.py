@@ -296,7 +296,7 @@ class WakeListener:
                 self._loud = 0
             if self._waited >= getattr(self, "_follow_limit", FOLLOW_UP_S):
                 self._finish_idle()
-                self.on_cancel("rien entendu après « Alicia »")
+                self.on_cancel(f"rien entendu après « {current().name} »")
             return
 
         self._buffer.append(block)

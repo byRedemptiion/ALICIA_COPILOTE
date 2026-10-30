@@ -68,6 +68,8 @@ def rename_widgets(root: QWidget) -> None:
             continue  # texte qui cite déjà les deux robots (duo)
         if isinstance(widget, QComboBox):
             for index in range(widget.count()):
+                if widget.itemData(index) in ("veris", "voixc"):
+                    continue  # voix de VERIS / voix C d'ALICIA : leur vrai nom
                 widget.setItemText(index, named(widget.itemText(index)))
         if widget.windowTitle():
             widget.setWindowTitle(named(widget.windowTitle()))

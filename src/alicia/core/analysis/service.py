@@ -22,6 +22,7 @@ from alicia.core.capture.service import CaptureService
 from alicia.core.config import Settings
 from alicia.core.errors import AliciaError, CaptureError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import operation
+from alicia.core.persona import current as current_persona
 from alicia.core.session.context import SessionContext
 from alicia.games.profiles import resolve_profile
 
@@ -86,7 +87,7 @@ class AnalysisService:
                     local_transcript = strip_wake_word(local_transcript)
                     if not local_transcript:
                         raise AliciaError(
-                            "Oui ? Dis ta demande juste après « Alicia ».",
+                            f"Oui ? Dis ta demande juste après « {current_persona().name} ».",
                             detail=f"seulement le mot de réveil : {heard!r}",
                         )
                 if not local_transcript:
