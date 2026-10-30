@@ -39,7 +39,7 @@ class LiveCapture:
         self.interval_s = max(0.3, interval_s)
         self._wake = threading.Event()  # capture demandée tout de suite
         self.latest: Frame | None = None
-        self.latest_at = 0.0  # time.monotonic() de la dernière capture réussie
+        self.latest_at = 0.0  # time.perf_counter() de la dernière capture réussie
         self.frames = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -72,21 +72,21 @@ class LiveCapture:
         """Capture dès que possible (début de phrase). Renvoie l'instant de la demande,
         à passer à ``since``. Appelable depuis n'importe quel thread."""
         self._wake.set()
-        return time.monotonic()
+        return time.perf_counter()
 
     def since(self, mark: float, wait_s: float = 0.0) -> Frame | None:
         """La capture faite après ``mark`` (en l'attendant au plus ``wait_s`` secondes)."""
-        deadline = time.monotonic() + wait_s
+        deadline = time.perf_counter() + wait_s
         while True:
-            if self.latest is not None and self.latest_at >= mark:
+            if self.latest is not None and self.latest_at > mark:
                 return self.latest
-            if time.monotonic() >= deadline:
+            if time.perf_counter() >= deadline:
                 return None
             time.sleep(0.02)
 
     def fresh(self, max_age_s: float = 3.0) -> Frame | None:
         """La dernière capture si elle a moins de ``max_age_s`` secondes."""
-        if self.latest is None or time.monotonic() - self.latest_at > max_age_s:
+        if self.latest is None or time.perf_counter() - self.latest_at > max_age_s:
             return None
         return self.latest
 
@@ -102,7 +102,7 @@ class LiveCapture:
                 log.warning("Vision en direct : capture impossible (%s)", exc.detail)
             return None
         self._errors = 0
-        self.latest, self.latest_at = frame, time.monotonic()
+        self.latest, self.latest_at = frame, time.perf_counter()
         self.frames += 1
         if self.on_frame is not None:
             try:
