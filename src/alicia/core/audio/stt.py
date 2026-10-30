@@ -124,9 +124,12 @@ class LocalTranscriber:
 
     def _initial_prompt(self) -> str | None:
         """Aide Whisper à bien écrire les prénoms (le joueur, le robot)."""
+        from alicia.core.people import known_names
         from alicia.core.persona import current, player
 
-        names = ", ".join(n for n in (player().name, current().name) if n)
+        names = ", ".join(
+            dict.fromkeys(n for n in (player().name, current().title, *known_names()) if n)
+        )
         prompt = " ".join(p for p in (self.prompt, f"{names}." if names else "") if p)
         return prompt or None
 

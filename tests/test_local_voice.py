@@ -50,10 +50,10 @@ def test_local_transcript_is_sent_as_text_not_audio(settings):
     outcome = services.analysis.analyze(DEMO_WINDOW, "", audio=wav(), on_transcript=seen.append)
     request = model.requests[-1]
     assert request.audio is None
-    assert request.question == "quel objet pour Ashe ?"
-    assert seen == ["quel objet pour Ashe ?"]
-    assert outcome.transcript == "quel objet pour Ashe ?"
-    assert services.session.last.question == "quel objet pour Ashe ?"
+    assert request.question == "Quel objet pour Ashe ?"
+    assert seen == ["Quel objet pour Ashe ?"]
+    assert outcome.transcript == "Quel objet pour Ashe ?"
+    assert services.session.last.question == "Quel objet pour Ashe ?"
 
 
 def test_empty_transcript_stops_before_calling_ai(settings):
@@ -108,7 +108,7 @@ def test_wake_word_is_removed_before_routing(settings):
         transcriber=FakeTranscriber("Alicia, quel objet pour Ashe ?"),
     )
     services.analysis.analyze(DEMO_WINDOW, "", audio=wav())
-    assert model.requests[-1].question == "quel objet pour Ashe ?"
+    assert model.requests[-1].question == "Quel objet pour Ashe ?"
 
     services = build_services(
         settings, demo=True, model=model, transcriber=FakeTranscriber("Alicia.")
@@ -116,3 +116,22 @@ def test_wake_word_is_removed_before_routing(settings):
     with pytest.raises(AliciaError) as info:
         services.analysis.analyze(DEMO_WINDOW, "", audio=wav())
     assert "après « Alicia »" in info.value.user_message
+
+
+def test_dictation_shows_what_was_understood(tmp_path, monkeypatch):
+    """Entendu « virus dit a nova de gardé lobjet » → compris avec les bons noms."""
+    from alicia.core import people
+    from alicia.core.ai.prompts import understood_locally
+
+    store = people.PeopleStore(tmp_path / "personnes.json")
+    store.upsert(people.Person(first_name="Yannick", nickname="Nova", aliases=["NovaJagger"]))
+    people.set_store(store)
+    try:
+        assert understood_locally("virus dit a nova de garder l'objet") == (
+            "VIIRUS dit a Nova de garder l'objet."
+        )
+        assert (
+            understood_locally("est-ce que nova jager est là") == "Est-ce que NovaJagger est là ?"
+        )
+    finally:
+        people.set_store(None)

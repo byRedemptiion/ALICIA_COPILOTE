@@ -100,6 +100,7 @@ TABS = (
     ("keys", "⌨️  Raccourcis"),
     ("stream", "🎥  Stream"),
     ("duo", "🤝  Duo"),
+    ("people", "👥  Personnes"),
     ("games", "▦  Jeux"),
 )
 
@@ -137,7 +138,7 @@ class SettingsPage(QWidget):
             button.clicked.connect(lambda _=False, k=key: self.show_tab(k))
             bar.addWidget(button)
             self.tab_buttons[key] = button
-            if key == "games":
+            if key in ("games", "people"):
                 continue  # page ajoutée par la fenêtre principale (add_tab)
             area = QScrollArea()
             area.setWidgetResizable(True)
@@ -819,7 +820,7 @@ class SettingsPage(QWidget):
             labels["state"].setText(state)
 
     def show_tab(self, key: str) -> None:
-        """Affiche l'onglet ``key`` (general, profile, ai, voice, vision, keys, stream, duo, games)."""
+        """Affiche l'onglet ``key`` (general, profile, ai, voice, vision, keys, stream, duo, people, games)."""
         widget = self.tabs.get(key)
         if widget is None:
             return

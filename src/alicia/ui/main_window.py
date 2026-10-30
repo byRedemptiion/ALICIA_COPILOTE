@@ -519,6 +519,14 @@ class MainWindow(QMainWindow):
         self.settings_page.test_mic.connect(self.test_microphone)
         self.settings_page.test_voice.connect(self.test_voice)
         self.settings_page.open_ai.connect(self.open_setup)
+        from alicia.core import people
+        from alicia.ui.people_page import PeoplePage
+
+        self.people = people.PeopleStore()
+        people.set_store(self.people)
+        self.people_page = PeoplePage(self.people)
+        self.people_page.changed.connect(self._people_changed)
+        self.settings_page.add_tab("people", self.people_page)  # Personnes : le carnet
         self.settings_page.add_tab("games", self.games_page)  # Jeux : un onglet des réglages
         self.pages.addWidget(self.settings_page)
 
@@ -1293,7 +1301,10 @@ class MainWindow(QMainWindow):
         from alicia.core.persona import PERSONAS
 
         me = current_persona()
+        from alicia.core.people import known_names
+
         others = [p.title for p in PERSONAS.values() if p.key != me.key] + [self.duo_peer]
+        others += [n for n in known_names() if n not in others]
         found = parse_duo_request(text, others)
         if found is None:
             return None
@@ -1513,6 +1524,22 @@ class MainWindow(QMainWindow):
         if name:
             self.duo_peer_player = name
             register_pronunciation(name, str(msg.get("phonetic") or "")[:60])
+            # Le pote du duo est là : sa fiche est cochée « présent » (créée au besoin)
+            person = self.people.find(name, fuzzy=False)
+            if person is None or not person.present:
+                from alicia.core.people import Person
+
+                person = person or Person(nickname=name)
+                person.present = True
+                self.people.upsert(person)
+                self.people_page.refresh()
+                log.info("Personnes : %s marqué présent (duo)", person.display)
+
+    def _people_changed(self) -> None:
+        log.info(
+            "Personnes présentes : %s",
+            ", ".join(p.display for p in self.people.present()) or "aucune",
+        )
 
     def _relay_received(self, msg: dict) -> None:  # type: ignore[type-arg]
         name, text = str(msg.get("name") or "l'autre robot"), str(msg.get("text") or "").strip()
@@ -2883,7 +2910,8 @@ class MainWindow(QMainWindow):
             self.question.setText(f"🎙 {outcome.transcript}")
         asked = outcome.transcript or self.question.text().strip()
         if asked:
-            self.asked_label.setText(f"TOI  ›  {asked}")
+            label = "COMPRIS" if outcome.transcript is not None else "TOI"
+            self.asked_label.setText(f"{label}  ›  {asked}")
         self.answer.setPlainText(reply.text)
         if self._bubble_active():
             self.bubble.ask(asked)
@@ -3041,7 +3069,7 @@ class MainWindow(QMainWindow):
             self._set_status("Analyse en cours…")
         elif kind == "transcript":
             self.question.setText(f"🎙 {value}")
-            self.asked_label.setText(f"TOI  ›  🎙 {value}")
+            self.asked_label.setText(f"COMPRIS  ›  {value}")  # ce qui part au cerveau IA
             if self._bubble_active():
                 self.bubble.set_question(f"🎙 {value}")
         elif kind == "delta":

@@ -16,7 +16,12 @@ from alicia.core.ai.base import (
     VisionModel,
 )
 from alicia.core.ai.image_prep import prepare_image
-from alicia.core.ai.prompts import VOICE_QUESTION, TranscriptSplitter, build_system_prompt
+from alicia.core.ai.prompts import (
+    UNDERSTOOD_QUESTION,
+    VOICE_QUESTION,
+    TranscriptSplitter,
+    build_system_prompt,
+)
 from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.capture.service import CaptureService
 from alicia.core.config import Settings
@@ -80,6 +85,7 @@ class AnalysisService:
         with operation() as op_id:
             started = time.perf_counter()
             local_transcript = None
+            dictated = False  # question dictée : l'IA dira d'abord ce qu'elle a compris
             if audio is not None and self.transcriber is not None:
                 local_transcript = self.transcriber.transcribe(audio)
                 if local_transcript:
@@ -98,10 +104,15 @@ class AnalysisService:
                         "puis réessaie.",
                         detail="transcription vide",
                     )
+                from alicia.core.ai.prompts import understood_locally
+
+                understood = understood_locally(local_transcript)
+                log.info("Entendu : %s", heard)
+                log.info("Compris (local) : %s", understood)
                 if on_transcript is not None:
-                    on_transcript(local_transcript)
-                log.debug("Transcription : %s", local_transcript)
-                question, audio = local_transcript, None
+                    on_transcript(understood)
+                question, audio = understood, None
+                dictated = True
             if audio is not None:
                 question = VOICE_QUESTION
             else:
@@ -112,7 +123,13 @@ class AnalysisService:
                         total = int((time.perf_counter() - started) * 1000)
                         log.info("Demande traitée comme action « %s » (sans IA)", reply.intent)
                         return AnalysisOutcome(
-                            op_id, None, None, "", total, local_transcript, action=reply
+                            op_id,
+                            None,
+                            None,
+                            "",
+                            total,
+                            question if dictated else local_transcript,
+                            action=reply,
                         )
             vision = self.vision_mode
             if window is None and frame is None and vision == "window":
@@ -171,7 +188,10 @@ class AnalysisService:
                 question=question,
                 images=(image, *past_images),
                 system_prompt=build_system_prompt(
-                    profile.prompt_context(web_search) + vision_note(frame) + past_note,
+                    profile.prompt_context(web_search)
+                    + vision_note(frame)
+                    + past_note
+                    + ("\n" + UNDERSTOOD_QUESTION if dictated else ""),
                     spoken=spoken,
                     brain=brain,
                 ),
@@ -211,7 +231,7 @@ class AnalysisService:
             )
             splitter = None
             sink = on_delta
-            if audio is not None:
+            if audio is not None or dictated:
                 splitter = TranscriptSplitter(
                     on_transcript or (lambda _t: None), on_delta or (lambda _t: None)
                 )
@@ -229,9 +249,15 @@ class AnalysisService:
                 from alicia.core.ai.prompts import split_transcript
 
                 _, result.text = split_transcript(result.text)
-                log.info("Question orale transcrite : %d caractères", len(transcript or ""))
+                if dictated and transcript:
+                    log.info("Compris (IA) : %s", transcript)
+                else:
+                    log.info("Question orale transcrite : %d caractères", len(transcript or ""))
                 log.debug("Transcription : %s", transcript)
-                question = transcript or "(question orale inaudible)"
+                if dictated:
+                    question = transcript or question  # sinon la version comprise sur le PC
+                else:
+                    question = transcript or "(question orale inaudible)"
             self.session.record(question, result.text)
             if result.sources:
                 log.info(
@@ -263,7 +289,12 @@ class AnalysisService:
             )
             log.debug("Réponse : %s", result.text)
             return AnalysisOutcome(
-                op_id, frame, result, profile.key, total, transcript or local_transcript
+                op_id,
+                frame,
+                result,
+                profile.key,
+                total,
+                transcript or (question if dictated else local_transcript),
             )
 
     def _past_images(self, question: str) -> tuple[tuple, str]:  # type: ignore[type-arg]

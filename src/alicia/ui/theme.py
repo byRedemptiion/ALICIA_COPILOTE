@@ -240,6 +240,16 @@ QPlainTextEdit {{
     font-size: 8.5pt;
     color: #7fb4c4;
 }}
+QPlainTextEdit#field {{
+    background: rgba(2, 10, 16, 0.85);
+    border: 1px solid {BORDER};
+    border-bottom: 2px solid {PINK};
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-family: "Segoe UI", "Inter", sans-serif;
+    font-size: 11.5pt;
+    color: {TEXT};
+}}
 QListWidget {{
     background: rgba(2, 10, 16, 0.6);
     border: 1px solid {BORDER};

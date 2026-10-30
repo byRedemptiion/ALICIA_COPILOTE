@@ -40,6 +40,56 @@ puis, à la ligne suivante, ta réponse. Si l'audio est vide ou incompréhensibl
 
 TRANSCRIPT_PREFIX = "Question :"
 
+# Question dictée et transcrite sur le PC : l'IA écrit d'abord ce qu'elle a compris.
+UNDERSTOOD_QUESTION = """\
+La question du joueur vient d'une dictée vocale : il peut y avoir des fautes, des noms mal \
+écrits ou des mots mal reconnus. Écris d'abord une ligne exactement de la forme :
+Question : <la question corrigée, telle que tu la comprends, avec les bons noms>
+puis, à la ligne suivante, ta réponse."""
+
+
+def understood_locally(text: str) -> str:
+    """Première « compréhension » immédiate (avant l'IA) : bons noms, majuscule, ponctuation."""
+    from alicia.core.people import canonical_names
+    from alicia.core.persona import PERSONAS
+
+    titles = [p.title for p in PERSONAS.values()]
+    text = canonical_names(text.strip(), titles)
+    if not text:
+        return text
+    text = text[0].upper() + text[1:]
+    if text[-1] not in ".!?…":
+        first = text.split()[0].casefold() if text.split() else ""
+        question = (
+            first
+            in {
+                "est",
+                "est-ce",
+                "c'est",
+                "quel",
+                "quelle",
+                "quels",
+                "quelles",
+                "comment",
+                "pourquoi",
+                "combien",
+                "ou",
+                "où",
+                "quand",
+                "qui",
+                "que",
+                "quoi",
+                "tu",
+                "peux",
+                "dois",
+                "faut",
+                "il",
+            }
+            or "?" in text
+        )
+        text += " ?" if question else "."
+    return text
+
 
 BRAIN_RULES = {
     "rapide": "",
@@ -86,6 +136,9 @@ def build_system_prompt(
             "sans aucun contenu romantique ou sexuel) :\n"
             f"<personnalite>\n{character}\n</personnalite>\n"
         )
+    from alicia.core.people import people_context
+
+    prompt += people_context()
     prompt += BRAIN_RULES.get(brain, "")
     if spoken:
         prompt += "\n" + VOICE_RULES
