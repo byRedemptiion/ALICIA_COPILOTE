@@ -544,8 +544,11 @@ class MainWindow(QMainWindow):
         if self.live is None:
 
             def target():  # type: ignore[no-untyped-def]
-                window = self.services.capture.foreground_window() or self.observed
-                return window, self._vision(), self.services.settings.capture.cursor_box
+                window = self.services.capture.foreground_window()  # ce que tu as devant toi
+                mode = self._vision()
+                if window is None and mode == "window":
+                    mode = "screen"  # bureau : l'écran entier
+                return window, mode, self.services.settings.capture.cursor_box
 
             self.live = LiveCapture(
                 self.services.capture.capture,

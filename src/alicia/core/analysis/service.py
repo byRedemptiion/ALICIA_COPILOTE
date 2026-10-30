@@ -20,7 +20,7 @@ from alicia.core.ai.prompts import VOICE_QUESTION, TranscriptSplitter, build_sys
 from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.capture.service import CaptureService
 from alicia.core.config import Settings
-from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
+from alicia.core.errors import AliciaError, CaptureError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import operation
 from alicia.core.session.context import SessionContext
 from alicia.games.profiles import resolve_profile
@@ -110,11 +110,10 @@ class AnalysisService:
                         return AnalysisOutcome(
                             op_id, None, None, "", total, local_transcript, action=reply
                         )
-            if window is None and frame is None and self.vision_mode == "window":
-                raise AliciaError(
-                    "Mets le jeu au premier plan, puis redemande-moi.",
-                    detail="aucune fenêtre à capturer",
-                )
+            vision = self.vision_mode
+            if window is None and frame is None and vision == "window":
+                vision = "screen"  # pas de jeu (bureau, réglages…) : l'écran entier
+                log.info("Aucune application au premier plan : je regarde l'écran entier")
             mode = (
                 f"question orale {audio.duration_s:.1f} s"
                 if audio
@@ -133,9 +132,16 @@ class AnalysisService:
             if audio is None:
                 log.debug("Question : %s", question)
             if frame is None:
-                frame = self.capture.capture(
-                    window, self.vision_mode, self.settings.capture.cursor_box
-                )
+                try:
+                    frame = self.capture.capture(window, vision, self.settings.capture.cursor_box)
+                except CaptureError as exc:
+                    if vision != "window":
+                        raise
+                    # Fenêtre réduite ou impossible à capturer : l'écran entier à la place.
+                    log.warning(
+                        "Capture de l'application impossible, écran entier : %s", exc.detail
+                    )
+                    frame = self.capture.capture(window, "screen", self.settings.capture.cursor_box)
             if on_frame is not None:
                 on_frame(frame)
             if cancel is not None and cancel.is_set():

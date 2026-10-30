@@ -20,6 +20,8 @@ _GWL_EXSTYLE = -20
 _WS_EX_TOOLWINDOW = 0x00000080
 _WS_EX_NOACTIVATE = 0x08000000
 _GW_OWNER = 4
+# Bureau et barre des tâches de Windows : pas une application à regarder.
+_DESKTOP_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 _DWMWA_EXTENDED_FRAME_BOUNDS = 9
 _DWMWA_CLOAKED = 14
 _MONITOR_DEFAULTTONEAREST = 2
@@ -320,7 +322,17 @@ class Win32:
         hwnd = self.user32.GetForegroundWindow()
         if not hwnd or self.process_id(hwnd) == os.getpid():
             return None
+        if self.class_name(int(hwnd)) in _DESKTOP_CLASSES:
+            return None  # bureau ou barre des tâches : on regardera l'écran entier
         return self.describe(int(hwnd))
+
+    def class_name(self, hwnd: int) -> str:
+        buffer = ctypes.create_unicode_buffer(256)
+        try:
+            self.user32.GetClassNameW(wintypes.HWND(hwnd), buffer, 256)
+        except (AttributeError, OSError):
+            return ""
+        return buffer.value
 
     # --- PrintWindow (repli) ----------------------------------------------------------------
 

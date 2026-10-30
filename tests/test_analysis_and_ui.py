@@ -666,3 +666,11 @@ def test_confirmation_question_opens_the_mic_for_the_answer(qt_app, settings):
     window._wake_cancel("rien")
     assert not window._awaiting_answer
     window.close()
+
+
+def test_question_from_the_desktop_looks_at_the_whole_screen(settings):
+    """Pas de jeu au premier plan (bureau) : l'écran entier au lieu d'une erreur."""
+    services = build_services(settings, demo=True, model=FakeModel())
+    services.analysis.vision_mode = "window"
+    outcome = services.analysis.analyze(None, "c'est quoi sur mon bureau ?")
+    assert outcome.frame is not None and outcome.frame.mode == "screen"
