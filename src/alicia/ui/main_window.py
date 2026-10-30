@@ -244,7 +244,9 @@ class MainWindow(QMainWindow):
         )
         self.orb_button.clicked.connect(self.show_orb)
         self.update_button = QPushButton("⟳  MAJ")
-        self.update_button.setToolTip("Vérifier et installer la dernière version d'ALICIA")
+        self.update_button.setToolTip(
+            f"Vérifier et installer la dernière version de {PROJECT_NAME}"
+        )
         self.update_button.clicked.connect(self.update_now)
         right_buttons.addStretch(1)
         right_buttons.addWidget(self.orb_button)
@@ -1431,14 +1433,15 @@ class MainWindow(QMainWindow):
             if info is None:
                 self._set_update_button(False)
                 if interactive:
-                    self._notify("ALICIA est déjà à jour ✓")
+                    self._notify(f"{PROJECT_NAME} est déjà à jour ✓")
                 return
             self._set_update_button(True)
             if interactive:
                 self._confirm_update(info)
             else:
                 self._notify(
-                    "Une nouvelle version d'ALICIA est prête : bouton MAJ (ou clic droit sur le rond)."
+                    f"Une nouvelle version de {PROJECT_NAME} est prête : bouton MAJ en bas "
+                    "(ou clic droit sur le rond)."
                 )
 
         def failed(exc: Exception) -> None:
@@ -1462,9 +1465,9 @@ class MainWindow(QMainWindow):
         when = info.date[:10] if info.date else ""
         answer = QMessageBox.question(
             self if self.isVisible() else None,
-            "Mise à jour d'ALICIA",
+            f"Mise à jour de {PROJECT_NAME}",
             f"Nouvelle version disponible ({info.short}{', ' + when if when else ''}) :\n\n"
-            f"« {info.title} »\n\nL'installer maintenant ? ALICIA redémarrera toute seule.",
+            f"« {info.title} »\n\nL'installer maintenant ? {PROJECT_NAME} redémarrera tout seul.",
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.install_update(info)
@@ -1491,7 +1494,7 @@ class MainWindow(QMainWindow):
                 self if self.isVisible() else None,
                 "Mise à jour installée",
                 f"Version {info.short} installée ({len(result.changed)} fichier(s) modifié(s)).{extra}\n\n"
-                "ALICIA redémarre.",
+                f"{PROJECT_NAME} redémarre.",
             )
             self.restart(show_console=result.dependencies_changed)
 

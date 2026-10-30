@@ -1,4 +1,4 @@
-﻿# Installation d'ALICIA sous Windows : uv, Python 3.12, dépendances, modèles vocaux.
+﻿# Installation de COP'IA'LOTE sous Windows : uv, Python 3.12, dépendances, modèles vocaux.
 # -Installer : lancé par ALICIA-Setup.exe (sans question : l'IA est choisie dans l'installateur).
 # -Update    : mise à jour des dépendances seulement (lancé par Lancer_Alicia.bat).
 # Sans option : installation depuis le dossier source (Installer_Alicia.bat).
@@ -25,7 +25,7 @@ try {
     }
     uv --version
 
-    Step "Python 3.12 et composants d'ALICIA (première fois : quelques minutes)"
+    Step "Python 3.12 et composants de COP'IA'LOTE (première fois : quelques minutes)"
     uv sync --python 3.12 --frozen
     if ($LASTEXITCODE -ne 0) { throw "uv sync a échoué (code $LASTEXITCODE) : voir le message ci-dessus." }
     if (-not (Test-Path ".venv\Scripts\alicia-gui.exe")) {
@@ -33,10 +33,10 @@ try {
         uv sync --python 3.12 --frozen --reinstall-package alicia-copilot
     }
 
-    Step "Modèles vocaux locaux (compréhension de ta voix, voix d'ALICIA) : environ 2 Go la première fois"
+    Step "Modèles vocaux locaux (compréhension de ta voix, voix du robot) : environ 2 Go la première fois"
     uv run --frozen alicia-diag prepare-voice
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Les modèles vocaux n'ont pas pu être téléchargés : ALICIA réessaiera au lancement." -ForegroundColor Yellow
+        Write-Host "Les modèles vocaux n'ont pas pu être téléchargés : COP'IA'LOTE réessaiera au lancement." -ForegroundColor Yellow
     }
 
     if (-not $Installer) {
@@ -68,7 +68,7 @@ try {
     if ($Installer) {
         Step "IA choisie dans l'installateur"
         uv run --frozen alicia-diag setup-ai
-        if ($LASTEXITCODE -ne 0) { Write-Host "Choix de l'IA à refaire dans ALICIA (bouton IA)." -ForegroundColor Yellow }
+        if ($LASTEXITCODE -ne 0) { Write-Host "Choix de l'IA à refaire dans COP'IA'LOTE (bouton IA en bas)." -ForegroundColor Yellow }
     } else {
         Step "Clé Gemini"
         if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
@@ -76,7 +76,7 @@ try {
         if ($envText -match "(?m)^GEMINI_API_KEY=\S+") {
             Write-Host "Une clé est déjà présente dans .env (non affichée)."
         } else {
-            Write-Host "Tu pourras coller ta clé Gemini au premier lancement d'ALICIA (bouton IA)."
+            Write-Host "Tu pourras coller ta clé Gemini au premier lancement de COP'IA'LOTE (bouton IA en bas)."
         }
     }
 

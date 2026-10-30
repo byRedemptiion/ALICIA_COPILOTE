@@ -576,7 +576,7 @@ class OrbWindow(QWidget):
                 lambda: self.stream_toggled.emit(not stream_visible),
             ),
             ("Choisir l'IA / la clé", self.setup_requested.emit),
-            ("Mettre à jour ALICIA", self.update_requested.emit),
+            ("Mettre à jour COP'IA'LOTE", self.update_requested.emit),
             ("Replacer en haut à droite", self._reset_position),
             (None, None),
             ("Quitter ALICIA", self.quit_requested.emit),

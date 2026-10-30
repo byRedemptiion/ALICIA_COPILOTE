@@ -11,7 +11,7 @@ set "NEED="
 fc /b "uv.lock" ".venv\uv.lock.installed" >nul 2>nul || set "NEED=1"
 if not exist ".venv\Scripts\alicia-gui.exe" set "NEED=1"
 if defined NEED (
-  echo Mise a jour des composants d'ALICIA...
+  echo Mise a jour des composants de COP'IA'LOTE...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\setup.ps1" -Update
   if errorlevel 1 (
     echo.
@@ -23,7 +23,7 @@ if defined NEED (
 goto run
 
 :install
-echo ALICIA n'est pas encore installee sur ce PC : lancement de l'installation...
+echo COP'IA'LOTE n'est pas encore installe sur ce PC : lancement de l'installation...
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\setup.ps1"
 if errorlevel 1 (

@@ -40,7 +40,7 @@ RedirectionGuard=no
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
-fr.WelcomeLabel2=Tu vas installer ALICIA, ta copilote de jeu : elle regarde ton écran, t'écoute (F10 ou « Alicia… ») et te conseille, sans jamais jouer à ta place.%n%nIl faut une connexion Internet : l'installation télécharge Python et les voix (environ 2 Go la première fois).
+fr.WelcomeLabel2=Tu vas installer COP'IA'LOTE, ton copilote de jeu (profil ALICIA ou VERIS) : il regarde ton écran, t'écoute (F10 ou « Alicia… ») et te conseille, sans jamais jouer à ta place.%n%nIl faut une connexion Internet : l'installation télécharge Python et les voix (environ 2 Go la première fois).
 
 [Files]
 Source: "..\pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
@@ -61,7 +61,7 @@ Name: "{autoprograms}\ALICIA"; Filename: "{app}\.venv\Scripts\alicia-gui.exe"; W
 Name: "{autoprograms}\ALICIA (diagnostic, avec terminal)"; Filename: "{app}\Lancer_Alicia.bat"; Parameters: "--console"; WorkingDir: "{app}"; IconFilename: "{app}\src\alicia\assets\alicia.ico"
 
 [Run]
-Filename: "{app}\.venv\Scripts\alicia-gui.exe"; WorkingDir: "{app}"; Description: "Lancer ALICIA maintenant"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\.venv\Scripts\alicia-gui.exe"; WorkingDir: "{app}"; Description: "Lancer COP'IA'LOTE maintenant"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 ; Tout le dossier du programme (Python, composants, fichiers mis à jour par le bouton MAJ).
@@ -117,14 +117,14 @@ end;
 procedure InitializeWizard;
 begin
   AiPage := CreateInputOptionPage(wpWelcome,
-    'Choisis l''IA d''ALICIA',
+    'Choisis l''IA de COP''IA''LOTE',
     'Le « cerveau » qui comprend ton écran et te répond.',
-    'Tu pourras changer d''avis plus tard (bouton IA dans ALICIA).',
+    'Tu pourras changer d''avis plus tard (bouton IA en bas de COP''IA''LOTE).',
     True, False);
   AiPage.Add('Gemini (Google) — recommandé, gratuit pour commencer');
   AiPage.Add('ChatGPT (OpenAI) — payant à l''usage (clé API avec crédit)');
   AiPage.Add('Ollama — IA locale sur ton PC (avancé, demande une bonne carte graphique)');
-  AiPage.Add('Je choisirai plus tard, au premier lancement d''ALICIA');
+  AiPage.Add('Je choisirai plus tard, au premier lancement de COP''IA''LOTE');
   AiPage.SelectedValueIndex := 0;
 
   KeyPage := CreateInputQueryPage(AiPage.ID,
@@ -159,7 +159,7 @@ begin
     if ExistingKey() then
       Exit; { réinstallation : la clé déjà enregistrée est gardée }
     Result := MsgBox('Aucune clé collée. Continuer quand même ?' + #13#10 +
-      'Tu pourras la coller au premier lancement d''ALICIA.', mbConfirmation, MB_YESNO) = IDYES;
+      'Tu pourras la coller au premier lancement de COP''IA''LOTE.', mbConfirmation, MB_YESNO) = IDYES;
   end;
 end;
 

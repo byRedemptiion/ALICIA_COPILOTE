@@ -175,7 +175,7 @@ class Updater:
         files = self._files(zipped)
         if "pyproject.toml" not in files or "src/alicia/__init__.py" not in files:
             raise AliciaError(
-                "L'archive ne ressemble pas à ALICIA : mise à jour annulée.",
+                "L'archive ne ressemble pas à COP'IA'LOTE : mise à jour annulée.",
                 detail=f"{len(files)} fichiers, sans pyproject.toml ou src/alicia",
             )
         lock_before = self._read(self.root / "uv.lock")
