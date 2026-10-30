@@ -231,17 +231,15 @@ class MainWindow(QMainWindow):
         self.hotkey_label = QLabel("")
         self.hotkey_label.setObjectName("chip")
         self.nav_console = QPushButton("◈  ALICIA")
-        self.nav_games = QPushButton("▦  JEUX")
         self.nav_keys = QPushButton("⚙")
         self.nav_keys.setToolTip(
             "Réglages : profil, micro, voix d'ALICIA, IA, stream, raccourcis et commandes vocales"
         )
-        for button, index in ((self.nav_console, 0), (self.nav_games, 1), (self.nav_keys, 2)):
+        for button, index in ((self.nav_console, 0), (self.nav_keys, 2)):
             button.setObjectName("nav")
             button.setCheckable(True)
             button.clicked.connect(lambda _=False, i=index: self.show_page(i))
         self.nav_console.setChecked(True)
-        self.nav_games.setToolTip("Tes jeux et leurs sites de référence")
         # Trois colonnes de même largeur : COP'IA'LOTE | VERIS · JEUX (au centre) | bulle, ⚙
         header = QGridLayout()
         header.setContentsMargins(0, 0, 0, 0)
@@ -249,7 +247,6 @@ class MainWindow(QMainWindow):
         nav = QHBoxLayout()
         nav.setSpacing(6)
         nav.addWidget(self.nav_console)
-        nav.addWidget(self.nav_games)
         header.addLayout(nav, 0, 1, Qt.AlignmentFlag.AlignCenter)
         right_buttons = QHBoxLayout()
         right_buttons.setSpacing(6)
@@ -500,7 +497,6 @@ class MainWindow(QMainWindow):
         self.games_page.use_game.connect(self._select_game)
         self.pages = QStackedWidget()
         self.pages.addWidget(console)
-        self.pages.addWidget(self.games_page)
         settings = self.services.settings
         self.hotkey_texts = {"analyze": settings.hotkey_analyze, "talk": settings.hotkey_talk}
         self.shortcuts_page = ShortcutsPage(self.hotkey_texts)
@@ -517,6 +513,7 @@ class MainWindow(QMainWindow):
         self.settings_page.test_mic.connect(self.test_microphone)
         self.settings_page.test_voice.connect(self.test_voice)
         self.settings_page.open_ai.connect(self.open_setup)
+        self.settings_page.add_tab("games", self.games_page)  # Jeux : un onglet des réglages
         self.pages.addWidget(self.settings_page)
 
         layout.addLayout(header)
@@ -525,16 +522,19 @@ class MainWindow(QMainWindow):
         layout.addLayout(footer)
         self.setCentralWidget(root)
 
-    def show_page(self, index: int) -> None:
-        """0 = console d'ALICIA, 1 = onglet Jeux (toujours ouvert sur la liste)."""
-        self.pages.setCurrentIndex(index)
+    def show_page(self, index: int, tab: str | None = None) -> None:
+        """0 = console du robot ; 1 = réglages, onglet Jeux ; 2 = réglages (``tab`` au choix)."""
+        if index == 1:
+            index, tab = 2, "games"
+        self.pages.setCurrentWidget(self.settings_page if index == 2 else self.pages.widget(0))
         self.nav_console.setChecked(index == 0)
-        self.nav_games.setChecked(index == 1)
         self.nav_keys.setChecked(index == 2)
         if index == 2:
             self._load_settings_page()
-        if index == 1:
-            self.games_page.show_list()
+            if tab:
+                self.settings_page.show_tab(tab)
+            if self.settings_page.current_tab == "games":
+                self.games_page.show_list()
 
     # --- vision ---------------------------------------------------------------------------------
 
@@ -1301,7 +1301,7 @@ class MainWindow(QMainWindow):
 
         if self.duo_link is None:
             self.show_panel()
-            self.show_page(2)
+            self.show_page(2, "duo")
             self._notify("Active le duo et mets le même code que ton pote : Réglages → Duo.")
             return
         other = self.duo_peer or "l'autre robot"
@@ -1729,7 +1729,7 @@ class MainWindow(QMainWindow):
 
         channel = self.services.settings.stream.twitch_channel
         if not channel:
-            self.show_page(2)
+            self.show_page(2, "stream")
             self.show_panel()
             self._set_status("Indique ta chaîne Twitch dans Réglages → Stream.")
             return

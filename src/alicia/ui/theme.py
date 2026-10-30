@@ -159,6 +159,29 @@ QPushButton#navIcon:checked {{
     color: {PINK};
     border-color: {PINK};
 }}
+QPushButton#settingsTab {{
+    background: transparent;
+    color: {MUTED};
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding: 8px 12px;
+}}
+QPushButton#settingsTab:hover {{
+    color: {TEXT};
+}}
+QPushButton#settingsTab:checked {{
+    color: {TEXT};
+    background: {PANEL};
+    border-color: {PINK};
+}}
+QFrame#settingsLine {{
+    background: {PINK};
+    border: none;
+}}
 QPushButton#chipButton {{
     color: {MUTED};
     border: 1px solid {BORDER};

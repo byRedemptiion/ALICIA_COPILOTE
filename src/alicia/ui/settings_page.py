@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -29,7 +30,7 @@ from alicia.core.config import VoiceSettings
 from alicia.core.persona import PERSONAS
 from alicia.core.persona import current as current_persona
 from alicia.ui.shortcuts_page import ShortcutsPage
-from alicia.ui.theme import PINK, PROJECT_NAME, title_font
+from alicia.ui.theme import PROJECT_NAME
 
 EDGE_VOICES = (
     ("fr-FR-DeniseNeural", "Denise (France) — douce"),
@@ -90,7 +91,20 @@ def _panel() -> tuple[QFrame, QGridLayout]:
     return frame, grid
 
 
-class SettingsPage(QScrollArea):
+TABS = (
+    ("general", "⚙️  Général"),
+    ("profile", "👤  Profil"),
+    ("ai", "🧠  IA && clés"),
+    ("voice", "🎙️  Voix && micro"),
+    ("vision", "👀  Vision && mémoire"),
+    ("keys", "⌨️  Raccourcis"),
+    ("stream", "🎥  Stream"),
+    ("duo", "🤝  Duo"),
+    ("games", "▦  Jeux"),
+)
+
+
+class SettingsPage(QWidget):
     setting_changed = Signal(str, object)  # (réglage, valeur)
     test_mic = Signal()
     test_voice = Signal()
@@ -103,22 +117,49 @@ class SettingsPage(QScrollArea):
         output_devices: Callable[[], list[str]] | None = None,
     ) -> None:
         super().__init__()
-        self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet(
-            "QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }"
-        )
         self._input_devices = input_devices or (lambda: [])
         self._output_devices = output_devices or (lambda: [])
         self._loading = False
-        host = QWidget()
-        layout = QVBoxLayout(host)
-        layout.setContentsMargins(0, 0, 8, 0)
-        layout.setSpacing(14)
-        title = QLabel("RÉGLAGES")
-        title.setFont(title_font(16))
-        title.setStyleSheet(f"color:{PINK};")
-        layout.addWidget(title)
+        # Onglets en haut, une page courte par thème (Général en premier)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        bar = QHBoxLayout()
+        bar.setSpacing(4)
+        self.tab_buttons: dict[str, QPushButton] = {}
+        self.stack = QStackedWidget()
+        self.tabs: dict[str, QWidget] = {}
+        self._tab_layouts: dict[str, QVBoxLayout] = {}
+        for key, label in TABS:
+            button = QPushButton(label)
+            button.setObjectName("settingsTab")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _=False, k=key: self.show_tab(k))
+            bar.addWidget(button)
+            self.tab_buttons[key] = button
+            if key == "games":
+                continue  # page ajoutée par la fenêtre principale (add_tab)
+            area = QScrollArea()
+            area.setWidgetResizable(True)
+            area.setFrameShape(QFrame.Shape.NoFrame)
+            area.setStyleSheet(
+                "QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }"
+            )
+            host = QWidget()
+            tab_layout = QVBoxLayout(host)
+            tab_layout.setContentsMargins(0, 14, 8, 0)
+            tab_layout.setSpacing(14)
+            area.setWidget(host)
+            self.stack.addWidget(area)
+            self.tabs[key] = area
+            self._tab_layouts[key] = tab_layout
+        bar.addStretch(1)
+        line = QFrame()
+        line.setObjectName("settingsLine")
+        line.setFixedHeight(1)
+        outer.addLayout(bar)
+        outer.addWidget(line)
+        outer.addWidget(self.stack, 1)
 
         # --- Profil ------------------------------------------------------------------------------
         profile, grid = _panel()
@@ -179,7 +220,7 @@ class SettingsPage(QScrollArea):
         self.player_name.setProperty("keep_names", True)
         self.player_phonetic.setProperty("keep_names", True)
         grid.setColumnStretch(2, 1)
-        layout.addWidget(profile)
+        self._tab_layouts["profile"].addWidget(profile)
 
         # --- Vision ------------------------------------------------------------------------------
         vision, grid = _panel()
@@ -232,7 +273,7 @@ class SettingsPage(QScrollArea):
             1,
             3,
         )
-        layout.addWidget(vision)
+        self._tab_layouts["vision"].addWidget(vision)
 
         # --- Mémoire de partie ---------------------------------------------------------------
         memory, grid = _panel()
@@ -300,7 +341,7 @@ class SettingsPage(QScrollArea):
             1,
             3,
         )
-        layout.addWidget(memory)
+        self._tab_layouts["vision"].addWidget(memory)
 
         # --- Micro -------------------------------------------------------------------------------
         mic, grid = _panel()
@@ -338,7 +379,7 @@ class SettingsPage(QScrollArea):
             1,
             3,
         )
-        layout.addWidget(mic)
+        self._tab_layouts["voice"].addWidget(mic)
 
         # --- Voix --------------------------------------------------------------------------------
         voice, grid = _panel()
@@ -375,7 +416,7 @@ class SettingsPage(QScrollArea):
         self.voice_test = QPushButton("Tester la voix")
         self.voice_test.clicked.connect(self.test_voice.emit)
         grid.addWidget(self.voice_test, 6, 0)
-        layout.addWidget(voice)
+        self._tab_layouts["voice"].addWidget(voice)
 
         # --- Stream ---------------------------------------------------------------------------------
         stream, grid = _panel()
@@ -421,7 +462,7 @@ class SettingsPage(QScrollArea):
         )
         obs_help.setTextFormat(Qt.TextFormat.RichText)
         grid.addWidget(obs_help, 6, 0, 1, 3)
-        layout.addWidget(stream)
+        self._tab_layouts["stream"].addWidget(stream)
 
         # --- Duo -----------------------------------------------------------------------------------
         duo, grid = _panel()
@@ -487,17 +528,32 @@ class SettingsPage(QScrollArea):
         duo_help.setTextFormat(Qt.TextFormat.RichText)
         duo_help.setProperty("keep_names", True)
         grid.addWidget(duo_help, 11, 0, 1, 3)
-        layout.addWidget(duo)
+        self._tab_layouts["duo"].addWidget(duo)
 
         # --- Général -------------------------------------------------------------------------------
-        general, grid = _panel()
-        grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
+        ai_panel, grid = _panel()
+        grid.addWidget(_title("IA & CLÉS"), 0, 0, 1, 3)
         self.ai_label = QLabel("")
-        change_ai = QPushButton("Changer d'IA / de clé")
+        change_ai = QPushButton("Changer d'IA / gérer mes clés")
         change_ai.clicked.connect(self.open_ai.emit)
-        grid.addWidget(QLabel("IA"), 1, 0)
+        grid.addWidget(QLabel("IA utilisée"), 1, 0)
         grid.addWidget(self.ai_label, 1, 1)
         grid.addWidget(change_ai, 1, 2)
+        grid.addWidget(
+            _muted(
+                "Gemini, ChatGPT ou Ollama. Plusieurs clés par fournisseur : bouton « + » dans "
+                "la fenêtre des clés, puis coche celle à utiliser. L'IA du duo se choisit dans "
+                "l'onglet Duo."
+            ),
+            2,
+            0,
+            1,
+            3,
+        )
+        self._tab_layouts["ai"].addWidget(ai_panel)
+
+        general, grid = _panel()
+        grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
         self.mode_box = QComboBox()
         self.mode_box.addItem("Seulement le rond d'ALICIA (mode bulle)", "orb")
         self.mode_box.addItem("Le panneau complet", "full")
@@ -528,13 +584,14 @@ class SettingsPage(QScrollArea):
         grid.addWidget(save_token, 6, 2)
         self.github_state = _muted("")
         grid.addWidget(self.github_state, 7, 1, 1, 2)
-        layout.addWidget(general)
+        self._tab_layouts["general"].addWidget(general)
 
-        # --- Raccourcis (onglet précédent, intégré ici) --------------------------------------
+        # --- Raccourcis ---------------------------------------------------------------------------
         self.shortcuts = shortcuts
-        layout.addWidget(shortcuts)
-        layout.addStretch(1)
-        self.setWidget(host)
+        self._tab_layouts["keys"].addWidget(shortcuts)
+        for tab_layout in self._tab_layouts.values():
+            tab_layout.addStretch(1)
+        self.show_tab("general")
 
         # Signaux (ignorés pendant le chargement des valeurs)
         self.input_box.currentIndexChanged.connect(
@@ -644,6 +701,25 @@ class SettingsPage(QScrollArea):
             self.ai_label.setText(ai_text)
         finally:
             self._loading = False
+
+    def show_tab(self, key: str) -> None:
+        """Affiche l'onglet ``key`` (general, profile, ai, voice, vision, keys, stream, duo, games)."""
+        widget = self.tabs.get(key)
+        if widget is None:
+            return
+        self.stack.setCurrentWidget(widget)
+        for name, button in self.tab_buttons.items():
+            button.setChecked(name == key)
+        self.current_tab = key
+
+    def add_tab(self, key: str, widget: QWidget) -> None:
+        """Ajoute une page déjà construite (l'onglet Jeux vient de la fenêtre principale)."""
+        holder = QWidget()
+        box = QVBoxLayout(holder)
+        box.setContentsMargins(0, 14, 0, 0)
+        box.addWidget(widget)
+        self.stack.addWidget(holder)
+        self.tabs[key] = holder
 
     def show_personality(self, text: str) -> None:
         self.personality_state.setText(text)

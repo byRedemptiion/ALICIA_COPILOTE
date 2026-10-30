@@ -452,8 +452,11 @@ def test_games_tab_updates_the_game_menus(qt_app, settings):
 
     window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
     window.show_page(1)
-    assert window.pages.currentWidget() is window.games_page
-    assert window.nav_games.isChecked() and not window.nav_console.isChecked()
+    assert window.pages.currentWidget() is window.settings_page
+    assert window.settings_page.current_tab == "games" and window.games_page.isVisibleTo(
+        window.settings_page.stack.currentWidget()
+    )
+    assert window.nav_keys.isChecked() and not window.nav_console.isChecked()
     window.game_store.save(
         None, GameDraft("Hades II", ["hades2.exe"], [], ["hades.fandom.com"], "")
     )
