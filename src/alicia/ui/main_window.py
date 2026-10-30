@@ -180,6 +180,11 @@ class MainWindow(QMainWindow):
         self._peer_speaker = None  # voix de l'autre robot sur ce PC
         self._duo_model_cache = None  # ((fournisseur, clé), modèle) de l'IA du duo
         self.duo_peer_player = ""  # prénom du pote (joueur de l'autre robot)
+        self._duo_inbox: list[dict] = []  # type: ignore[type-arg]  # messages en attente
+        self._duo_last_msg: dict | None = None  # type: ignore[type-arg]
+        self._duo_inbox_timer = QTimer(self)
+        self._duo_inbox_timer.setInterval(600)
+        self._duo_inbox_timer.timeout.connect(self._duo_flush_inbox)
         self._duo_last_relay: tuple[float, str] | None = None  # pour « réponds-lui »
         self._peer_engine = ""
         self._overlay_sent: tuple[str, float] = ("", -1.0)
@@ -1110,6 +1115,7 @@ class MainWindow(QMainWindow):
         self.orb.stream_toggled.connect(lambda on: self.change_setting("stream_visible", on))
         self.orb.twitch_requested.connect(self.open_twitch_chat)
         self.orb.duo_requested.connect(self.ask_duo_topic)
+        self.orb.duo_replay_requested.connect(self.replay_duo_message)
         self.orb.twitch_channel = settings.stream.twitch_channel
         self.orb.set_stream_visible(settings.stream_visible)
         self.settings_page.stream_box.blockSignals(True)
@@ -1675,7 +1681,17 @@ class MainWindow(QMainWindow):
                 log.info("Duo : relié à %s", name)
             return
         self.duo_peer = name
+        if kind in ("relay", "say") and not msg.get("_queued") and self._duo_should_wait():
+            # Tu parles à ton robot (ou il te répond) : le message attend son tour.
+            self._duo_inbox.append(msg)
+            self._duo_inbox_timer.start()
+            count = len(self._duo_inbox)
+            notice = f"📩 {count} message{'s' if count > 1 else ''} de {name} en attente"
+            self._set_status(notice)
+            log.info("Duo : message de %s mis en attente (%d)", name, count)
+            return
         if kind == "relay":
+            self._duo_last_msg = msg
             self._relay_received(msg)
             return
         if kind == "stop":
@@ -1731,6 +1747,37 @@ class MainWindow(QMainWindow):
                 self.bubble.hide_after(self.bubble.linger_ms(text) + 4000)
             return
         self._duo_answer_when_free(conv)
+
+    def _duo_should_wait(self) -> bool:
+        """Vrai si tu es en train de parler à ton robot, ou s'il parle / réfléchit."""
+        recorder = self.services.recorder
+        speaker = self.services.speaker
+        wake = self.wake
+        return bool(
+            self.busy
+            or (recorder is not None and getattr(recorder, "recording", False))
+            or (speaker is not None and getattr(speaker, "speaking", False))
+            or self._peer_talking()
+            or (wake is not None and getattr(wake, "state", 0) in (1, 3, 4))  # phrase en cours
+        )
+
+    def _duo_flush_inbox(self) -> None:
+        """Messages en attente : dits un par un dès que tu as fini (rien n'est perdu)."""
+        if not self._duo_inbox:
+            self._duo_inbox_timer.stop()
+            return
+        if self._duo_should_wait():
+            return
+        msg = dict(self._duo_inbox.pop(0))
+        msg["_queued"] = True
+        self._duo_received(msg)
+
+    def replay_duo_message(self) -> None:
+        """« Réécouter le dernier message » (menu du rond / icône près de l'horloge)."""
+        if self._duo_last_msg is None:
+            self._notify("Aucun message reçu pour l'instant.")
+            return
+        self._relay_received(self._duo_last_msg)
 
     def _duo_answer_when_free(self, conv: dict, tries: int = 0) -> None:  # type: ignore[type-arg]
         if conv["ended"] or conv.get("thinking"):
@@ -2270,6 +2317,7 @@ class MainWindow(QMainWindow):
             ("Couper la voix", self.stop_voice),
             ("Chat Twitch", self.open_twitch_chat),
             ("Message à l'autre robot…", self.ask_duo_topic),
+            ("Réécouter le dernier message", self.replay_duo_message),
             ("Réglages", lambda: (self.show_panel(), self.show_page(2))),
             ("Mettre à jour", self.update_now),
             (None, None),

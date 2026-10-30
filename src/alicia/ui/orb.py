@@ -405,6 +405,7 @@ class OrbWindow(QWidget):
     stream_toggled = Signal(bool)
     twitch_requested = Signal()
     duo_requested = Signal()
+    duo_replay_requested = Signal()
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -598,6 +599,7 @@ class OrbWindow(QWidget):
             ),
             ("Chat Twitch", self.twitch_requested.emit),
             ("Message à l'autre robot…", self.duo_requested.emit),
+            ("Réécouter le dernier message", self.duo_replay_requested.emit),
             (
                 "Visible en stream (OBS) ✓" if stream_visible else "Visible en stream (OBS)",
                 lambda: self.stream_toggled.emit(not stream_visible),

@@ -236,3 +236,18 @@ def test_relay_message_goes_to_the_other_player(qt_app, tmp_path, monkeypatch):
     )
     window.duo_link = None
     window.close()
+
+
+def test_messages_wait_while_you_talk_to_your_robot(qt_app, tmp_path, monkeypatch):
+    window, sent = _window(qt_app, tmp_path, monkeypatch)
+    window.busy = True  # tu poses une question à ton robot
+    window._duo_received({"kind": "relay", "name": "ALICIA", "text": "Nova arrive !"})
+    assert len(window._duo_inbox) == 1 and "Nova arrive" not in window.answer.toPlainText()
+    window.busy = False
+    window._duo_flush_inbox()
+    assert not window._duo_inbox and "Nova arrive" in window.answer.toPlainText()
+    window.answer.clear()
+    window.replay_duo_message()  # réécouter
+    assert "Nova arrive" in window.answer.toPlainText()
+    window.duo_link = None
+    window.close()
