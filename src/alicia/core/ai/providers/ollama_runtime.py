@@ -119,6 +119,24 @@ class OllamaRuntime:
             detail=f"pas de réponse en {wait_s:.0f} s",
         )
 
+    def gpu_share(self) -> float | None:
+        """Part du modèle chargée sur la carte graphique (0 = tout sur le processeur),
+        ou None si le modèle n'est pas chargé."""
+        try:
+            with self._client(3.0) as client:
+                models = client.get(f"{self.base_url}/api/ps").json().get("models", [])
+        except (httpx.HTTPError, ValueError):
+            return None
+        wanted = self.model if ":" in self.model else f"{self.model}:latest"
+        for entry in models:
+            if entry.get("name") in (self.model, wanted) or entry.get("model") in (
+                self.model,
+                wanted,
+            ):
+                size = float(entry.get("size") or 0)
+                return float(entry.get("size_vram") or 0) / size if size else None
+        return None
+
     def has_model(self) -> bool:
         with self._client(5.0) as client:
             response = client.get(f"{self.base_url}/api/tags")

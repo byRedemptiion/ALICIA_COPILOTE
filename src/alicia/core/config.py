@@ -107,6 +107,9 @@ class OllamaSettings:
     model: str
     base_url: str
     keep_alive: str
+    # Cœurs du processeur laissés à Ollama : sans carte graphique compatible, il calcule sur
+    # le processeur et le fait chauffer. 0 = la moitié des cœurs (6 au plus).
+    num_thread: int = 0
 
 
 @dataclass(frozen=True)
@@ -384,7 +387,8 @@ def load_settings(
             ollama=OllamaSettings(
                 model=str(ollama.get("model", "")).strip(),
                 base_url=str(ollama.get("base_url", "")).rstrip("/"),
-                keep_alive=str(ollama.get("keep_alive", "10m")),
+                keep_alive=str(ollama.get("keep_alive", "2m")),
+                num_thread=max(0, min(64, int(ollama.get("num_thread", 0) or 0))),
             ),
             web_search=bool(ai.get("web_search", False)),
             openai=OpenAISettings(

@@ -174,6 +174,7 @@ class MainWindow(QMainWindow):
         self._awaiting_answer = False  # elle écoute cette réponse en ce moment
         self._shown_frame: Frame | None = None
         self.ollama_runtime = None  # OllamaRuntime quand l'IA locale est choisie
+        self._ollama_checked = False
         self.update_info: UpdateInfo | None = None
         self._updating = False
         self.updater = self._make_updater()
@@ -1648,6 +1649,7 @@ class MainWindow(QMainWindow):
         self.voice_bridge.wake_command.connect(self._wake_command)
         self.voice_bridge.wake_cancel.connect(self._wake_cancel)
         self.voice_bridge.wake_stop.connect(self.voice_stop)
+        self.voice_bridge.notice.connect(self._notify)
         if self.services.actions is not None:
             self.services.actions.on_reminder = self.voice_bridge.reminder.emit
         if self.services.speaker is not None:
@@ -2183,7 +2185,34 @@ class MainWindow(QMainWindow):
             if self._bubble_active():
                 self.bubble.append(value)
 
+    def _check_ollama_heat(self) -> None:
+        """Une fois : prévient si Ollama calcule sur le processeur (c'est ce qui chauffe)."""
+        runtime = self.ollama_runtime
+        if (
+            runtime is None
+            or self._ollama_checked
+            or self.services.settings.ai.provider != "ollama"
+        ):
+            return
+        self._ollama_checked = True
+
+        def check() -> None:
+            share = runtime.gpu_share()
+            if share is None:
+                self._ollama_checked = False  # pas encore chargé : on revérifiera
+                return
+            log.info("Ollama : %.0f %% du modèle sur la carte graphique", share * 100)
+            if share < 0.6:
+                self.voice_bridge.notice.emit(
+                    "⚠ Ollama calcule surtout sur ton processeur (ta carte graphique n'est pas "
+                    "utilisée) : c'est ce qui le fait chauffer. Passe sur Gemini (gratuit) ou "
+                    "ChatGPT avec le bouton IA en bas."
+                )
+
+        threading.Thread(target=check, name="alicia-ollama-check", daemon=True).start()
+
     def _analysis_done(self, outcome: AnalysisOutcome) -> None:
+        self._check_ollama_heat()
         if outcome.action is not None:
             self._action_done(outcome)
             return

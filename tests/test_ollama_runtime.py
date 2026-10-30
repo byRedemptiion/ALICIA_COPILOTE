@@ -94,3 +94,26 @@ def test_missing_model_is_downloaded_with_progress():
 
 def test_remote_address_is_never_started():
     assert is_local("http://localhost:11434") and not is_local("http://192.168.1.20:11434")
+
+
+def test_gpu_share_tells_if_ollama_runs_on_the_processor():
+    import httpx
+
+    from alicia.core.ai.providers.ollama_runtime import OllamaRuntime
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"models": [{"name": "qwen2.5vl:7b", "size": 8_000, "size_vram": 0}]},
+        )
+
+    runtime = OllamaRuntime(
+        "http://127.0.0.1:11434", "qwen2.5vl:7b", transport=httpx.MockTransport(handler)
+    )
+    assert runtime.gpu_share() == 0.0
+
+
+def test_ollama_never_takes_every_core():
+    from alicia.core.ai.providers.ollama import default_threads
+
+    assert 2 <= default_threads() <= 6

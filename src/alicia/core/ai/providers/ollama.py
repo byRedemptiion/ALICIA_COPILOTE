@@ -63,6 +63,8 @@ class OllamaModel(HttpVisionModel):
             "options": {
                 "num_predict": request.max_output_tokens,
                 "temperature": request.temperature,
+                # Jamais tout le processeur : sans carte graphique, Ollama le ferait chauffer.
+                "num_thread": self.settings.num_thread or default_threads(),
             },
         }
         return f"{self.settings.base_url}/api/chat", {}, body
@@ -117,3 +119,9 @@ class OllamaModel(HttpVisionModel):
                     detail=exc.detail,
                 ) from exc
             raise
+
+
+def default_threads() -> int:
+    import os
+
+    return max(2, min(6, (os.cpu_count() or 4) // 2))

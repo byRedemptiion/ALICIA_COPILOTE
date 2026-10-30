@@ -33,7 +33,8 @@ reasoning_effort = "low"     # none | low | medium : plus bas = plus rapide
 [ai.ollama]
 model = "qwen2.5vl:7b"
 base_url = "http://127.0.0.1:11434"
-keep_alive = "10m"
+keep_alive = "2m"   # modèle libéré 2 min après la dernière question (mémoire, chaleur)
+num_thread = 0       # cœurs du processeur pour Ollama : 0 = la moitié (6 au plus)
 
 [capture]
 backend = "auto"             # auto | wgc | printwindow
