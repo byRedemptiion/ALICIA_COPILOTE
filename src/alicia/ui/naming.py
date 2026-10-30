@@ -9,6 +9,7 @@ from importlib import resources
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QComboBox,
     QGroupBox,
     QLabel,
     QLineEdit,
@@ -49,6 +50,11 @@ def rename_widgets(root: QWidget) -> None:
     if current().key == "alicia":
         return
     for widget in [root, *root.findChildren(QWidget)]:
+        if widget.property("keep_names"):
+            continue  # texte qui cite déjà les deux robots (duo)
+        if isinstance(widget, QComboBox):
+            for index in range(widget.count()):
+                widget.setItemText(index, named(widget.itemText(index)))
         if widget.windowTitle():
             widget.setWindowTitle(named(widget.windowTitle()))
         if widget.toolTip():

@@ -21,7 +21,15 @@ _WS_EX_TOOLWINDOW = 0x00000080
 _WS_EX_NOACTIVATE = 0x08000000
 _GW_OWNER = 4
 # Bureau et barre des tâches de Windows : pas une application à regarder.
-_DESKTOP_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+_DESKTOP_CLASSES = {
+    "Progman",  # bureau
+    "WorkerW",
+    "Shell_TrayWnd",  # barre des tâches
+    "Shell_SecondaryTrayWnd",
+    "Windows.UI.Core.CoreWindow",  # menu Démarrer, Rechercher, centre de notifications
+    "XamlExplorerHostIslandWindow",  # Alt+Tab
+    "ForegroundStaging",
+}
 _DWMWA_EXTENDED_FRAME_BOUNDS = 9
 _DWMWA_CLOAKED = 14
 _MONITOR_DEFAULTTONEAREST = 2

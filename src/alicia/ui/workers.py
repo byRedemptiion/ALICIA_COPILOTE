@@ -29,11 +29,14 @@ class Task(QRunnable):
 
     def run(self) -> None:
         try:
-            result = self.fn(lambda item: self.signals.progress.emit(self.generation, item))
-        except Exception as exc:  # noqa: BLE001 - transmis à l'UI, journalisé là-bas
-            self.signals.failed.emit(self.generation, exc)
-        else:
-            self.signals.finished.emit(self.generation, result)
+            try:
+                result = self.fn(lambda item: self.signals.progress.emit(self.generation, item))
+            except Exception as exc:  # noqa: BLE001 - transmis à l'UI, journalisé là-bas
+                self.signals.failed.emit(self.generation, exc)
+            else:
+                self.signals.finished.emit(self.generation, result)
+        except RuntimeError:
+            pass  # fenêtre fermée pendant la tâche (fermeture d'ALICIA) : plus personne à prévenir
 
 
 class LogBridge(QObject):

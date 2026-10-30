@@ -388,7 +388,12 @@ class SettingsPage(QScrollArea):
         # --- Duo -----------------------------------------------------------------------------------
         duo, grid = _panel()
         grid.addWidget(_title("DUO : DEUX ROBOTS QUI SE PARLENT"), 0, 0, 1, 3)
-        self.duo_box = QCheckBox("Activer le duo (ex. VERIS chez toi, ALICIA chez ton pote)")
+        me = current_persona()
+        other = next((p for p in PERSONAS.values() if p.key != me.key), me)
+        self.duo_box = QCheckBox(
+            f"Activer le duo (ex. {me.title} chez toi, {other.title} chez ton pote)"
+        )
+        self.duo_box.setProperty("keep_names", True)
         self.duo_box.toggled.connect(lambda on: self._emit("duo", on))
         grid.addWidget(self.duo_box, 1, 0, 1, 3)
         self.duo_code = QLineEdit()
@@ -423,12 +428,14 @@ class SettingsPage(QScrollArea):
         grid.addWidget(self.duo_hear, 6, 0, 1, 3)
         duo_help = _muted(
             "Crée un code ici, envoie-le à ton pote (en privé), il le colle chez lui. Puis "
-            "dis par exemple <b>« Veris, dis bonjour à Alicia »</b> ou <b>« Alicia, discute "
-            "avec Veris de WoW »</b>. « Stop » arrête la discussion des deux côtés.<br>"
+            f"dis par exemple <b>« {me.name}, dis bonjour à {other.name} »</b> ou <b>« {me.name}, "
+            f"discute avec {other.name} de WoW »</b>. « Stop » arrête la discussion des deux "
+            "côtés.<br>"
             "Les messages sont chiffrés avec ce code et passent par un relais gratuit "
             "(ntfy.sh). Un message de l'autre robot ne peut jamais agir sur ton PC."
         )
         duo_help.setTextFormat(Qt.TextFormat.RichText)
+        duo_help.setProperty("keep_names", True)
         grid.addWidget(duo_help, 7, 0, 1, 3)
         layout.addWidget(duo)
 

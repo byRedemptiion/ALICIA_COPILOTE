@@ -42,6 +42,12 @@ def _ok_level() -> int:
     return logging.DEBUG if getattr(_quiet, "on", False) else logging.INFO
 
 
+def _problem_level(level: int) -> int:
+    """Captures de fond : leurs échecs sont résumés par la vision en direct (pas une ligne
+    d'erreur par seconde dans le journal)."""
+    return logging.DEBUG if getattr(_quiet, "on", False) else level
+
+
 class CaptureService:
     """Liste les fenêtres et capture celle choisie en essayant les backends dans l'ordre.
 
@@ -223,7 +229,12 @@ class CaptureService:
             if refresh:
                 window = self._refresher(window)
         except AliciaError as exc:
-            log.error("Capture refusée pour « %s » : %s", window.title, exc.detail)
+            log.log(
+                _problem_level(logging.ERROR),
+                "Capture refusée pour « %s » : %s",
+                window.title,
+                exc.detail,
+            )
             raise
         attempts: list[str] = []
         notes: list[str] = []
@@ -233,7 +244,12 @@ class CaptureService:
                 pixels = backend.grab(window)
             except AliciaError as exc:
                 attempts.append(f"{backend.name}: {exc.detail}")
-                log.warning("Capture %s échouée : %s", backend.name, exc.detail)
+                log.log(
+                    _problem_level(logging.WARNING),
+                    "Capture %s échouée : %s",
+                    backend.name,
+                    exc.detail,
+                )
                 continue
             except Exception as exc:  # noqa: BLE001 - erreur native inattendue
                 attempts.append(f"{backend.name}: {exc!r}")
@@ -241,7 +257,11 @@ class CaptureService:
                 continue
             if is_black(pixels):
                 attempts.append(f"{backend.name}: image noire")
-                log.warning("Capture %s : image entièrement noire, essai suivant", backend.name)
+                log.log(
+                    _problem_level(logging.WARNING),
+                    "Capture %s : image entièrement noire, essai suivant",
+                    backend.name,
+                )
                 continue
             if attempts:
                 notes.append("Repli après : " + " ; ".join(attempts))
@@ -267,7 +287,12 @@ class CaptureService:
             )
             return frame
 
-        log.error("Capture impossible de « %s » : %s", window.title, " | ".join(attempts))
+        log.log(
+            _problem_level(logging.ERROR),
+            "Capture impossible de « %s » : %s",
+            window.title,
+            " | ".join(attempts),
+        )
         hint = (
             " Le jeu est en plein écran : vérifie qu'il est bien sur l'écran affiché."
             if window.fullscreen
