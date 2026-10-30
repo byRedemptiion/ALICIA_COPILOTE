@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -200,11 +201,9 @@ class MainWindow(QMainWindow):
         self.game_store = GameStore()
 
         # --- En-tête : nom, raccourcis, modèle -------------------------------------------------
-        brand = QLabel("A · L · I · C · I · A")
+        brand = QLabel(PROJECT_NAME)  # le projet en haut à gauche, le profil au centre
         brand.setFont(title_font(15))
-        brand.setStyleSheet(f"color:{PINK};")
-        tagline = QLabel(PROJECT_NAME)
-        tagline.setObjectName("muted")
+        brand.setStyleSheet(f"color:{PINK}; letter-spacing: 3px;")
         model = self.services.model
         self.provider_label = QPushButton(f"IA · {model.provider} / {model.model}")
         self.provider_label.setObjectName("chipButton")
@@ -224,14 +223,19 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda _=False, i=index: self.show_page(i))
         self.nav_console.setChecked(True)
         self.nav_games.setToolTip("Tes jeux et leurs sites de référence")
-        header = QHBoxLayout()
-        header.addWidget(brand)
-        header.addSpacing(10)
-        header.addWidget(tagline)
-        header.addSpacing(24)
-        header.addWidget(self.nav_console)
-        header.addWidget(self.nav_games)
-        header.addStretch(1)
+        # Trois colonnes de même largeur : COP'IA'LOTE | VERIS · JEUX (au centre) | bulle, ⚙
+        header = QGridLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addWidget(brand, 0, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        nav = QHBoxLayout()
+        nav.setSpacing(6)
+        nav.addWidget(self.nav_console)
+        nav.addWidget(self.nav_games)
+        header.addLayout(nav, 0, 1, Qt.AlignmentFlag.AlignCenter)
+        right_buttons = QHBoxLayout()
+        right_buttons.setSpacing(6)
+        for column in range(3):
+            header.setColumnStretch(column, 1)
         self.orb_button = QPushButton("◉  Mode bulle")
         self.orb_button.setToolTip(
             "Ne garder que le rond d'ALICIA à l'écran (ses réponses s'affichent à côté)"
@@ -240,9 +244,10 @@ class MainWindow(QMainWindow):
         self.update_button = QPushButton("⟳  MAJ")
         self.update_button.setToolTip("Vérifier et installer la dernière version d'ALICIA")
         self.update_button.clicked.connect(self.update_now)
-        header.addWidget(self.orb_button)
-        header.addSpacing(6)
-        header.addWidget(self.nav_keys)  # roue des réglages, tout à droite
+        right_buttons.addStretch(1)
+        right_buttons.addWidget(self.orb_button)
+        right_buttons.addWidget(self.nav_keys)  # roue des réglages, tout à droite
+        header.addLayout(right_buttons, 0, 2)
         self.nav_keys.setObjectName("navIcon")
 
         # --- Colonne gauche : cible + vision -----------------------------------------------------
