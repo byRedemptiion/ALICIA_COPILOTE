@@ -86,6 +86,7 @@ def test_window_copilot_speaks_only_when_it_matters(qt_app, tmp_path, monkeypatc
         assert not window.copilot_timer.isActive()
         window.settings_page.copilot_box.setChecked(True)  # depuis les réglages
         assert window.copilot_timer.isActive() and window.orb.copilot_on
+        assert window.copilot_button.isChecked()
         assert "enabled = true" in (data_dir() / "alicia.toml").read_text("utf-8")
         window._copilot_tick()
         _wait(qt_app, lambda: said)
@@ -108,8 +109,8 @@ def test_window_copilot_speaks_only_when_it_matters(qt_app, tmp_path, monkeypatc
         assert (
             window.services.settings.copilot.threshold == 9 and window.copilot.gate.threshold == 9
         )
-        window.set_copilot(False)
-        assert not window.copilot_timer.isActive()
+        window.copilot_button.click()  # le bouton du haut coupe aussi
+        assert not window.copilot_timer.isActive() and not window.copilot_button.isChecked()
         assert not window.settings_page.copilot_box.isChecked()
     finally:
         window.close()

@@ -269,6 +269,15 @@ class MainWindow(QMainWindow):
         )
         self.update_button.clicked.connect(self.update_now)
         right_buttons.addStretch(1)
+        self.copilot_button = QPushButton("💡  Copilote")
+        self.copilot_button.setObjectName("copilotToggle")
+        self.copilot_button.setCheckable(True)
+        self.copilot_button.setToolTip(
+            "Mode Copilote : il regarde l'écran de temps en temps et parle de lui-même "
+            "quand c'est important (réglages dans Général)"
+        )
+        self.copilot_button.toggled.connect(lambda on: self.set_copilot(on))
+        right_buttons.addWidget(self.copilot_button)
         right_buttons.addWidget(self.orb_button)
         right_buttons.addWidget(self.nav_keys)  # roue des réglages, tout à droite
         header.addLayout(right_buttons, 0, 2)
@@ -2979,6 +2988,10 @@ class MainWindow(QMainWindow):
         action = getattr(self, "copilot_action", None)
         if action is not None:
             action.setChecked(bool(on))
+        self.copilot_button.blockSignals(True)
+        self.copilot_button.setChecked(bool(on))
+        self.copilot_button.setText("💡  Copilote ✓" if on else "💡  Copilote")
+        self.copilot_button.blockSignals(False)
         page = self.settings_page
         page.copilot_box.blockSignals(True)
         page.copilot_box.setChecked(bool(on))

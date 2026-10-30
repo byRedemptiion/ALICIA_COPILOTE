@@ -159,6 +159,11 @@ QPushButton#navIcon:checked {{
     color: {PINK};
     border-color: {PINK};
 }}
+QPushButton#copilotToggle:checked {{
+    color: #ffffff;
+    border: 1px solid {PINK};
+    background: {PANEL};
+}}
 QPushButton#settingsTab {{
     background: transparent;
     color: {MUTED};
