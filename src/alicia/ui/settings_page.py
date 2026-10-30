@@ -168,6 +168,7 @@ class SettingsPage(QWidget):
         for persona in PERSONAS.values():
             self.persona_box.addItem(persona.title, persona.key)
         self.persona_box.setCurrentIndex(max(0, self.persona_box.findData(current_persona().key)))
+        self.persona_box.setProperty("keep_names", True)  # « ALICIA » et « VERIS », jamais renommés
         self.persona_box.currentIndexChanged.connect(
             lambda _i: self._emit("persona", self.persona_box.currentData())
         )

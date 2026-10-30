@@ -161,3 +161,41 @@ def test_alicia_voice_c_is_available():
     assert ALICIA.voice_engine == "voixc"
     synth = make_synthesizer(replace(VoiceSettings(), tts_engine="voixc"))
     assert callable(synth) and hasattr(synth, "warm_up")
+
+
+def test_profile_list_shows_alicia_and_veris(veris, qt_app, tmp_path, monkeypatch):
+    """La liste des profils montre ALICIA et VERIS, même quand VERIS est actif."""
+    from alicia.app import build_services
+    from alicia.core.config import load_settings
+    from alicia.ui.main_window import MainWindow
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow(
+        build_services(load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True)
+    )
+    box = window.settings_page.persona_box
+    assert [box.itemText(i) for i in range(box.count())] == ["ALICIA", "VERIS"]
+    assert box.currentData() == "veris"
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("key", "identity", "wake"),
+    [("alicia", "Tu es Alicia", "alicia"), ("veris", "Tu es VERIS", "veris")],
+)
+def test_each_profile_loads_its_own_identity(key, identity, wake, tmp_path, monkeypatch):
+    from alicia.core import personality
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    persona.set_current(key)
+    try:
+        (tmp_path / "Alicia").mkdir(exist_ok=True)
+        personality.personality_file(key).write_text(f"Caractère propre à {key}.", "utf-8")
+        prompt = build_system_prompt()
+        assert identity in prompt and f"Caractère propre à {key}." in prompt
+        other = "veris" if key == "alicia" else "alicia"
+        assert f"Caractère propre à {other}." not in prompt
+        assert persona.current().wake_name == wake
+    finally:
+        persona.set_current("alicia")
