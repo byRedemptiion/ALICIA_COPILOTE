@@ -55,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     from alicia.core.persona import set_current
 
     persona = set_current(settings.persona)  # avant l'interface : couleurs, nom, portrait
+    from alicia.core.persona import set_player
+
+    set_player(settings.player.name, settings.player.phonetic)
 
     from PySide6.QtWidgets import QApplication
 

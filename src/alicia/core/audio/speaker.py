@@ -284,8 +284,10 @@ class Speaker:
         return self._thread is not None and self._thread.is_alive()
 
     def speak(self, text: str) -> bool:
+        from alicia.core.persona import pronounce
+
         self.stop()
-        sentences = split_sentences(text)
+        sentences = split_sentences(pronounce(text))  # prénoms dits comme il faut
         if not sentences:
             return False
         self._stop = threading.Event()

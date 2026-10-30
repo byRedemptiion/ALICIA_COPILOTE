@@ -125,3 +125,42 @@ def set_current(key: str) -> Persona:
     global _current
     _current = PERSONAS.get((key or "").strip().lower(), ALICIA)
     return _current
+
+
+# --- le joueur : son prénom écrit et comment le prononcer ---------------------------------
+
+
+@dataclass
+class Player:
+    name: str = ""  # écrit : « Redemptiion »
+    phonetic: str = ""  # dit : « Rédemm-chionne » (laisse vide si la voix le dit bien)
+
+
+_player = Player()
+_pronunciations: dict[str, str] = {}  # nom écrit → prononciation (toi, le pote…)
+
+
+def player() -> Player:
+    return _player
+
+
+def set_player(name: str, phonetic: str = "") -> Player:
+    global _player
+    _player = Player(name.strip()[:40], phonetic.strip()[:60])
+    register_pronunciation(_player.name, _player.phonetic)
+    return _player
+
+
+def register_pronunciation(written: str, spoken: str) -> None:
+    written, spoken = written.strip(), spoken.strip()
+    if written and spoken and written.casefold() != spoken.casefold():
+        _pronunciations[written] = spoken
+
+
+def pronounce(text: str) -> str:
+    """Le texte à lire à voix haute, avec les prénoms écrits comme ils se prononcent."""
+    import re
+
+    for written, spoken in sorted(_pronunciations.items(), key=lambda kv: -len(kv[0])):
+        text = re.sub(rf"(?<!\w){re.escape(written)}(?!\w)", spoken, text, flags=re.IGNORECASE)
+    return text

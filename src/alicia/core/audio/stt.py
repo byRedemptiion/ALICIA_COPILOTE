@@ -122,6 +122,14 @@ class LocalTranscriber:
         text = " ".join(segment.text.strip() for segment in segments).strip()
         return "" if _HALLUCINATIONS.search(text) else text
 
+    def _initial_prompt(self) -> str | None:
+        """Aide Whisper à bien écrire les prénoms (le joueur, le robot)."""
+        from alicia.core.persona import current, player
+
+        names = ", ".join(n for n in (player().name, current().name) if n)
+        prompt = " ".join(p for p in (self.prompt, f"{names}." if names else "") if p)
+        return prompt or None
+
     def transcribe(self, audio: PreparedAudio) -> str:
         model = self.load()
         samples = wav_to_float(audio)
@@ -132,7 +140,7 @@ class LocalTranscriber:
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
-            initial_prompt=self.prompt or None,
+            initial_prompt=self._initial_prompt(),
         )
         text = " ".join(segment.text.strip() for segment in segments).strip()
         elapsed = time.perf_counter() - started

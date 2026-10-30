@@ -216,6 +216,12 @@ class StreamSettings:
 
 
 @dataclass(frozen=True)
+class PlayerSettings:
+    name: str = ""  # ton prénom / pseudo, écrit
+    phonetic: str = ""  # comment la voix doit le dire (vide = tel quel)
+
+
+@dataclass(frozen=True)
 class DuoSettings:
     enabled: bool = False  # ALICIA chez l'un, VERIS chez l'autre : ils se parlent
     code: Secret = field(default_factory=lambda: Secret(None))  # DUO_CODE dans .env
@@ -241,6 +247,7 @@ class Settings:
     update: UpdateSettings = field(default_factory=UpdateSettings)
     stream: StreamSettings = field(default_factory=StreamSettings)
     duo: DuoSettings = field(default_factory=DuoSettings)
+    player: PlayerSettings = field(default_factory=PlayerSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
     stream_visible: bool = False  # True : OBS / Discord voient le rond et la bulle
@@ -460,6 +467,12 @@ def load_settings(
             ),
             key_slot=str(_section(data, "duo").get("key_slot", "")).strip(),
             relay=str(_section(data, "duo").get("relay", DuoSettings.relay)).rstrip("/"),
+        ),
+        player=PlayerSettings(
+            name=str(
+                _section(data, "player").get("name", "") or _section(data, "duo").get("player", "")
+            ).strip()[:40],
+            phonetic=str(_section(data, "player").get("phonetic", "")).strip()[:60],
         ),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),

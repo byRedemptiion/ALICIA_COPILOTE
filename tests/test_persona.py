@@ -90,3 +90,43 @@ def test_veris_is_masculine_in_the_interface(veris, qt_app):
     assert named("ALICIA se réveille toute seule quand elle t'entend") == (
         "VERIS se réveille tout seul quand il t'entend"
     )
+
+
+def test_player_name_and_pronunciation():
+    from alicia.core.persona import pronounce, set_player
+
+    try:
+        set_player("Redemptiion", "Rédemm-chionne")
+        assert "Ton joueur s'appelle Redemptiion" in build_system_prompt()
+        assert pronounce("Salut Redemptiion !") == "Salut Rédemm-chionne !"
+        assert pronounce("Redemptiions") == "Redemptiions"  # mot entier seulement
+    finally:
+        set_player("", "")
+    assert "Ton joueur s'appelle" not in build_system_prompt()
+
+
+def test_player_settings_are_saved(qt_app, tmp_path, monkeypatch):
+    import tomllib
+
+    from alicia.app import build_services
+    from alicia.core.config import data_dir, load_settings
+    from alicia.core.persona import player, set_player
+    from alicia.ui.main_window import MainWindow
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow(
+        build_services(load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True)
+    )
+    try:
+        page = window.settings_page
+        page.player_name.setText("Yannick")
+        page.player_name.editingFinished.emit()
+        page.player_phonetic.setText("Ya-nik")
+        page.player_phonetic.editingFinished.emit()
+        assert player().name == "Yannick" and player().phonetic == "Ya-nik"
+        saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))
+        assert saved["player"] == {"name": "Yannick", "phonetic": "Ya-nik"}
+        assert load_settings().player.name == "Yannick"
+    finally:
+        set_player("", "")
+        window.close()

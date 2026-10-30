@@ -140,6 +140,30 @@ class SettingsPage(QScrollArea):
             1,
             2,
         )
+        self.player_name = QLineEdit()
+        self.player_name.setPlaceholderText("ton prénom ou pseudo, ex. Redemptiion")
+        self.player_name.setMaxLength(40)
+        self.player_name.editingFinished.connect(
+            lambda: self._emit("player_name", self.player_name.text())
+        )
+        self.player_phonetic = QLineEdit()
+        self.player_phonetic.setPlaceholderText(
+            "comment le dire, ex. Rédemm-chionne (vide si la voix le dit bien)"
+        )
+        self.player_phonetic.setMaxLength(60)
+        self.player_phonetic.editingFinished.connect(
+            lambda: self._emit("player_phonetic", self.player_phonetic.text())
+        )
+        listen = QPushButton("Écouter")
+        listen.clicked.connect(lambda: self._emit("player_test", True))
+        grid.addWidget(QLabel("Ton nom"), 2, 0)
+        grid.addWidget(self.player_name, 2, 1)
+        grid.addWidget(_muted("l'IA sait qui tu es et t'appelle par ton nom"), 2, 2)
+        grid.addWidget(QLabel("Prononciation"), 3, 0)
+        grid.addWidget(self.player_phonetic, 3, 1)
+        grid.addWidget(listen, 3, 2)
+        self.player_name.setProperty("keep_names", True)
+        self.player_phonetic.setProperty("keep_names", True)
         grid.setColumnStretch(2, 1)
         layout.addWidget(profile)
 
@@ -431,15 +455,6 @@ class SettingsPage(QScrollArea):
         )
         self.duo_chat.toggled.connect(lambda on: self._emit("duo_allow_chat", on))
         grid.addWidget(self.duo_chat, 8, 0, 1, 3)
-        self.duo_player = QLineEdit()
-        self.duo_player.setPlaceholderText("ex. Redem")
-        self.duo_player.setMaxLength(24)
-        self.duo_player.editingFinished.connect(
-            lambda: self._emit("duo_player", self.duo_player.text())
-        )
-        grid.addWidget(QLabel("Ton prénom"), 9, 0)
-        grid.addWidget(self.duo_player, 9, 1)
-        grid.addWidget(_muted("dit à l'autre joueur avec tes messages"), 9, 2)
         self.duo_ai = QComboBox()
         self.duo_ai.currentIndexChanged.connect(
             lambda _i: self._emit("duo_ai", str(self.duo_ai.currentData() or "main|"))
@@ -616,12 +631,19 @@ class SettingsPage(QScrollArea):
         finally:
             self._loading = False
 
+    def load_player(self, player) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            self.player_name.setText(player.name)
+            self.player_phonetic.setText(player.phonetic)
+        finally:
+            self._loading = False
+
     def load_duo(self, duo, has_token: bool, ai_choices=()) -> None:  # type: ignore[no-untyped-def]
         self._loading = True
         try:
             self.duo_box.setChecked(duo.enabled)
             self.duo_chat.setChecked(duo.allow_chat)
-            self.duo_player.setText(duo.player)
             self.duo_ai.clear()
             for label, (provider, slot) in ai_choices:
                 self.duo_ai.addItem(label, f"{provider}|{slot}")

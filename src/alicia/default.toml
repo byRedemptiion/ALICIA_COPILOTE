@@ -159,3 +159,9 @@ provider = "main"    # IA du duo : main (la même que d'habitude), gemini, opena
 key_slot = ""        # quelle clé (ex. GEMINI_API_KEY_2) ; vide = la clé utilisée
 relay = "https://ntfy.sh"
 
+[player]
+# Ton prénom ou pseudo : l'IA sait qui tu es et t'appelle par ton nom.
+name = ""
+# Comment la voix doit le dire, s'il est mal prononcé (ex. "Rédemm-chionne"). Vide = tel quel.
+phonetic = ""
+

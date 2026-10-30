@@ -42,9 +42,14 @@ TRANSCRIPT_PREFIX = "Question :"
 
 
 def build_system_prompt(game_context: str | None = None, *, spoken: bool = False) -> str:
-    from alicia.core.persona import current
+    from alicia.core.persona import current, player
 
     prompt = BASE_SYSTEM_PROMPT.replace("{identity}", current().identity)
+    if player().name:
+        prompt += (
+            f"\nTon joueur s'appelle {player().name}. Appelle-le par ce prénom de temps en "
+            "temps (pas à chaque réponse), toujours écrit ainsi.\n"
+        )
     if spoken:
         prompt += "\n" + VOICE_RULES
     if game_context:
