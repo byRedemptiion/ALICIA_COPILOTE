@@ -167,7 +167,14 @@ def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
 VERIS_PITCH_CENTS = 450  # même recette que VERIS MOD : Kokoro ff_siwis, +450 cents
 
 
-def robot_voice(samples: np.ndarray, ratio: float, rate: int = TTS_SAMPLE_RATE) -> np.ndarray:
+def robot_voice(
+    samples: np.ndarray,
+    ratio: float,
+    rate: int = TTS_SAMPLE_RATE,
+    *,
+    highpass_hz: float = 200.0,
+    presence_hz: float = 3500.0,
+) -> np.ndarray:
     """Voix de VERIS à partir d'une voix générée ``ratio`` fois plus lente : on la raccourcit
     (la hauteur monte d'autant, la durée redevient normale), puis passe-haut 200 Hz,
     +3 dB vers 3,5 kHz et volume normalisé. Tout dans le domaine fréquentiel (numpy seul)."""
@@ -181,8 +188,8 @@ def robot_voice(samples: np.ndarray, ratio: float, rate: int = TTS_SAMPLE_RATE) 
     spectrum = np.fft.rfft(audio)[: m // 2 + 1]  # coupe au-dessus de Nyquist : pas de repliement
     freqs = np.fft.rfftfreq(m, 1.0 / rate)
     with np.errstate(divide="ignore"):
-        highpass = 1.0 / np.sqrt(1.0 + (200.0 / np.maximum(freqs, 1.0)) ** 4)
-        octaves = np.log2(np.maximum(freqs, 1.0) / 3500.0)
+        highpass = 1.0 / np.sqrt(1.0 + (highpass_hz / np.maximum(freqs, 1.0)) ** 4)
+        octaves = np.log2(np.maximum(freqs, 1.0) / presence_hz)
     presence = 1.0 + (10 ** (3 / 20) - 1.0) * np.exp(-(octaves**2) / (2 * 0.5**2))
     out = np.fft.irfft(spectrum * highpass * presence, m) * (m / n)
     rms = float(np.sqrt(np.mean(out**2))) or 1.0
@@ -193,9 +200,14 @@ def robot_voice(samples: np.ndarray, ratio: float, rate: int = TTS_SAMPLE_RATE) 
     return (np.clip(out, -1.0, 1.0) * 32767).astype(np.int16)
 
 
-def veris_synthesizer(speed: float = 1.0) -> Synthesizer:
-    """La voix de VERIS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique."""
-    ratio = 2 ** (VERIS_PITCH_CENTS / 1200)
+def veris_synthesizer(
+    speed: float = 1.0,
+    ratio: float = 2 ** (VERIS_PITCH_CENTS / 1200),
+    highpass_hz: float = 200.0,
+    presence_hz: float = 3500.0,
+) -> Synthesizer:
+    """La voix de VERIS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique.
+    Avec d'autres réglages : la « voix C » d'ALICIA (petite fille)."""
     base = kokoro_synthesizer("ff_siwis", max(0.5, speed / ratio))
     # Sans les fichiers Kokoro : même traitement sur la voix Edge ralentie d'autant.
     fallback = edge_synthesizer("fr-FR-DeniseNeural", f"{round((1 / ratio - 1) * 100):+d}%")
@@ -203,9 +215,8 @@ def veris_synthesizer(speed: float = 1.0) -> Synthesizer:
     def synthesize(text: str) -> np.ndarray:
         from alicia.core.audio.models import kokoro_ready
 
-        if not kokoro_ready():
-            return robot_voice(fallback(text), ratio)
-        return robot_voice(base(text), ratio)
+        source = fallback(text) if not kokoro_ready() else base(text)
+        return robot_voice(source, ratio, highpass_hz=highpass_hz, presence_hz=presence_hz)
 
     synthesize.warm_up = base.warm_up  # type: ignore[attr-defined]
     return synthesize
@@ -214,6 +225,9 @@ def veris_synthesizer(speed: float = 1.0) -> Synthesizer:
 def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
     if settings.tts_engine == "veris":
         return veris_synthesizer(settings.kokoro_speed)
+    if settings.tts_engine == "voixc":
+        # Voix C d'ALICIA : ff_siwis, hauteur ×1,30 (formants suivis), 220 Hz / +3 dB à 3,8 kHz
+        return veris_synthesizer(settings.kokoro_speed, 1.30, 220.0, 3800.0)
     if settings.tts_engine == "openai":
         return openai_synthesizer(settings)
     if settings.tts_engine == "kokoro":

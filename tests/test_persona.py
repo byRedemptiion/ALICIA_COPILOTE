@@ -149,3 +149,15 @@ def test_personality_file_is_added_to_the_prompt(tmp_path, monkeypatch):
     assert "sans jamais jouer à sa place" in prompt
     personality.remove("alicia")
     assert "<personnalite>" not in build_system_prompt()
+
+
+def test_alicia_voice_c_is_available():
+    from dataclasses import replace
+
+    from alicia.core.audio.speaker import make_synthesizer
+    from alicia.core.config import VoiceSettings
+    from alicia.core.persona import ALICIA
+
+    assert ALICIA.voice_engine == "voixc"
+    synth = make_synthesizer(replace(VoiceSettings(), tts_engine="voixc"))
+    assert callable(synth) and hasattr(synth, "warm_up")

@@ -53,7 +53,7 @@ ALICIA = Persona(
     icon="alicia.ico",
     face_crop=(0.2, 0.07, 0.58, 0.58),
     identity="Tu es Alicia, une copilote assise virtuellement à côté du joueur.",
-    voice_engine="edge",
+    voice_engine="voixc",
 )
 
 VERIS = Persona(

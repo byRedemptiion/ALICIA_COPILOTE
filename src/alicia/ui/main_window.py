@@ -377,6 +377,7 @@ class MainWindow(QMainWindow):
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
         self.engine_box.addItem("OpenAI (réaliste)", "openai")
         self.engine_box.addItem("VERIS (robot)", "veris")
+        self.engine_box.addItem("ALICIA (voix C)", "voixc")
         self.engine_box.setCurrentIndex(
             max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
         )

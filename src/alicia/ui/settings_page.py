@@ -391,6 +391,7 @@ class SettingsPage(QWidget):
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
         self.engine_box.addItem("VERIS — voix robot de VERIS MOD (sur ton PC)", "veris")
+        self.engine_box.addItem("ALICIA — voix C, petite fille (sur ton PC)", "voixc")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
         self.voice_box = QComboBox()

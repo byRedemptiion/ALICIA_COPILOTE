@@ -488,7 +488,9 @@ def load_settings(
             speak_answers=bool(voice.get("speak_answers", True)),
             stt=_choice(voice, "stt", "local", ("local", "gemini")),
             whisper_model=str(voice.get("whisper_model", "large-v3-turbo")).strip(),
-            tts_engine=_choice(voice, "tts_engine", "edge", ("edge", "kokoro", "openai", "veris")),
+            tts_engine=_choice(
+                voice, "tts_engine", "edge", ("edge", "kokoro", "openai", "veris", "voixc")
+            ),
             kokoro_voice=str(voice.get("kokoro_voice", "ff_siwis")).strip(),
             kokoro_speed=_number({"v": voice.get("kokoro_speed", 1.05)}, "v", float, 0.5),
             tts_voice=str(voice.get("tts_voice", "fr-FR-DeniseNeural")).strip(),
