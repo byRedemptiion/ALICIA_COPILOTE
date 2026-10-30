@@ -101,6 +101,7 @@ class Bubble(QWidget):
         self.side = "auto"  # auto | left | right | above | below
         self.seconds = 4  # temps d'affichage après la fin de la voix
         self.editing = False
+        self.mirror = None  # rappel (type, **données) : sous-titres de l'overlay OBS
         self.apply_style()
         frame = QFrame(self)
         frame.setObjectName("bubble")
@@ -193,7 +194,16 @@ class Bubble(QWidget):
 
     # --- contenu --------------------------------------------------------------------------------
 
+    def _mirror(self, kind: str, **data: object) -> None:
+        """Recopie les sous-titres vers l'overlay OBS (s'il est branché)."""
+        if self.mirror is not None and not self.editing:
+            try:
+                self.mirror(kind, **data)
+            except Exception:  # noqa: BLE001 - l'overlay ne doit jamais gêner la bulle
+                log.debug("Overlay : sous-titre non transmis", exc_info=True)
+
     def ask(self, question: str) -> None:
+        self._mirror("text", question=question, text="…")
         self._buffer = ""
         self.asked.setText(f"TOI  ›  {question}" if question else "")
         self.asked.setVisible(bool(question))
@@ -202,18 +212,21 @@ class Bubble(QWidget):
         self._pop()
 
     def set_question(self, question: str) -> None:
+        self._mirror("text", question=question)
         self.asked.setText(f"TOI  ›  {question}")
         self.asked.setVisible(True)
         self._relayout()
 
     def append(self, delta: str) -> None:
         self._buffer += delta
+        self._mirror("text", text=self._buffer)
         self.text.setTextFormat(Qt.TextFormat.PlainText)
         self.text.setText(_tail(self._buffer.replace("**", "")))
         self._pop()
 
     def set_answer(self, text: str) -> None:
         self._buffer = text
+        self._mirror("text", text=text)
         if len(text) <= MAX_BUBBLE_CHARS:
             self.text.setTextFormat(Qt.TextFormat.RichText)
             self.text.setText(_rich(text))
@@ -225,6 +238,7 @@ class Bubble(QWidget):
     def notice(self, text: str, hide_ms: int = 7000) -> None:
         """Message court d'ALICIA (avertissement, consigne), sans question."""
         self._buffer = text
+        self._mirror("text", question="", text=text)
         self.asked.setVisible(False)
         self.text.setTextFormat(Qt.TextFormat.PlainText)
         self.text.setText(text)
@@ -240,12 +254,14 @@ class Bubble(QWidget):
     def hide_after(self, ms: int) -> None:
         if self.editing:
             return  # en mode édition, la bulle d'exemple reste
+        self._mirror("hide", after_ms=max(500, ms))
         self._hide_timer.start(max(500, ms))
 
     def keep(self) -> None:
         self._hide_timer.stop()
 
     def fade_out(self) -> None:
+        self._mirror("hide", after_ms=0)
         if not self.isVisible():
             return
         self._fade.stop()
@@ -362,6 +378,7 @@ class OrbWindow(QWidget):
     layout_changed = Signal()
     vision_chosen = Signal(str)
     stream_toggled = Signal(bool)
+    twitch_requested = Signal()
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -387,6 +404,7 @@ class OrbWindow(QWidget):
             )
         )
         self.bubble = Bubble()
+        self.twitch_channel = ""
         self.bubble.moved.connect(self._save_position)
         self.games: list[tuple[str, str]] = []  # (clé, nom) proposés dans le menu « Jeu »
         self.current_game = "auto"
@@ -552,6 +570,7 @@ class OrbWindow(QWidget):
                 "Réveil « Alicia » : activé ✓" if self.wake_on else "Réveil « Alicia » : coupé",
                 lambda: self.wake_toggled.emit(not self.wake_on),
             ),
+            ("Chat Twitch", self.twitch_requested.emit),
             (
                 "Visible en stream (OBS) ✓" if stream_visible else "Visible en stream (OBS)",
                 lambda: self.stream_toggled.emit(not stream_visible),

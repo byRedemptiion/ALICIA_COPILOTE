@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
+    QLineEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -314,6 +315,52 @@ class SettingsPage(QScrollArea):
         grid.addWidget(self.voice_test, 6, 0)
         layout.addWidget(voice)
 
+        # --- Stream ---------------------------------------------------------------------------------
+        stream, grid = _panel()
+        grid.addWidget(_title("STREAM"), 0, 0, 1, 3)
+        self.twitch_input = QLineEdit()
+        self.twitch_input.setPlaceholderText("ta chaîne, ex. nova_jagger")
+        self.twitch_input.editingFinished.connect(
+            lambda: self._emit("twitch_channel", self.twitch_input.text())
+        )
+        self.twitch_button = QPushButton("Ouvrir le chat Twitch")
+        self.twitch_button.clicked.connect(lambda: self._emit("twitch_open", True))
+        grid.addWidget(QLabel("Chaîne Twitch"), 1, 0)
+        grid.addWidget(self.twitch_input, 1, 1)
+        grid.addWidget(self.twitch_button, 1, 2)
+        self.twitch_state = _muted("")
+        grid.addWidget(self.twitch_state, 2, 1, 1, 2)
+        self.overlay_box = QCheckBox("ALICIA sur le stream : page à ajouter dans OBS")
+        self.overlay_box.toggled.connect(lambda on: self._emit("overlay", on))
+        grid.addWidget(self.overlay_box, 3, 0, 1, 3)
+        self.overlay_url = QLineEdit()
+        self.overlay_url.setReadOnly(True)
+        copy = QPushButton("Copier l'adresse")
+        copy.clicked.connect(lambda: self._emit("overlay_copy", True))
+        preview = QPushButton("Aperçu")
+        preview.clicked.connect(lambda: self._emit("overlay_preview", True))
+        anims = QPushButton("Dossier des animations")
+        anims.clicked.connect(lambda: self._emit("overlay_folder", True))
+        grid.addWidget(QLabel("Adresse"), 4, 0)
+        grid.addWidget(self.overlay_url, 4, 1)
+        grid.addWidget(copy, 4, 2)
+        grid.addWidget(preview, 5, 1)
+        grid.addWidget(anims, 5, 2)
+        obs_help = _muted(
+            "Dans OBS : Sources → + → <b>Navigateur</b> → colle l'adresse, largeur et hauteur "
+            "600 × 600 (le fond est déjà transparent). Elle flotte, bouge toute seule, "
+            "s'allume quand elle écoute, réfléchit ou parle, et ses réponses s'affichent en "
+            "sous-titres.<br>Options à ajouter à l'adresse : <b>?size=200</b> (taille), "
+            "<b>&amp;bulle=0</b> (sans sous-titres), <b>&amp;side=top</b> (sous-titres "
+            "au-dessus), <b>&amp;roam=1</b> (elle se promène : mets la source en 1920 × 1080)."
+            "<br>Animations de Nova : dépose <b>idle.webm</b>, <b>speaking.webm</b>, "
+            "<b>listening.webm</b>, <b>thinking.webm</b>, <b>nod.webm</b>… dans le dossier des "
+            "animations (vidéos à fond transparent), puis recharge la source dans OBS."
+        )
+        obs_help.setTextFormat(Qt.TextFormat.RichText)
+        grid.addWidget(obs_help, 6, 0, 1, 3)
+        layout.addWidget(stream)
+
         # --- Général -------------------------------------------------------------------------------
         general, grid = _panel()
         grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
@@ -469,6 +516,35 @@ class SettingsPage(QScrollArea):
             self.ai_label.setText(ai_text)
         finally:
             self._loading = False
+
+    def load_stream(self, stream) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            self.twitch_input.setText(stream.twitch_channel)
+            self.overlay_box.setChecked(stream.overlay)
+        finally:
+            self._loading = False
+        self.show_channel(stream.twitch_channel, valid=True)
+
+    def show_channel(self, channel: str, valid: bool = True) -> None:
+        self.twitch_input.setText(channel or self.twitch_input.text())
+        if not valid:
+            self.twitch_state.setText("⚠ Nom de chaîne invalide (3 à 25 lettres, chiffres ou _).")
+        elif channel:
+            self.twitch_state.setText(
+                f"twitch.tv/{channel} — aussi dans le menu du rond (clic droit)."
+            )
+        else:
+            self.twitch_state.setText("")
+
+    def show_overlay(self, url: str | None) -> None:
+        """None : coupé ; "" : impossible de démarrer ; sinon l'adresse à coller dans OBS."""
+        if url:
+            self.overlay_url.setText(url)
+        elif url == "":
+            self.overlay_url.setText("⚠ Impossible de démarrer (port occupé ?)")
+        else:
+            self.overlay_url.setText("coupé")
 
     def load_memory(self, capture, usage: str) -> None:  # type: ignore[no-untyped-def]
         self._loading = True

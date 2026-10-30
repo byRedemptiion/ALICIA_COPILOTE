@@ -137,3 +137,12 @@ steam = { launch = "steam://open/main", process = "steam.exe" }
 # Jeu joué : "auto" le reconnaît à la fenêtre. Sinon le nom d'un profil
 # (overwatch, wow-forever…). Profils et sites de référence : alicia-diag games
 profile = "auto"
+
+[stream]
+# Chaîne Twitch (ex. "nova_jagger") : bouton « Chat Twitch » dans les réglages et le menu du rond.
+twitch_channel = ""
+# Présence sur le stream : une page à ajouter dans OBS (source « Navigateur »), fond
+# transparent, à l'adresse http://127.0.0.1:8765/overlay. Seulement sur ce PC.
+overlay = true
+overlay_port = 8765
+

@@ -12,6 +12,7 @@ Les clés API ne vivent que dans l'environnement ou le ``.env`` : jamais dans un
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -205,6 +206,13 @@ class UpdateSettings:
 
 
 @dataclass(frozen=True)
+class StreamSettings:
+    twitch_channel: str = ""  # ex. « nova_jagger » : bouton « Chat Twitch »
+    overlay: bool = True  # page pour OBS (source Navigateur) sur http://127.0.0.1:<port>/overlay
+    overlay_port: int = 8765
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
@@ -215,6 +223,7 @@ class Settings:
     voice: VoiceSettings = field(default_factory=VoiceSettings)
     actions: ActionSettings = field(default_factory=ActionSettings)
     update: UpdateSettings = field(default_factory=UpdateSettings)
+    stream: StreamSettings = field(default_factory=StreamSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
     stream_visible: bool = False  # True : OBS / Discord voient le rond et la bulle
@@ -222,6 +231,18 @@ class Settings:
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
+
+
+def twitch_channel(text: str) -> str:
+    """« Nova_Jagger », « https://www.twitch.tv/nova_jagger » → « nova_jagger » ("" si invalide)."""
+    text = text.strip().rstrip("/")
+    match = re.search(r"twitch\.tv/(?:popout/)?([A-Za-z0-9_]{3,25})", text)
+    name = match.group(1) if match else text.lstrip("@")
+    return name.lower() if re.fullmatch(r"[A-Za-z0-9_]{3,25}", name) else ""
+
+
+def twitch_chat_url(channel: str) -> str:
+    return f"https://www.twitch.tv/popout/{channel}/chat?popout="
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -401,6 +422,14 @@ def load_settings(
         ui_mode=_choice(_section(data, "ui"), "mode", "orb", ("orb", "full")),
         persona=_choice(_section(data, "ui"), "persona", "alicia", ("alicia", "veris")),
         stream_visible=bool(_section(data, "ui").get("stream_visible", False)),
+        stream=StreamSettings(
+            twitch_channel=twitch_channel(str(_section(data, "stream").get("twitch_channel", ""))),
+            overlay=bool(_section(data, "stream").get("overlay", True)),
+            overlay_port=min(
+                65000,
+                max(1024, int(_section(data, "stream").get("overlay_port", 8765) or 8765)),
+            ),
+        ),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),
             branch=str(_section(data, "update").get("branch", UpdateSettings.branch)).strip(),

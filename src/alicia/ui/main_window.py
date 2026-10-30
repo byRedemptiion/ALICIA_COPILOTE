@@ -159,6 +159,10 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
         self.live = None  # LiveCapture : capture récente toujours prête
+        self.overlay = None  # OverlayServer : ALICIA sur le stream (OBS)
+        self._overlay_sent: tuple[str, float] = ("", -1.0)
+        self._overlay_timer = QTimer(self)
+        self._overlay_timer.timeout.connect(self._pump_overlay)
         self._speech_frame: Frame | None = None
         self._speech_mark: float | None = None  # capture demandée au début de ta phrase
         self._expect_reply = False  # elle attend « oui / non / annule » après une action
@@ -668,6 +672,9 @@ class MainWindow(QMainWindow):
             capture.mode, capture.cursor_box, capture.live, capture.live_interval_s
         )
         self.settings_page.load_memory(capture, self.memory_usage_text())
+        self.settings_page.load_stream(self.services.settings.stream)
+        if self.overlay is not None and self.overlay.running:
+            self.settings_page.show_overlay(self.overlay.url)
         self.settings_page.load(
             self.services.settings.voice,
             self.wake_box.isChecked(),
@@ -792,6 +799,29 @@ class MainWindow(QMainWindow):
 
             self.services.settings = replace(self.services.settings, ui_mode=str(value))
             self._save("ui", "mode", value)
+        elif key == "overlay":
+            self.set_overlay(bool(value))
+        elif key == "twitch_channel":
+            self.set_twitch_channel(str(value or ""))
+        elif key == "twitch_open":
+            self.open_twitch_chat()
+        elif key == "overlay_copy":
+            if self.overlay is not None:
+                QApplication.clipboard().setText(self.overlay.url)
+                self._notify("Adresse de l'overlay copiée : colle-la dans OBS (source Navigateur).")
+        elif key == "overlay_preview":
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            if self.overlay is not None:
+                QDesktopServices.openUrl(QUrl(self.overlay.url + "?size=320"))
+        elif key == "overlay_folder":
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            folder = state_dir() / "overlay"
+            folder.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
         elif key == "stream_visible":
             from dataclasses import replace
 
@@ -937,11 +967,131 @@ class MainWindow(QMainWindow):
         self.orb.vision = self.services.settings.capture.mode
         self.orb.vision_chosen.connect(self.set_vision)
         self.orb.stream_toggled.connect(lambda on: self.change_setting("stream_visible", on))
+        self.orb.twitch_requested.connect(self.open_twitch_chat)
+        self.orb.twitch_channel = settings.stream.twitch_channel
         self.orb.set_stream_visible(settings.stream_visible)
         self.settings_page.stream_box.blockSignals(True)
         self.settings_page.stream_box.setChecked(settings.stream_visible)
         self.settings_page.stream_box.blockSignals(False)
         self.orb_mode = settings.ui_mode == "orb"
+
+    # --- stream : overlay OBS et chat Twitch -------------------------------------------------
+
+    def _overlay_config(self) -> dict:  # type: ignore[type-arg]
+        from alicia.ui import theme
+
+        persona = current_persona()
+        folder = state_dir() / "overlay"
+        try:
+            anims = sorted(p.name for p in folder.iterdir() if p.is_file())
+        except OSError:
+            anims = []
+        return {
+            "name": persona.title,
+            "crop": list(persona.face_crop),
+            "colors": {
+                "accent": theme.PINK,
+                "cyan": theme.CYAN,
+                "soft": theme.PINK_SOFT,
+                "gold": theme.GOLD,
+                "text": theme.TEXT,
+                "deep": theme.DEEP,
+            },
+            "states": {key: color.name() for key, color in theme.STATE_COLORS.items()},
+            "anims": anims,
+        }
+
+    @staticmethod
+    def _overlay_portrait() -> bytes:
+        from importlib import resources
+
+        try:
+            return (
+                resources.files("alicia.assets").joinpath(current_persona().portrait).read_bytes()
+            )
+        except OSError:
+            return b""
+
+    def set_overlay(self, on: bool, save: bool = True) -> None:
+        """Présence sur le stream : la page OBS (source Navigateur) d'ALICIA."""
+        from dataclasses import replace
+
+        from alicia.stream.overlay import OverlayServer
+
+        stream = replace(self.services.settings.stream, overlay=on)
+        self.services.settings = replace(self.services.settings, stream=stream)
+        if save:
+            self._save("stream", "overlay", on)
+        if not on:
+            if self.overlay is not None:
+                self.overlay.stop()
+            self.overlay = None
+            self.bubble.mirror = None
+            self._overlay_timer.stop()
+            self.settings_page.show_overlay(None)
+            return
+        if self.overlay is None:
+            (state_dir() / "overlay").mkdir(parents=True, exist_ok=True)
+            self.overlay = OverlayServer(
+                stream.overlay_port,
+                self._overlay_config,
+                self._overlay_portrait,
+                state_dir() / "overlay",
+            )
+        if self.overlay.start():
+            self.bubble.mirror = self.overlay.publish
+            self._overlay_timer.start(70)
+            self.settings_page.show_overlay(self.overlay.url)
+        else:
+            self.settings_page.show_overlay("")
+
+    def _pump_overlay(self) -> None:
+        """État et niveau de voix du rond → overlay (≈ 14 fois par seconde, si une page écoute)."""
+        overlay = self.overlay
+        if overlay is None or not overlay.clients:
+            self._overlay_sent = ("", -1.0)
+            return
+        core = self.orb.core
+        state, level = core.state, round(max(0.0, min(1.0, core._level)), 2)
+        last_state, last_level = self._overlay_sent
+        if state != last_state:
+            overlay.publish("state", state=state)
+        if state in ("speaking", "listening") and abs(level - last_level) >= 0.03:
+            overlay.publish("level", value=level)
+        elif state != last_state:
+            level = 0.0
+        self._overlay_sent = (state, level)
+
+    def overlay_gesture(self, name: str) -> None:
+        if self.overlay is not None:
+            self.overlay.publish("gesture", name=name)
+
+    def open_twitch_chat(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from alicia.core.config import twitch_chat_url
+
+        channel = self.services.settings.stream.twitch_channel
+        if not channel:
+            self.show_page(2)
+            self.show_panel()
+            self._set_status("Indique ta chaîne Twitch dans Réglages → Stream.")
+            return
+        QDesktopServices.openUrl(QUrl(twitch_chat_url(channel)))
+        log.info("Chat Twitch ouvert : %s", channel)
+
+    def set_twitch_channel(self, text: str) -> None:
+        from dataclasses import replace
+
+        from alicia.core.config import twitch_channel
+
+        channel = twitch_channel(text)
+        stream = replace(self.services.settings.stream, twitch_channel=channel)
+        self.services.settings = replace(self.services.settings, stream=stream)
+        self._save("stream", "twitch_channel", channel)
+        self.orb.twitch_channel = channel
+        self.settings_page.show_channel(channel, valid=bool(channel) or not text.strip())
 
     def start(self) -> None:
         """Affichage au lancement, selon [ui] mode."""
@@ -957,6 +1107,7 @@ class MainWindow(QMainWindow):
             self.prepare_ollama()
             self.set_memory(self.services.settings.capture.memory, save=False)
             self.set_live(self.services.settings.capture.live, save=False)
+            self.set_overlay(self.services.settings.stream.overlay, save=False)
         if self.updater is not None and self.services.settings.update.check_on_start:
             if not self.services.demo:
                 QTimer.singleShot(4000, lambda: self.check_update(interactive=False))
@@ -1404,6 +1555,8 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if self.overlay is not None:
+            self.overlay.stop()
         if self.wake is not None:
             self.wake.stop()
         if self.live is not None:
