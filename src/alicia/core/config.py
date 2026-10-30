@@ -202,7 +202,7 @@ class ActionSettings:
 
 @dataclass(frozen=True)
 class UpdateSettings:
-    repo: str = "byRedemptiion/ALICIA_COPILOTE"
+    repo: str = "byRedemptiion/COP_IA_LOTE"
     branch: str = "alice-v0.3"
     check_on_start: bool = True
     token: Secret = field(default_factory=lambda: Secret(None))
@@ -220,6 +220,7 @@ class DuoSettings:
     enabled: bool = False  # ALICIA chez l'un, VERIS chez l'autre : ils se parlent
     code: Secret = field(default_factory=lambda: Secret(None))  # DUO_CODE dans .env
     max_turns: int = 6  # répliques au total (les deux robots)
+    hear_peer: bool = True  # entendre aussi l'autre robot sur ce PC, avec sa voix
     relay: str = "https://ntfy.sh"
 
 
@@ -447,6 +448,7 @@ def load_settings(
             enabled=bool(_section(data, "duo").get("enabled", False)),
             code=Secret(env.get("DUO_CODE")),
             max_turns=max(2, min(20, int(_section(data, "duo").get("max_turns", 6) or 6))),
+            hear_peer=bool(_section(data, "duo").get("hear_peer", True)),
             relay=str(_section(data, "duo").get("relay", DuoSettings.relay)).rstrip("/"),
         ),
         update=UpdateSettings(

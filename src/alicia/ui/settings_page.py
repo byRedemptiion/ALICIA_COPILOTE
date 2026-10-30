@@ -418,6 +418,9 @@ class SettingsPage(QScrollArea):
         grid.addWidget(self.duo_start, 3, 2)
         self.duo_state = _muted("")
         grid.addWidget(self.duo_state, 4, 1, 1, 2)
+        self.duo_hear = QCheckBox("Entendre l'autre robot sur mon PC, avec sa voix")
+        self.duo_hear.toggled.connect(lambda on: self._emit("duo_hear", on))
+        grid.addWidget(self.duo_hear, 6, 0, 1, 3)
         duo_help = _muted(
             "Crée un code ici, envoie-le à ton pote (en privé), il le colle chez lui. Puis "
             "dis par exemple <b>« Veris, dis bonjour à Alicia »</b> ou <b>« Alicia, discute "
@@ -426,7 +429,7 @@ class SettingsPage(QScrollArea):
             "(ntfy.sh). Un message de l'autre robot ne peut jamais agir sur ton PC."
         )
         duo_help.setTextFormat(Qt.TextFormat.RichText)
-        grid.addWidget(duo_help, 5, 0, 1, 3)
+        grid.addWidget(duo_help, 7, 0, 1, 3)
         layout.addWidget(duo)
 
         # --- Général -------------------------------------------------------------------------------
@@ -589,6 +592,7 @@ class SettingsPage(QScrollArea):
         self._loading = True
         try:
             self.duo_box.setChecked(duo.enabled)
+            self.duo_hear.setChecked(duo.hear_peer)
             self.duo_code.setText(duo.code.get())
             index = self.duo_turns.findData(duo.max_turns)
             if index < 0:

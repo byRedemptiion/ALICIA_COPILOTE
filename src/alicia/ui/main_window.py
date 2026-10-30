@@ -170,6 +170,8 @@ class MainWindow(QMainWindow):
         self.duo_peer = ""  # nom de l'autre robot, appris à la connexion
         self.duo_conv: dict | None = None  # type: ignore[type-arg]  # discussion en cours
         self._duo_pending: list[dict] = []  # type: ignore[type-arg]
+        self._peer_speaker = None  # voix de l'autre robot sur ce PC
+        self._peer_engine = ""
         self._overlay_sent: tuple[str, float] = ("", -1.0)
         self._overlay_timer = QTimer(self)
         self._overlay_timer.timeout.connect(self._pump_overlay)
@@ -873,6 +875,12 @@ class MainWindow(QMainWindow):
             duo = replace(self.services.settings.duo, max_turns=int(value))  # type: ignore[call-overload]
             self.services.settings = replace(self.services.settings, duo=duo)
             self._save("duo", "max_turns", int(value))  # type: ignore[call-overload]
+        elif key == "duo_hear":
+            from dataclasses import replace
+
+            duo = replace(self.services.settings.duo, hear_peer=bool(value))
+            self.services.settings = replace(self.services.settings, duo=duo)
+            self._save("duo", "hear_peer", bool(value))
         elif key == "duo_start":
             self.ask_duo_topic()
         elif key == "github_token":
@@ -1299,14 +1307,7 @@ class MainWindow(QMainWindow):
             conv["turn"] = turn
             conv["lines"].append((current_persona().title, text))
             conv["ended"] = final
-            self.answer.setPlainText(text)
-            if self._bubble_active():
-                self.bubble.set_answer(text)
-            self._core("speaking")
-            spoken = self._say(text)
-            self._bubble_finish(text, spoken)
-            QTimer.singleShot(1800, self._core_settle)
-            self._duo_send_after_speech(conv, turn, text)
+            self._duo_present(conv, turn, text)
 
         def failed(exc: Exception) -> None:
             conv["thinking"] = False
@@ -1318,19 +1319,48 @@ class MainWindow(QMainWindow):
 
         self._background(work, done, failed)
 
-    def _duo_send_after_speech(self, conv: dict, turn: int, text: str, waited: int = 0) -> None:  # type: ignore[type-arg]
-        """L'autre robot reçoit la réplique quand celle-ci a fini d'être dite (40 s au plus)."""
-        speaker = self.services.speaker
-        if speaker is not None and getattr(speaker, "speaking", False) and waited < 40_000:
-            QTimer.singleShot(
-                300, lambda: self._duo_send_after_speech(conv, turn, text, waited + 300)
-            )
+    def _peer_talking(self) -> bool:
+        peer = self._peer_speaker
+        return peer is not None and bool(getattr(peer, "speaking", False))
+
+    def _duo_present(self, conv: dict, turn: int, text: str, waited: int = 0) -> None:  # type: ignore[type-arg]
+        """Ma réplique : dite quand l'autre robot a fini de parler, et envoyée en même temps
+        (vous l'entendez ensemble, chacun sur son PC)."""
+        if self._peer_talking() and waited < 40_000:
+            QTimer.singleShot(300, lambda: self._duo_present(conv, turn, text, waited + 300))
             return
         link = self.duo_link
-        if link is None or (conv["ended"] and turn < conv["max"]):
-            return
-        data = {"conv": conv["id"], "turn": turn, "max": conv["max"], "text": text}
-        threading.Thread(target=lambda: link.send("say", **data), daemon=True).start()
+        if link is not None and not (conv["ended"] and turn < conv["max"]):
+            data = {"conv": conv["id"], "turn": turn, "max": conv["max"], "text": text}
+            threading.Thread(target=lambda: link.send("say", **data), daemon=True).start()
+        self.answer.setPlainText(text)
+        if self._bubble_active():
+            self.bubble.ask("")
+            self.bubble.set_answer(text)
+        self._core("speaking")
+        spoken = self._say(text)
+        self._bubble_finish(text, spoken)
+        QTimer.singleShot(1800, self._core_settle)
+
+    def _peer_voice(self, name: str):  # type: ignore[no-untyped-def]
+        """Voix de l'autre robot sur ce PC (ALICIA : sa voix Edge, VERIS : sa voix robot)."""
+        from dataclasses import replace
+
+        from alicia.core.audio.speaker import Speaker
+        from alicia.core.persona import PERSONAS
+
+        main = self.services.speaker
+        if main is None or not hasattr(main, "synthesizer"):
+            return None
+        persona = next((p for p in PERSONAS.values() if p.title == name.upper()), None)
+        engine = persona.voice_engine if persona is not None else "edge"
+        if self._peer_speaker is None or self._peer_engine != engine:
+            voice = replace(
+                main.settings, tts_engine=engine, tts_voice="fr-FR-DeniseNeural", tts_rate="+0%"
+            )
+            self._peer_speaker = Speaker(voice)
+            self._peer_engine = engine
+        return self._peer_speaker
 
     def _duo_received(self, msg: dict) -> None:  # type: ignore[type-arg]
         kind, name = msg.get("kind"), str(msg.get("name") or "l'autre robot")
@@ -1379,21 +1409,30 @@ class MainWindow(QMainWindow):
         conv["lines"].append((name, text))
         self.asked_label.setText(f"{name.upper()}  ›  {text}")
         if self._bubble_active():
-            self.bubble.ask(f"{name} : {text}")
+            from alicia.core.persona import PERSONAS
+            from alicia.ui.naming import persona_avatar
+
+            persona = next((p for p in PERSONAS.values() if p.title == name.upper()), None)
+            self.bubble.ask("")
+            self.bubble.set_avatar(persona_avatar(persona) if persona is not None else None)
+            self.bubble.set_answer(text)
+            self.bubble.keep()
+        if self.services.settings.duo.hear_peer:
+            peer = self._peer_voice(name)
+            if peer is not None:
+                self.stop_voice()
+                peer.speak(text)
         if turn >= conv["max"]:
             conv["ended"] = True
             if self._bubble_active():
-                self.bubble.set_answer("🙂")
-                self.bubble.hide_after(self.bubble.linger_ms(text))
+                self.bubble.hide_after(self.bubble.linger_ms(text) + 4000)
             return
         self._duo_answer_when_free(conv)
 
     def _duo_answer_when_free(self, conv: dict, tries: int = 0) -> None:  # type: ignore[type-arg]
         if conv["ended"] or conv.get("thinking"):
             return
-        speaker = self.services.speaker
-        talking = speaker is not None and getattr(speaker, "speaking", False)
-        if (self.busy or talking) and tries < 40:
+        if self.busy and tries < 40:
             QTimer.singleShot(500, lambda: self._duo_answer_when_free(conv, tries + 1))
             return
         self._duo_reply(conv)
@@ -2393,6 +2432,8 @@ class MainWindow(QMainWindow):
         speaker = self.services.speaker
         if speaker is not None and speaker.speaking:
             speaker.stop()
+        if self._peer_talking():
+            self._peer_speaker.stop()  # type: ignore[union-attr]
         self.stop_voice_button.setEnabled(False)
 
     def _voice_state(self, state: str, message: str | None) -> None:

@@ -102,3 +102,27 @@ def test_robots_take_turns(qt_app, tmp_path, monkeypatch):
     assert reply.intent == "duo" and reply.text == "bonjour"
     window.duo_link = None
     window.close()
+
+
+def test_peer_line_shows_its_head_in_the_bubble(qt_app, tmp_path, monkeypatch):
+    from alicia.app import build_services
+    from alicia.core.ai.providers.fake import FakeModel
+    from alicia.core.config import load_settings
+    from alicia.ui.main_window import MainWindow
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow(
+        build_services(
+            load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True, model=FakeModel()
+        )
+    )
+    window.orb.show()
+    window.duo_link = None
+    window._duo_received(
+        {"kind": "say", "name": "VERIS", "conv": "c9", "turn": 1, "max": 2, "text": "Bip boup !"}
+    )
+    assert window.bubble.avatar.isVisibleTo(window.bubble)
+    assert "Bip boup" in window.bubble.text.text()
+    window.bubble.ask("question normale")
+    assert not window.bubble.avatar.isVisibleTo(window.bubble)
+    window.close()

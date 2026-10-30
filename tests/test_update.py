@@ -37,7 +37,7 @@ ARCHIVE = make_zip(
 def transport(seen):
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        if "/repos/byRedemptiion/ALICIA_COPILOTE/" not in request.url.path:
+        if "/repos/byRedemptiion/COP_IA_LOTE/" not in request.url.path:
             return httpx.Response(404, json={"message": "Not Found"})
         if request.url.path.endswith("/commits/alice-v0.3"):
             return httpx.Response(
@@ -68,9 +68,7 @@ def install(tmp_path):
 
 def test_update_is_found_installed_then_up_to_date(install):
     seen = []
-    updater = Updater(
-        install, "byRedemptiion/ALICIA_COPILOTE", "alice-v0.3", transport=transport(seen)
-    )
+    updater = Updater(install, "byRedemptiion/COP_IA_LOTE", "alice-v0.3", transport=transport(seen))
     info = updater.check()
     assert info is not None and info.short == SHA[:7] and info.title == "Onglet Jeux"
 
@@ -98,7 +96,7 @@ def test_token_is_sent_but_never_shown(install):
     seen = []
     updater = Updater(
         install,
-        "byRedemptiion/ALICIA_COPILOTE",
+        "byRedemptiion/COP_IA_LOTE",
         "alice-v0.3",
         token=Secret("jeton-secret"),
         transport=transport(seen),

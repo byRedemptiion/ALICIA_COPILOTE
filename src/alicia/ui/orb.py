@@ -20,7 +20,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPropertyAnimation, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QGuiApplication
-from PySide6.QtWidgets import QFrame, QLabel, QMenu, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QVBoxLayout, QWidget
 
 from alicia.ui.core_widget import AliciaCore
 from alicia.ui.naming import named
@@ -32,6 +32,7 @@ WDA_EXCLUDEFROMCAPTURE = 0x11
 BUBBLE_WIDTH = 400
 MAX_BUBBLE_CHARS = 900
 MARGIN = 24
+AVATAR = 52
 
 
 WDA_NONE = 0
@@ -115,8 +116,16 @@ class Bubble(QWidget):
         self.text.setObjectName("bubbleText")
         self.text.setWordWrap(True)
         self.text.setTextFormat(Qt.TextFormat.PlainText)
+        # Tête de celui qui parle (l'autre robot en duo), à gauche du texte
+        self.avatar = QLabel()
+        self.avatar.setFixedSize(AVATAR, AVATAR)
+        self.avatar.setVisible(False)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self.text, 1)
         inner.addWidget(self.asked)
-        inner.addWidget(self.text)
+        inner.addLayout(row)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
@@ -202,8 +211,19 @@ class Bubble(QWidget):
             except Exception:  # noqa: BLE001 - l'overlay ne doit jamais gêner la bulle
                 log.debug("Overlay : sous-titre non transmis", exc_info=True)
 
+    def set_avatar(self, pixmap) -> None:  # type: ignore[no-untyped-def]
+        """Tête affichée à gauche du texte (None : pas de tête)."""
+        if pixmap is None or pixmap.isNull():
+            self.avatar.clear()
+            self.avatar.setVisible(False)
+        else:
+            self.avatar.setPixmap(pixmap)
+            self.avatar.setVisible(True)
+        self._relayout()
+
     def ask(self, question: str) -> None:
         self._mirror("text", question=question, text="…")
+        self.avatar.setVisible(False)  # réponse de ton robot : pas d'autre tête
         self._buffer = ""
         self.asked.setText(f"TOI  ›  {question}" if question else "")
         self.asked.setVisible(bool(question))
@@ -290,7 +310,12 @@ class Bubble(QWidget):
     def _relayout(self) -> None:
         # Hauteur calculée à la main : adjustSize() se trompe avec les textes à la ligne.
         inner = int(self.bubble_width) - 32
-        height = 12 + 14 + 2 + max(self.text.heightForWidth(inner), 18)
+        if not self.avatar.isHidden():
+            inner -= AVATAR + 10
+        text_height = max(self.text.heightForWidth(inner), 18)
+        if not self.avatar.isHidden():
+            text_height = max(text_height, AVATAR)
+        height = 12 + 14 + 2 + text_height
         if not self.asked.isHidden():
             height += self.asked.heightForWidth(inner) + 6
         self.setFixedHeight(height)

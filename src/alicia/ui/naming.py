@@ -104,3 +104,34 @@ def set_taskbar_identity() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)  # type: ignore[attr-defined]
     except (AttributeError, OSError):
         pass
+
+
+def persona_avatar(persona, size: int = 52) -> QPixmap:  # type: ignore[no-untyped-def]
+    """Tête ronde d'un personnage (pour la bulle du duo)."""
+    from PySide6.QtCore import QRectF, Qt
+    from PySide6.QtGui import QPainter, QPainterPath
+
+    source = QPixmap()
+    try:
+        source.loadFromData(
+            resources.files("alicia.assets").joinpath(persona.portrait).read_bytes()
+        )
+    except OSError:
+        return QPixmap()
+    if source.isNull():
+        return source
+    fx, fy, fw, fh = persona.face_crop
+    crop = QRectF(
+        fx * source.width(), fy * source.height(), fw * source.width(), fh * source.height()
+    )
+    out = QPixmap(size, size)
+    out.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    clip = QPainterPath()
+    clip.addEllipse(QRectF(0, 0, size, size))
+    painter.setClipPath(clip)
+    painter.drawPixmap(QRectF(0, 0, size, size), source, crop)
+    painter.end()
+    return out
