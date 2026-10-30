@@ -1398,10 +1398,12 @@ class MainWindow(QMainWindow):
         )
         system = self._duo_system(
             f"Tu sers de porte-parole : {player} (ton joueur) te demande de transmettre un "
-            f"message au joueur de {other}. Écris UNIQUEMENT ce que {other} devra dire à son "
-            "joueur, en une phrase courte, à la 2e personne (tu), en citant "
-            f"{name or 'ton joueur'} : par exemple « {name or 'Mon joueur'} veut "
-            "savoir ce que tu fais. ». Pas de guillemets, pas de nom devant."
+            f"message au pote{' ' + self.duo_peer_player if self.duo_peer_player else ''} "
+            f"(le joueur de {other}). C'est TOI qui vas le lui dire, avec ta voix, sur son "
+            "PC. Écris UNIQUEMENT ta phrase pour lui : courte, à la 2e personne (tu), avec ta "
+            f"personnalité, en citant {name or 'ton joueur'} : par exemple « "
+            f"{name or 'Mon joueur'} veut savoir ce que tu fais ! ». Pas de guillemets, pas "
+            "de nom devant."
         )
         question = f"{context}{player} te dit : « {request.strip()} »"
         self._core("thinking")
@@ -1507,9 +1509,11 @@ class MainWindow(QMainWindow):
         if not text:
             return
         self._duo_last_relay = (time.monotonic(), text)
-        line = f"Message de {name} : {text}"
         log.info("Duo : message reçu de %s", name)
-        self.asked_label.setText(f"{name.upper()}  ›  message")
+        # C'est l'autre robot qui te parle : sa tête, sa voix (ALICIA chez toi, VERIS chez lui)
+        peer = self._peer_voice(name) if self.services.settings.duo.hear_peer else None
+        line = text if peer is not None else f"Message de {name} : {text}"
+        self.asked_label.setText(f"{name.upper()}  ›")
         self.answer.setPlainText(text)
         if self._bubble_active():
             from alicia.ui.naming import persona_avatar
@@ -1518,10 +1522,14 @@ class MainWindow(QMainWindow):
             self.bubble.ask("")
             self.bubble.set_avatar(persona_avatar(persona) if persona is not None else None)
             self.bubble.set_answer(line)
-        self._core("speaking")
-        spoken = self._say(line)  # ton robot te dit le message (avec sa voix à lui)
+        if peer is not None and self.voice_box.isChecked():
+            self.stop_voice()
+            spoken = peer.speak(text)
+        else:
+            self._core("speaking")
+            spoken = self._say(line)  # sans la voix de l'autre robot : le tien annonce
+            QTimer.singleShot(1800, self._core_settle)
         self._bubble_finish(line, spoken)
-        QTimer.singleShot(1800, self._core_settle)
 
     @staticmethod
     def _persona_named(name: str):  # type: ignore[no-untyped-def]
