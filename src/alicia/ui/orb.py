@@ -23,7 +23,8 @@ from PySide6.QtGui import QAction, QGuiApplication
 from PySide6.QtWidgets import QFrame, QLabel, QMenu, QVBoxLayout, QWidget
 
 from alicia.ui.core_widget import AliciaCore
-from alicia.ui.theme import GOLD, STYLESHEET, TEXT
+from alicia.ui.naming import named
+from alicia.ui.theme import BG, DEEP, GOLD, PINK, PINK_SOFT, STYLESHEET, TEXT, rgb
 
 log = logging.getLogger("alicia.ui")
 
@@ -56,7 +57,7 @@ def _rich(text: str) -> str:
         line = html.escape(raw.strip())
         line = re.sub(r"^#+\s*", "", line)
         line = re.sub(r"^[-*]\s+", "• ", line)
-        line = re.sub(r"\*\*(.+?)\*\*", r"<b style='color:#ff8cc0'>\1</b>", line)
+        line = re.sub(r"\*\*(.+?)\*\*", rf"<b style='color:{PINK_SOFT}'>\1</b>", line)
         lines.append(line)
     return "<br>".join(lines)
 
@@ -134,8 +135,8 @@ class Bubble(QWidget):
             + f"""
             QFrame#bubble {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(14, 22, 74, {a:.2f}), stop:1 rgba(5, 9, 38, {a:.2f}));
-                border: 1px solid rgba(255, 61, 139, 0.75);
+                    stop:0 rgba({rgb(DEEP)}, {a:.2f}), stop:1 rgba({rgb(BG)}, {a:.2f}));
+                border: 1px solid rgba({rgb(PINK)}, 0.75);
                 border-radius: 16px;
             }}
             QLabel#bubbleAsked {{ color: {GOLD}; font-size: {self.font_pt * 0.87:.1f}pt; }}
@@ -360,11 +361,10 @@ class OrbWindow(QWidget):
             None,
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
             | Qt.WindowType.WindowDoesNotAcceptFocus,
-        )
+        )  # sans Qt.Tool : le rond a son icône dans la barre des tâches
         self.setObjectName("aliciaOrb")
-        self.setWindowTitle("ALICIA")
+        self.setWindowTitle(named("ALICIA"))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.position_file = position_file
@@ -374,8 +374,10 @@ class OrbWindow(QWidget):
         layout.addWidget(self.core)
         self.setFixedSize(size, size)
         self.setToolTip(
-            "ALICIA — maintiens F10 pour lui parler, F9 pour une analyse rapide.\n"
-            "Glisser : déplacer · double-clic : panneau complet · clic droit : menu"
+            named(
+                "ALICIA — maintiens F10 pour lui parler, F9 pour une analyse rapide.\n"
+                "Glisser : déplacer · double-clic : panneau complet · clic droit : menu"
+            )
         )
         self.bubble = Bubble()
         self.bubble.moved.connect(self._save_position)
@@ -521,9 +523,9 @@ class OrbWindow(QWidget):
     def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background:#0a1240; color:#e9eeff; border:1px solid #ff3d8b; padding:4px; }"
+            f"QMenu {{ background:{DEEP}; color:{TEXT}; border:1px solid {PINK}; padding:4px; }}"
             "QMenu::item { padding:6px 18px; border-radius:6px; }"
-            "QMenu::item:selected { background: rgba(255,61,139,0.35); }"
+            f"QMenu::item:selected {{ background: rgba({rgb(PINK)},0.35); }}"
         )
         actions = (
             ("Ouvrir le panneau complet", self.open_panel.emit),
@@ -565,7 +567,7 @@ class OrbWindow(QWidget):
             if text is None:
                 menu.addSeparator()
                 continue
-            action = QAction(text, menu)
+            action = QAction(named(text), menu)
             action.triggered.connect(slot)
             menu.addAction(action)
         menu.exec(event.globalPos())
@@ -583,8 +585,8 @@ class EditPanel(QWidget):
         from PySide6.QtWidgets import QComboBox, QGridLayout, QPushButton, QSlider
 
         self.orb = orb
-        self.setWindowTitle("ALICIA — mode édition")
-        self.setStyleSheet(STYLESHEET + "QWidget#editPanel { background: #060c30; }")
+        self.setWindowTitle(named("ALICIA — mode édition"))
+        self.setStyleSheet(STYLESHEET + "QWidget#editPanel { background: " + DEEP + "; }")
         self.setObjectName("editPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         grid = QGridLayout(self)

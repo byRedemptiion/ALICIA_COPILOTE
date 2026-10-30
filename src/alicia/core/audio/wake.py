@@ -28,6 +28,7 @@ import numpy as np
 from alicia.core.ai.base import PreparedAudio
 from alicia.core.audio.devices import AudioError, device_name, find_device, sounddevice
 from alicia.core.audio.recorder import to_prepared_audio
+from alicia.core.persona import PERSONAS, current
 
 log = logging.getLogger("alicia.audio")
 
@@ -66,13 +67,21 @@ def _normalize(text: str) -> list[str]:
     return re.findall(r"[a-z]+", plain)
 
 
-def _is_name(word: str, name: str = WAKE_NAME) -> bool:
-    if word in WAKE_FORMS or word == name:
+def _wake_forms(name: str) -> set[str] | frozenset[str]:
+    for persona in PERSONAS.values():
+        if persona.wake_name == name:
+            return persona.wake_forms
+    return WAKE_FORMS if name == WAKE_NAME else {name}
+
+
+def _is_name(word: str, name: str | None = None) -> bool:
+    name = name or current().wake_name
+    if word in _wake_forms(name) or word == name:
         return True
     return len(word) >= 5 and difflib.SequenceMatcher(None, word, name).ratio() >= 0.8
 
 
-def find_wake(text: str, name: str = WAKE_NAME) -> tuple[bool, str]:
+def find_wake(text: str, name: str | None = None) -> tuple[bool, str]:
     """(mot de réveil dit au début ?, ce qui suit). Tolère « Ok Alicia », « A licia »."""
     words = _normalize(text)
     for i, word in enumerate(words[:3]):
@@ -92,7 +101,7 @@ def is_stop(rest: str) -> bool:
     return any(word in STOP_WORDS for word in words)
 
 
-def strip_wake_word(text: str, name: str = WAKE_NAME) -> str:
+def strip_wake_word(text: str, name: str | None = None) -> str:
     """« Alicia, lance Discord » → « lance Discord » (texte d'origine conservé)."""
     tokens = list(re.finditer(r"\S+", text))
     for i, token in enumerate(tokens[:3]):
@@ -125,7 +134,7 @@ class WakeListener:
         on_stop: Callable[[], None] | None = None,
         device: str = "",
         sample_rate: int = 16000,
-        name: str = WAKE_NAME,
+        name: str | None = None,
         sensitivity: int = 3,
     ) -> None:
         self.detector = detector
@@ -138,7 +147,7 @@ class WakeListener:
         self.on_stop = on_stop or (lambda: None)
         self.device = device
         self.sample_rate = sample_rate
-        self.name = name
+        self.name = name or current().wake_name
         self.min_level = SENSITIVITY_LEVELS.get(sensitivity, MIN_LEVEL)
         self.level = 0.0
         self._queue: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=400)
@@ -184,7 +193,7 @@ class WakeListener:
             ) from exc
         self._thread = threading.Thread(target=self._loop, name="alicia-wake", daemon=True)
         self._thread.start()
-        log.info("Réveil vocal actif : dis « Alicia… » (micro %s)", label)
+        log.info("Réveil vocal actif : dis « %s… » (micro %s)", current().name, label)
 
     def stop(self) -> None:
         stream, self._stream = self._stream, None
@@ -379,4 +388,4 @@ class WhisperWakeDetector:
         self.transcriber.warm_up_async()
 
     def __call__(self, samples: np.ndarray) -> str:
-        return self.transcriber.transcribe_samples(samples, hotwords="Alicia")
+        return self.transcriber.transcribe_samples(samples, hotwords=current().name)

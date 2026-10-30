@@ -10,7 +10,7 @@ from typing import Any
 
 from PIL import Image
 from PySide6.QtCore import Qt, QThreadPool, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QIcon, QImage, QPixmap, QTextCursor
+from PySide6.QtGui import QDesktopServices, QImage, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -41,13 +41,15 @@ from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.config import state_dir
 from alicia.core.errors import AliciaError, ProviderError, ProviderErrorKind
 from alicia.core.logging_setup import make_filter, make_formatter, set_level
+from alicia.core.persona import current as current_persona
 from alicia.core.update import UpdateInfo, Updater, install_root
 from alicia.games.store import GameStore
 from alicia.ui.core_widget import AliciaCore
 from alicia.ui.games_page import GamesPage
+from alicia.ui.naming import app_icon, rename_widgets
 from alicia.ui.orb import OrbWindow
 from alicia.ui.shortcuts_page import ShortcutsPage
-from alicia.ui.theme import CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
+from alicia.ui.theme import BORDER, CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
 log = logging.getLogger("alicia.ui")
@@ -79,7 +81,7 @@ class PreviewLabel(QLabel):
         self.setMinimumSize(240, 135)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet(
-            "background: rgba(2,6,30,0.85); color:#5f6fa8; border:1px solid #24307a;"
+            "background: rgba(2,6,30,0.85); color:#5f6fa8; border:1px solid " + BORDER + ";"
             "border-radius:8px;"
         )
         self._pixmap: QPixmap | None = None
@@ -149,7 +151,9 @@ class MainWindow(QMainWindow):
         self.cancel_event: threading.Event | None = None
         self._live_tasks: set[Task] = set()
 
-        self.setWindowTitle(f"Alicia {__version__}" + (" — DÉMO" if services.demo else ""))
+        self.setWindowTitle(
+            f"{current_persona().name} {__version__}" + (" — DÉMO" if services.demo else "")
+        )
         self.resize(1360, 840)
         self.setMinimumSize(1000, 640)
         self._build_ui()
@@ -164,8 +168,12 @@ class MainWindow(QMainWindow):
         self._updating = False
         self.updater = self._make_updater()
         self._build_orb()
-        if self.core.portrait is not None:
-            self.setWindowIcon(QIcon(self.core.portrait))
+        icon = app_icon()
+        if not icon.isNull():
+            self.setWindowIcon(icon)
+            self.orb.setWindowIcon(icon)
+        rename_widgets(self)  # VERIS : son nom partout à la place d'ALICIA
+        rename_widgets(self.orb)
         self._attach_logs()
         self.refresh_windows()
         self._update_state()
@@ -334,6 +342,7 @@ class MainWindow(QMainWindow):
         self.engine_box.addItem("Edge (en ligne)", "edge")
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
         self.engine_box.addItem("OpenAI (réaliste)", "openai")
+        self.engine_box.addItem("VERIS (robot)", "veris")
         self.engine_box.setCurrentIndex(
             max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
         )
@@ -774,11 +783,37 @@ class MainWindow(QMainWindow):
 
             self.services.settings = replace(self.services.settings, ui_mode=str(value))
             self._save("ui", "mode", value)
+        elif key == "persona":
+            self.change_persona(str(value))
+
+    def change_persona(self, key: str) -> None:
+        """ALICIA ↔ VERIS : enregistré, avec sa voix, puis appliqué au redémarrage."""
+        from PySide6.QtWidgets import QMessageBox
+
+        from alicia.core.persona import PERSONAS
+
+        persona = PERSONAS.get(key)
+        if persona is None:
+            return
+        self._save("ui", "persona", persona.key)
+        engine = self.services.settings.voice.tts_engine
+        if engine != "openai":  # une voix OpenAI choisie exprès est gardée
+            self._save("voice", "tts_engine", persona.voice_engine)
+        if persona.key == current_persona().key:
+            return
+        answer = QMessageBox.question(
+            self,
+            persona.title,
+            f"{persona.title} arrive au prochain démarrage (nom, portrait, couleurs, voix, "
+            f"mot de réveil « {persona.name} »).\n\nRedémarrer maintenant ?",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.restart()
 
     def test_voice(self) -> None:
         speaker = self.services.speaker
         if speaker is None or not speaker.speak(
-            "Salut, c'est ALICIA ! Si tu m'entends bien, tout est prêt pour jouer."
+            f"Salut, c'est {current_persona().name} ! Si tu m'entends bien, tout est prêt pour jouer."
         ):
             self._set_status("⚠ Voix indisponible : vérifie la sortie audio choisie.")
             return

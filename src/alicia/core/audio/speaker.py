@@ -164,7 +164,56 @@ def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
     return synthesize
 
 
+VERIS_PITCH_CENTS = 450  # même recette que VERIS MOD : Kokoro ff_siwis, +450 cents
+
+
+def robot_voice(samples: np.ndarray, ratio: float, rate: int = TTS_SAMPLE_RATE) -> np.ndarray:
+    """Voix de VERIS à partir d'une voix générée ``ratio`` fois plus lente : on la raccourcit
+    (la hauteur monte d'autant, la durée redevient normale), puis passe-haut 200 Hz,
+    +3 dB vers 3,5 kHz et volume normalisé. Tout dans le domaine fréquentiel (numpy seul)."""
+    audio = samples.astype(np.float32)
+    if samples.dtype == np.int16:
+        audio /= 32768.0
+    n = len(audio)
+    if n < 32:
+        return (np.clip(audio, -1, 1) * 32767).astype(np.int16)
+    m = max(1, round(n / ratio))
+    spectrum = np.fft.rfft(audio)[: m // 2 + 1]  # coupe au-dessus de Nyquist : pas de repliement
+    freqs = np.fft.rfftfreq(m, 1.0 / rate)
+    with np.errstate(divide="ignore"):
+        highpass = 1.0 / np.sqrt(1.0 + (200.0 / np.maximum(freqs, 1.0)) ** 4)
+        octaves = np.log2(np.maximum(freqs, 1.0) / 3500.0)
+    presence = 1.0 + (10 ** (3 / 20) - 1.0) * np.exp(-(octaves**2) / (2 * 0.5**2))
+    out = np.fft.irfft(spectrum * highpass * presence, m) * (m / n)
+    rms = float(np.sqrt(np.mean(out**2))) or 1.0
+    out *= 10 ** (-17 / 20) / rms
+    peak = float(np.abs(out).max(initial=0))
+    if peak > 0.79:
+        out *= 0.79 / peak
+    return (np.clip(out, -1.0, 1.0) * 32767).astype(np.int16)
+
+
+def veris_synthesizer(speed: float = 1.0) -> Synthesizer:
+    """La voix de VERIS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique."""
+    ratio = 2 ** (VERIS_PITCH_CENTS / 1200)
+    base = kokoro_synthesizer("ff_siwis", max(0.5, speed / ratio))
+    # Sans les fichiers Kokoro : même traitement sur la voix Edge ralentie d'autant.
+    fallback = edge_synthesizer("fr-FR-DeniseNeural", f"{round((1 / ratio - 1) * 100):+d}%")
+
+    def synthesize(text: str) -> np.ndarray:
+        from alicia.core.audio.models import kokoro_ready
+
+        if not kokoro_ready():
+            return robot_voice(fallback(text), ratio)
+        return robot_voice(base(text), ratio)
+
+    synthesize.warm_up = base.warm_up  # type: ignore[attr-defined]
+    return synthesize
+
+
 def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    if settings.tts_engine == "veris":
+        return veris_synthesizer(settings.kokoro_speed)
     if settings.tts_engine == "openai":
         return openai_synthesizer(settings)
     if settings.tts_engine == "kokoro":

@@ -1,0 +1,106 @@
+"""Le nom du personnage dans les textes de l'interface (« ALICIA » → « VERIS »)."""
+
+from __future__ import annotations
+
+import re
+import sys
+from importlib import resources
+
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QWidget,
+)
+
+from alicia.core.persona import current
+
+_NAME = re.compile(r"(?<![\\/%])\b(d'|qu'|D'|QU'|d’|qu’)?(ALICIA|Alicia)\b(?![\\/])")
+_ELISION = {"d'": "de ", "qu'": "que ", "D'": "DE ", "QU'": "QUE ", "d’": "de ", "qu’": "que "}
+
+
+def spaced(title: str, sep: str = " ") -> str:
+    return sep.join(title)
+
+
+def named(text: str) -> str:
+    """Texte avec le nom du personnage choisi (sans toucher aux dossiers « …\\Alicia\\ »)."""
+    persona = current()
+    if persona.key == "alicia" or not text:
+        return text
+    text = text.replace("A · L · I · C · I · A", spaced(persona.title, " · "))
+    text = text.replace("A L I C I A", spaced(persona.title))
+
+    def swap(match: re.Match[str]) -> str:
+        prefix, word = match.group(1), match.group(2)
+        name = persona.title if word.isupper() else persona.name
+        if prefix and persona.name[0].lower() not in "aeiouyh":
+            prefix = _ELISION[prefix]
+        return (prefix or "") + name
+
+    return _NAME.sub(swap, text)
+
+
+def rename_widgets(root: QWidget) -> None:
+    """Applique le nom du personnage à tous les textes déjà affichés sous ``root``."""
+    if current().key == "alicia":
+        return
+    for widget in [root, *root.findChildren(QWidget)]:
+        if widget.windowTitle():
+            widget.setWindowTitle(named(widget.windowTitle()))
+        if widget.toolTip():
+            widget.setToolTip(named(widget.toolTip()))
+        if isinstance(widget, QLabel | QAbstractButton) and widget.text():
+            widget.setText(named(widget.text()))
+        elif isinstance(widget, QGroupBox) and widget.title():
+            widget.setTitle(named(widget.title()))
+        if isinstance(widget, QLineEdit | QPlainTextEdit) and widget.placeholderText():
+            widget.setPlaceholderText(named(widget.placeholderText()))
+
+
+def app_icon() -> QIcon:
+    """Icône du personnage (fenêtres et barre des tâches), tirée de son .ico multi-tailles."""
+    persona = current()
+    icon = QIcon()
+    for name in (persona.icon, persona.portrait):
+        try:
+            data = resources.files("alicia.assets").joinpath(name).read_bytes()
+        except (OSError, ModuleNotFoundError):
+            continue
+        pixmap = QPixmap()
+        if name.endswith(".ico"):
+            from PySide6.QtCore import QBuffer, QByteArray
+            from PySide6.QtGui import QImageReader
+
+            buffer = QBuffer()
+            buffer.setData(QByteArray(data))
+            reader = QImageReader(buffer, b"ico")
+            while True:
+                image = reader.read()
+                if image.isNull():
+                    break
+                icon.addPixmap(QPixmap.fromImage(image))
+                if not reader.jumpToNextImage():
+                    break
+        elif pixmap.loadFromData(data):
+            icon.addPixmap(pixmap)
+        if not icon.isNull():
+            break
+    return icon
+
+
+def set_taskbar_identity() -> None:
+    """Windows : ALICIA / VERIS a sa propre icône dans la barre des tâches (pas celle de
+    Python), et ses fenêtres y sont regroupées."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        app_id = f"byRedemptiion.Alicia.{current().key}"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        pass

@@ -70,6 +70,8 @@ level = "INFO"               # INFO | DEBUG
 # s'affichent dans une bulle seulement quand elle te répond. Double-clic = panneau complet.
 # "full" : la fenêtre complète (choix de la fenêtre, aperçu, journal).
 mode = "orb"
+# Personnage : "alicia" ou "veris" (nom, mot de réveil, portrait, couleurs, voix).
+persona = "alicia"
 orb_size = 210               # diamètre du rond, en pixels (120 à 600)
 
 [update]

@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from alicia.core.config import VoiceSettings
+from alicia.core.persona import PERSONAS
+from alicia.core.persona import current as current_persona
 from alicia.ui.shortcuts_page import ShortcutsPage
 from alicia.ui.theme import PINK, title_font
 
@@ -284,6 +286,7 @@ class SettingsPage(QScrollArea):
         self.engine_box.addItem("Edge — voix Microsoft en ligne (plus naturelle)", "edge")
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
+        self.engine_box.addItem("VERIS — voix robot de VERIS MOD (sur ton PC)", "veris")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
         self.voice_box = QComboBox()
@@ -325,6 +328,16 @@ class SettingsPage(QScrollArea):
         self.mode_box.addItem("Le panneau complet", "full")
         grid.addWidget(QLabel("Au lancement"), 2, 0)
         grid.addWidget(self.mode_box, 2, 1, 1, 2)
+        self.persona_box = QComboBox()
+        for persona in PERSONAS.values():
+            self.persona_box.addItem(persona.title, persona.key)
+        self.persona_box.setCurrentIndex(max(0, self.persona_box.findData(current_persona().key)))
+        self.persona_box.currentIndexChanged.connect(
+            lambda _i: self._emit("persona", self.persona_box.currentData())
+        )
+        grid.addWidget(QLabel("Personnage"), 3, 0)
+        grid.addWidget(self.persona_box, 3, 1)
+        grid.addWidget(_muted("nom, portrait, couleurs, voix (redémarrage)"), 3, 2)
         layout.addWidget(general)
 
         # --- Raccourcis (onglet précédent, intégré ici) --------------------------------------

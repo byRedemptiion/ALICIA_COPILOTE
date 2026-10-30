@@ -15,6 +15,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from alicia.core.persona import current as current_persona
 from alicia.ui.theme import STATE_COLORS, STATE_LABELS, title_font
 
 # Vitesse de rotation (tours par seconde) des anneaux, par état.
@@ -69,7 +70,8 @@ class AliciaCore(QWidget):
             if path:
                 pixmap = QPixmap(path)
             else:
-                data = resources.files("alicia.assets").joinpath("alicia.png").read_bytes()
+                name = current_persona().portrait
+                data = resources.files("alicia.assets").joinpath(name).read_bytes()
                 pixmap = QPixmap()
                 pixmap.loadFromData(data)
         except (OSError, ModuleNotFoundError):
@@ -211,9 +213,9 @@ class AliciaCore(QWidget):
             clip = QPainterPath()
             clip.addEllipse(core_center, core_r, core_r)
             painter.setClipPath(clip)
-            if compact:  # petit rond : on cadre sur le visage
+            if compact or current_persona().round_portrait:  # cadré sur le visage
                 w, h = self.portrait.width(), self.portrait.height()
-                fx, fy, fw, fh = FACE_CROP
+                fx, fy, fw, fh = current_persona().face_crop
                 source = QRectF(fx * w, fy * h, fw * w, fh * h)
                 side = core_r * 2
                 target = QRectF(core_center.x() - core_r, core_center.y() - core_r, side, side)
@@ -239,7 +241,9 @@ class AliciaCore(QWidget):
         painter.setPen(tint(255, 140))
         painter.setFont(title_font(17))
         painter.drawText(
-            QRectF(0, text_top, self.width(), 26), Qt.AlignmentFlag.AlignCenter, "A L I C I A"
+            QRectF(0, text_top, self.width(), 26),
+            Qt.AlignmentFlag.AlignCenter,
+            " ".join(current_persona().title),
         )
         painter.setPen(tint(210, 110))
         painter.setFont(title_font(9))

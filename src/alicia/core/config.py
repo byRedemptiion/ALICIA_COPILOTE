@@ -217,6 +217,7 @@ class Settings:
     update: UpdateSettings = field(default_factory=UpdateSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
+    persona: str = "alicia"  # « alicia » ou « veris » : nom, portrait, couleurs, voix
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
     captures_dir: Path = field(default_factory=lambda: Path.cwd() / "captures")
@@ -397,6 +398,7 @@ def load_settings(
         hotkey_talk=str(_section(data, "hotkeys").get("talk", "")).strip(),
         actions=_actions(_section(data, "actions")),
         ui_mode=_choice(_section(data, "ui"), "mode", "orb", ("orb", "full")),
+        persona=_choice(_section(data, "ui"), "persona", "alicia", ("alicia", "veris")),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),
             branch=str(_section(data, "update").get("branch", UpdateSettings.branch)).strip(),
@@ -411,7 +413,7 @@ def load_settings(
             speak_answers=bool(voice.get("speak_answers", True)),
             stt=_choice(voice, "stt", "local", ("local", "gemini")),
             whisper_model=str(voice.get("whisper_model", "large-v3-turbo")).strip(),
-            tts_engine=_choice(voice, "tts_engine", "edge", ("edge", "kokoro", "openai")),
+            tts_engine=_choice(voice, "tts_engine", "edge", ("edge", "kokoro", "openai", "veris")),
             kokoro_voice=str(voice.get("kokoro_voice", "ff_siwis")).strip(),
             kokoro_speed=_number({"v": voice.get("kokoro_speed", 1.05)}, "v", float, 0.5),
             tts_voice=str(voice.get("tts_voice", "fr-FR-DeniseNeural")).strip(),

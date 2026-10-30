@@ -27,7 +27,8 @@ from PySide6.QtWidgets import (
 from alicia.core.ai.providers import gemini as gemini_provider
 from alicia.core.ai.providers import openai as openai_provider
 from alicia.core.config import GeminiSettings, OpenAISettings
-from alicia.ui.theme import PINK, STYLESHEET, title_font
+from alicia.ui.naming import rename_widgets
+from alicia.ui.theme import DEEP, PINK, STYLESHEET, title_font
 
 OLLAMA_URL = "https://ollama.com/download"
 
@@ -90,7 +91,7 @@ class SetupDialog(QDialog):
         else:
             self._has_keys = {provider: bool(has_key)}
         self.setWindowTitle("ALICIA — choisis ton IA")
-        self.setStyleSheet(STYLESHEET + "QDialog { background: #060c30; }")
+        self.setStyleSheet(STYLESHEET + "QDialog { background: " + DEEP + "; }")
         self.setMinimumWidth(600)
         self.choice: tuple[str, str] | None = None
         self._bridge = _Bridge()
@@ -183,6 +184,7 @@ class SetupDialog(QDialog):
         for radio in self.radios.values():
             radio.toggled.connect(self._sync)
         self._sync()
+        rename_widgets(self)
 
     # --- affichage ------------------------------------------------------------------------------
 

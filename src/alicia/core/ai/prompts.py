@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 BASE_SYSTEM_PROMPT = """\
-Tu es Alicia, une copilote assise virtuellement à côté du joueur. Tu vois une capture \
+{identity} Tu vois une capture \
 de la fenêtre de son jeu et tu réponds à sa question comme un coéquipier expérimenté.
 
 Règles :
@@ -42,7 +42,9 @@ TRANSCRIPT_PREFIX = "Question :"
 
 
 def build_system_prompt(game_context: str | None = None, *, spoken: bool = False) -> str:
-    prompt = BASE_SYSTEM_PROMPT
+    from alicia.core.persona import current
+
+    prompt = BASE_SYSTEM_PROMPT.replace("{identity}", current().identity)
     if spoken:
         prompt += "\n" + VOICE_RULES
     if game_context:

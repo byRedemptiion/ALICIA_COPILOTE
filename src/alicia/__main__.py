@@ -52,14 +52,23 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Dossier renommé (Alice → Alicia) : %s", line)
     enable_dpi_awareness()
 
+    from alicia.core.persona import set_current
+
+    persona = set_current(settings.persona)  # avant l'interface : couleurs, nom, portrait
+
     from PySide6.QtWidgets import QApplication
 
     from alicia.app import build_services, log_startup
     from alicia.ui.main_window import MainWindow
+    from alicia.ui.naming import app_icon, set_taskbar_identity
 
     log_startup(settings, str(log_file))
+    log.info("Personnage : %s", persona.title)
+    set_taskbar_identity()
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Alicia")
+    app.setApplicationDisplayName(persona.title)
+    app.setWindowIcon(app_icon())
     try:
         services = build_services(settings, demo=args.demo or args.smoke_test)
     except AliciaError as exc:

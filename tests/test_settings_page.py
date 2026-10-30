@@ -70,5 +70,5 @@ def test_settings_tab_applies_and_saves_voice_and_mic(qt_app, tmp_path, monkeypa
     assert reloaded.voice.tts_engine == "kokoro" and reloaded.ui_mode == "full"
 
     window.test_voice()
-    assert speaker.said and "ALICIA" in speaker.said[-1]
+    assert speaker.said and "Alicia" in speaker.said[-1]
     window.close()

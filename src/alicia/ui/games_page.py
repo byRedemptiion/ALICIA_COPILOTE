@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from alicia.core.capture.models import WindowInfo
 from alicia.games.profiles import GameProfile
 from alicia.games.store import GameDraft, GameStore, normalize_site
-from alicia.ui.theme import GOLD, PINK, title_font
+from alicia.ui.theme import BORDER, GOLD, PINK, title_font
 
 COLUMNS = 3
 
@@ -278,7 +278,7 @@ class GamesPage(QStackedWidget):
         )
         self.context_input.setStyleSheet(
             "QPlainTextEdit { font-family: 'Bahnschrift', 'Segoe UI'; font-size: 10.5pt;"
-            " color: #e9eeff; background: rgba(2,10,16,0.6); border: 1px solid #24307a;"
+            " color: #e9eeff; background: rgba(2,10,16,0.6); border: 1px solid " + BORDER + ";"
             " border-radius: 8px; padding: 6px; }"
         )
         info_panel = self._panel(

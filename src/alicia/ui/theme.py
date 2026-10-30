@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtGui import QColor, QFont
 
+from alicia.core.persona import current as current_persona
+
 BG = "#040a24"
 PANEL = "rgba(10, 18, 58, 0.72)"
 BORDER = "#24307a"
@@ -16,6 +18,8 @@ GOLD = "#f5b62a"
 TEXT = "#e9eeff"
 MUTED = "#7f8cc4"
 DANGER = "#ff3b5c"
+DEEP = "#0a1240"  # fond des menus et petits panneaux
+GLOW = "#12206a"  # haut du dégradé de fond
 
 STATE_COLORS = {
     "idle": QColor(43, 140, 255),  # halo bleu du portrait
@@ -25,6 +29,11 @@ STATE_COLORS = {
     "action": QColor(245, 182, 42),  # or de son armure : action sur le PC
     "error": QColor(255, 40, 70),
 }
+_PERSONA = current_persona()
+globals().update(_PERSONA.colors)  # VERIS : violet néon à la place du rose et de l'or
+for _state, _rgb in _PERSONA.states.items():
+    STATE_COLORS[_state] = QColor(*_rgb)
+
 STATE_LABELS = {
     "idle": "EN VEILLE",
     "listening": "J'ÉCOUTE",
@@ -48,7 +57,7 @@ def title_font(size: float, weight: QFont.Weight = QFont.Weight.DemiBold) -> QFo
 STYLESHEET = f"""
 QMainWindow, QWidget#root {{
     background: qradialgradient(cx:0.5, cy:0.4, radius:0.95, fx:0.5, fy:0.4,
-        stop:0 #12206a, stop:0.55 {BG}, stop:1 #02041a);
+        stop:0 {GLOW}, stop:0.55 {BG}, stop:1 #02041a);
 }}
 QWidget {{
     color: {TEXT};
@@ -265,7 +274,7 @@ QComboBox:hover {{
     border-color: {CYAN};
 }}
 QComboBox QAbstractItemView {{
-    background: #0a1240;
+    background: {DEEP};
     border: 1px solid {BORDER};
     selection-background-color: rgba(34, 227, 255, 0.25);
 }}
@@ -290,9 +299,21 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
     height: 0;
 }}
 QToolTip {{
-    background: #0a1240;
+    background: {DEEP};
     color: {TEXT};
     border: 1px solid {CYAN};
     padding: 4px 8px;
 }}
 """
+
+
+def rgb(hex_color: str) -> str:
+    """« #7c4dff » → « 124, 77, 255 » (pour les rgba() des feuilles de style)."""
+    value = hex_color.lstrip("#")
+    return ", ".join(str(int(value[i : i + 2], 16)) for i in (0, 2, 4))
+
+
+if _PERSONA.colors:  # teintes écrites en rgba() dans la feuille de style
+    STYLESHEET = STYLESHEET.replace("rgba(34, 227, 255,", f"rgba({rgb(CYAN)},").replace(
+        "rgba(255, 61, 139,", f"rgba({rgb(PINK)},"
+    )
