@@ -82,18 +82,29 @@ class SetupDialog(QDialog):
         parent=None,  # type: ignore[no-untyped-def]
         gemini: GeminiSettings | None = None,
         openai: OpenAISettings | None = None,
+        keys: dict[str, list[tuple[str, str]]] | None = None,
     ) -> None:
         super().__init__(parent)
+        # Clés déjà enregistrées par fournisseur : [(emplacement .env, nom affiché)], la 1re
+        # est celle utilisée. Les valeurs ne sont jamais transmises à cette fenêtre.
+        self.saved_keys = {k: list(v) for k, v in (keys or {}).items()}
+        self.removed: set[str] = set()
+        self.active: dict[str, str] = {k: v[0][0] for k, v in self.saved_keys.items() if v}
         self.gemini_settings = gemini
         self.openai_settings = openai
         if isinstance(has_key, dict):
             self._has_keys = dict(has_key)
         else:
             self._has_keys = {provider: bool(has_key)}
+        for key, slots in self.saved_keys.items():
+            self._has_keys[key] = bool(slots)
         self.setWindowTitle("ALICIA — choisis ton IA")
         self.setStyleSheet(STYLESHEET + "QDialog { background: " + DEEP + "; }")
         self.setMinimumWidth(600)
         self.choice: tuple[str, str] | None = None
+        self.key_name = ""  # nom de la nouvelle clé
+        self.activate: str | None = None  # emplacement de la clé à utiliser
+        self.remove: tuple[str, ...] = ()
         self._bridge = _Bridge()
         self._bridge.checked.connect(self._checked)
 
@@ -136,14 +147,32 @@ class SetupDialog(QDialog):
         self.steps.setWordWrap(True)
         self.key_input = QLineEdit()
         self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Nom (facultatif) : perso, Nova…")
+        self.name_input.setMaximumWidth(190)
         self.test_button = QPushButton("Tester")
         self.test_button.clicked.connect(self.test_key)
-        row = QHBoxLayout()
+        # Clés déjà enregistrées : choisir celle utilisée, en supprimer, en ajouter une (+)
+        self.keys_title = QLabel("TES CLÉS")
+        self.keys_title.setObjectName("sectionTitle")
+        self.keys_list = QVBoxLayout()
+        self.keys_list.setSpacing(4)
+        self.keys_group = QButtonGroup(self)
+        self.add_button = QPushButton("＋  Ajouter une autre clé")
+        self.add_button.setObjectName("ghost")
+        self.add_button.clicked.connect(self._show_add_row)
+        self.add_row = QFrame()
+        row = QHBoxLayout(self.add_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.name_input)
         row.addWidget(self.key_input, 1)
         row.addWidget(self.test_button)
         box.addWidget(self.open_page)
         box.addWidget(self.steps)
-        box.addLayout(row)
+        box.addWidget(self.keys_title)
+        box.addLayout(self.keys_list)
+        box.addWidget(self.add_button)
+        box.addWidget(self.add_row)
         layout.addWidget(self.gemini_box)
 
         # Ollama
@@ -207,12 +236,66 @@ class SetupDialog(QDialog):
             self.steps.setText(info.steps)
             self.open_page.setText(info.button)
             self.key_input.clear()
+            self.name_input.clear()
+            self._fill_keys(provider)
+            has = self._has_keys.get(provider)
             self.key_input.setPlaceholderText(
                 "Clé déjà enregistrée : laisse vide pour la garder"
-                if self._has_keys.get(provider)
+                if has and not self.saved_keys.get(provider)
                 else info.placeholder
             )
         self.status.setText("")
+        self.adjustSize()
+
+    def _remaining(self, provider: str) -> list[tuple[str, str]]:
+        return [
+            (slot, name)
+            for slot, name in self.saved_keys.get(provider, [])
+            if slot not in self.removed
+        ]
+
+    def _fill_keys(self, provider: str) -> None:
+        """Liste des clés enregistrées du fournisseur, avec leur bouton ✕."""
+        while self.keys_list.count():
+            item = self.keys_list.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        for button in self.keys_group.buttons():
+            self.keys_group.removeButton(button)
+        keys = self._remaining(provider)
+        if keys and self.active.get(provider) not in {slot for slot, _ in keys}:
+            self.active[provider] = keys[0][0]
+        for slot, name in keys:
+            line = QFrame()
+            row = QHBoxLayout(line)
+            row.setContentsMargins(0, 0, 0, 0)
+            radio = QRadioButton(name)
+            radio.setChecked(slot == self.active.get(provider))
+            radio.toggled.connect(
+                lambda on, p=provider, s=slot: on and self.active.__setitem__(p, s)
+            )
+            self.keys_group.addButton(radio)
+            delete = QPushButton("✕")
+            delete.setObjectName("ghost")
+            delete.setFixedWidth(36)
+            delete.setToolTip("Supprimer cette clé de ce PC")
+            delete.clicked.connect(lambda _=False, p=provider, s=slot: self._remove_key(p, s))
+            row.addWidget(radio, 1)
+            row.addWidget(delete)
+            self.keys_list.addWidget(line)
+        self.keys_title.setVisible(bool(keys))
+        self.add_button.setVisible(bool(keys))
+        self.add_row.setVisible(not keys)  # aucune clé : le champ pour la coller est ouvert
+
+    def _remove_key(self, provider: str, slot: str) -> None:
+        self.removed.add(slot)
+        self._has_keys[provider] = bool(self._remaining(provider))
+        self._fill_keys(provider)
+        self.adjustSize()
+
+    def _show_add_row(self) -> None:
+        self.add_row.setVisible(True)
+        self.key_input.setFocus()
         self.adjustSize()
 
     def _open_key_page(self) -> None:
@@ -251,5 +334,10 @@ class SetupDialog(QDialog):
             name = "Gemini" if provider == "gemini" else "OpenAI"
             self.status.setText(f"Colle ta clé {name} (ou choisis « Plus tard »).")
             return
+        self.key_name = self.name_input.text().strip()
+        self.activate = None if key else self.active.get(provider)
+        self.remove = tuple(
+            slot for slot, _ in self.saved_keys.get(provider, []) if slot in self.removed
+        )
         self.choice = (provider, key)
         self.accept()

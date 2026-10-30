@@ -28,7 +28,7 @@ from alicia.core.config import VoiceSettings
 from alicia.core.persona import PERSONAS
 from alicia.core.persona import current as current_persona
 from alicia.ui.shortcuts_page import ShortcutsPage
-from alicia.ui.theme import PINK, title_font
+from alicia.ui.theme import PINK, PROJECT_NAME, title_font
 
 EDGE_VOICES = (
     ("fr-FR-DeniseNeural", "Denise (France) — douce"),
@@ -118,6 +118,29 @@ class SettingsPage(QScrollArea):
         title.setFont(title_font(16))
         title.setStyleSheet(f"color:{PINK};")
         layout.addWidget(title)
+
+        # --- Profil ------------------------------------------------------------------------------
+        profile, grid = _panel()
+        grid.addWidget(_title(f"PROFIL {PROJECT_NAME}"), 0, 0, 1, 3)
+        self.persona_box = QComboBox()
+        for persona in PERSONAS.values():
+            self.persona_box.addItem(persona.title, persona.key)
+        self.persona_box.setCurrentIndex(max(0, self.persona_box.findData(current_persona().key)))
+        self.persona_box.currentIndexChanged.connect(
+            lambda _i: self._emit("persona", self.persona_box.currentData())
+        )
+        grid.addWidget(QLabel("Profil"), 1, 0)
+        grid.addWidget(self.persona_box, 1, 1)
+        grid.addWidget(
+            _muted(
+                "Nom, portrait, couleurs, voix, mot de réveil, icône et raccourci du bureau "
+                "(redémarrage)."
+            ),
+            1,
+            2,
+        )
+        grid.setColumnStretch(2, 1)
+        layout.addWidget(profile)
 
         # --- Vision ------------------------------------------------------------------------------
         vision, grid = _panel()
@@ -375,16 +398,6 @@ class SettingsPage(QScrollArea):
         self.mode_box.addItem("Le panneau complet", "full")
         grid.addWidget(QLabel("Au lancement"), 2, 0)
         grid.addWidget(self.mode_box, 2, 1, 1, 2)
-        self.persona_box = QComboBox()
-        for persona in PERSONAS.values():
-            self.persona_box.addItem(persona.title, persona.key)
-        self.persona_box.setCurrentIndex(max(0, self.persona_box.findData(current_persona().key)))
-        self.persona_box.currentIndexChanged.connect(
-            lambda _i: self._emit("persona", self.persona_box.currentData())
-        )
-        grid.addWidget(QLabel("Personnage"), 3, 0)
-        grid.addWidget(self.persona_box, 3, 1)
-        grid.addWidget(_muted("nom, portrait, couleurs, voix (redémarrage)"), 3, 2)
         self.stream_box = QCheckBox(
             "Visible en stream : OBS / Discord montrent le rond et la bulle"
         )

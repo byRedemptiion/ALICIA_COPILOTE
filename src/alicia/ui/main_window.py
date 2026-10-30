@@ -49,7 +49,7 @@ from alicia.ui.games_page import GamesPage
 from alicia.ui.naming import app_icon, rename_widgets
 from alicia.ui.orb import OrbWindow
 from alicia.ui.shortcuts_page import ShortcutsPage
-from alicia.ui.theme import BORDER, CYAN, PINK, PINK_SOFT, STYLESHEET, title_font
+from alicia.ui.theme import BORDER, CYAN, PINK, PINK_SOFT, PROJECT_NAME, STYLESHEET, title_font
 from alicia.ui.workers import LogBridge, QtLogHandler, Task, VoiceBridge
 
 log = logging.getLogger("alicia.ui")
@@ -152,9 +152,13 @@ class MainWindow(QMainWindow):
         self._live_tasks: set[Task] = set()
 
         self.setWindowTitle(
-            f"{current_persona().name} {__version__}" + (" — DÉMO" if services.demo else "")
+            f"{current_persona().title} · {PROJECT_NAME} {__version__}"
+            + (" — DÉMO" if services.demo else "")
         )
         self.resize(1360, 840)
+        from alicia.ui.wheel import install_wheel_guard
+
+        install_wheel_guard()  # la molette fait défiler, sans changer les listes ni les curseurs
         self.setMinimumSize(1000, 640)
         self._build_ui()
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
@@ -199,18 +203,21 @@ class MainWindow(QMainWindow):
         brand = QLabel("A · L · I · C · I · A")
         brand.setFont(title_font(15))
         brand.setStyleSheet(f"color:{PINK};")
-        tagline = QLabel("copilote de jeu")
+        tagline = QLabel(PROJECT_NAME)
         tagline.setObjectName("muted")
         model = self.services.model
         self.provider_label = QPushButton(f"IA · {model.provider} / {model.model}")
+        self.provider_label.setObjectName("chipButton")
         self.provider_label.setToolTip("Choisir l'IA d'ALICIA et coller sa clé")
         self.provider_label.clicked.connect(self.open_setup)
         self.hotkey_label = QLabel("")
         self.hotkey_label.setObjectName("chip")
         self.nav_console = QPushButton("◈  ALICIA")
         self.nav_games = QPushButton("▦  JEUX")
-        self.nav_keys = QPushButton("⚙  RÉGLAGES")
-        self.nav_keys.setToolTip("Micro, voix d'ALICIA, IA, raccourcis et commandes vocales")
+        self.nav_keys = QPushButton("⚙")
+        self.nav_keys.setToolTip(
+            "Réglages : profil, micro, voix d'ALICIA, IA, stream, raccourcis et commandes vocales"
+        )
         for button, index in ((self.nav_console, 0), (self.nav_games, 1), (self.nav_keys, 2)):
             button.setObjectName("nav")
             button.setCheckable(True)
@@ -224,10 +231,7 @@ class MainWindow(QMainWindow):
         header.addSpacing(24)
         header.addWidget(self.nav_console)
         header.addWidget(self.nav_games)
-        header.addWidget(self.nav_keys)
         header.addStretch(1)
-        header.addWidget(self.hotkey_label)
-        header.addWidget(self.provider_label)
         self.orb_button = QPushButton("◉  Mode bulle")
         self.orb_button.setToolTip(
             "Ne garder que le rond d'ALICIA à l'écran (ses réponses s'affichent à côté)"
@@ -236,8 +240,10 @@ class MainWindow(QMainWindow):
         self.update_button = QPushButton("⟳  MAJ")
         self.update_button.setToolTip("Vérifier et installer la dernière version d'ALICIA")
         self.update_button.clicked.connect(self.update_now)
-        header.addWidget(self.update_button)
         header.addWidget(self.orb_button)
+        header.addSpacing(6)
+        header.addWidget(self.nav_keys)  # roue des réglages, tout à droite
+        self.nav_keys.setObjectName("navIcon")
 
         # --- Colonne gauche : cible + vision -----------------------------------------------------
         self.window_list = QListWidget()
@@ -367,13 +373,13 @@ class MainWindow(QMainWindow):
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         game_row = QHBoxLayout()
         game_row.addWidget(self.game_box, 1)
+        game_row.addWidget(self.engine_box)
         game_row.addWidget(self.stop_voice_button)
         switches = QHBoxLayout()
         switches.addWidget(self.web_box)
         switches.addWidget(self.voice_box)
         switches.addWidget(self.wake_box)
         switches.addStretch(1)
-        switches.addWidget(self.engine_box)
         options = QVBoxLayout()
         options.setSpacing(8)
         options.addLayout(game_row)
@@ -433,10 +439,16 @@ class MainWindow(QMainWindow):
         self.logs_toggle.clicked.connect(self.toggle_logs)
         footer = QHBoxLayout()
         footer.addWidget(self.logs_toggle)
+        footer.addSpacing(8)
+        footer.addWidget(self.hotkey_label)
+        footer.addWidget(self.provider_label)
         footer.addStretch(1)
-        version = QLabel(f"v{__version__}" + (" · DÉMO" if self.services.demo else ""))
+        version = QLabel(
+            f"{PROJECT_NAME} v{__version__}" + (" · DÉMO" if self.services.demo else "")
+        )
         version.setObjectName("muted")
         footer.addWidget(version)
+        footer.addWidget(self.update_button)
 
         root = QWidget()
         root.setObjectName("root")
@@ -1104,6 +1116,11 @@ class MainWindow(QMainWindow):
         if not self.services.demo and self._needs_key():
             QTimer.singleShot(600, self.open_setup)  # premier lancement : choisir son IA
         if not self.services.demo:
+            from alicia.core.shortcuts import sync_shortcuts_async
+            from alicia.core.update import install_root
+
+            # Raccourci du bureau au nom et à l'icône du profil (VERIS, ALICIA…)
+            sync_shortcuts_async(current_persona(), install_root(), state_dir() / "icons")
             self.prepare_ollama()
             self.set_memory(self.services.settings.capture.memory, save=False)
             self.set_live(self.services.settings.capture.live, save=False)
@@ -1121,30 +1138,64 @@ class MainWindow(QMainWindow):
         )
 
     def open_setup(self) -> None:
-        from alicia.ui.setup_dialog import SetupDialog
+        from alicia.core.user_config import key_names, key_slots
+        from alicia.ui.setup_dialog import KEY_PROVIDERS, SetupDialog
 
         ai = self.services.settings.ai
+        keys: dict[str, list[tuple[str, str]]] = {}
+        try:
+            names = key_names()
+            for provider, info in KEY_PROVIDERS.items():
+                slots = key_slots(info.env)
+                keys[provider] = [
+                    (slot, names.get(slot) or f"Clé {i}") for i, slot in enumerate(slots, start=1)
+                ]
+        except OSError as exc:
+            log.warning("Clés enregistrées illisibles : %r", exc)
+            keys = {}
         dialog = SetupDialog(
             ai.provider,
             {"gemini": bool(ai.gemini.api_key), "openai": bool(ai.openai.api_key)},
             self if self.isVisible() else None,
             gemini=ai.gemini,
             openai=ai.openai,
+            keys=keys or None,
         )
         if dialog.exec() and dialog.choice is not None:
-            self.apply_ai_choice(*dialog.choice)
+            self.apply_ai_choice(
+                *dialog.choice,
+                name=dialog.key_name,
+                activate=dialog.activate,
+                remove=dialog.remove,
+            )
 
-    def apply_ai_choice(self, provider: str, key: str) -> None:
+    def apply_ai_choice(
+        self,
+        provider: str,
+        key: str,
+        *,
+        name: str = "",
+        activate: str | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> None:
         """Enregistre le choix (clé dans %APPDATA%\\Alicia\\.env) et change d'IA sans redémarrer."""
         from alicia.core.ai.factory import create_model
         from alicia.core.config import load_settings
-        from alicia.core.user_config import set_env, set_value
+        from alicia.core.user_config import set_value
 
         try:
-            if key:
-                from alicia.ui.setup_dialog import KEY_PROVIDERS
+            from alicia.ui.setup_dialog import KEY_PROVIDERS
 
-                set_env(KEY_PROVIDERS[provider].env, key)
+            if provider in KEY_PROVIDERS and (key or activate or remove):
+                from alicia.core.user_config import update_keys
+
+                update_keys(
+                    KEY_PROVIDERS[provider].env,
+                    add=key,
+                    name=name,
+                    activate=activate,
+                    remove=remove,
+                )
             set_value("ai", "provider", provider)
             settings = load_settings()
         except (OSError, ValueError, AliciaError) as exc:

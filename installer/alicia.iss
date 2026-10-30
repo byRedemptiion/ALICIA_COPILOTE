@@ -11,9 +11,9 @@
 
 [Setup]
 AppId={{DAEFB63B-3EA5-4F22-A7FB-873735B9FC22}
-AppName=ALICIA
+AppName=COP'IA'LOTE
 AppVersion={#AppVersion}
-AppVerName=ALICIA {#AppVersion}
+AppVerName=COP'IA'LOTE {#AppVersion}
 AppPublisher=byRedemptiion
 AppComments=Copilote de jeu : elle regarde ton écran, t'écoute et te conseille, sans jamais jouer à ta place.
 DefaultDirName={localappdata}\Programs\ALICIA
@@ -24,7 +24,7 @@ OutputDir=..\dist
 OutputBaseFilename=ALICIA-Setup
 SetupIconFile=..\src\alicia\assets\alicia.ico
 UninstallDisplayIcon={app}\src\alicia\assets\alicia.ico
-UninstallDisplayName=ALICIA
+UninstallDisplayName=COP'IA'LOTE
 WizardStyle=modern
 WizardImageFile=wizard.bmp
 WizardSmallImageFile=wizard-small.bmp
@@ -67,6 +67,9 @@ Filename: "{app}\.venv\Scripts\alicia-gui.exe"; WorkingDir: "{app}"; Description
 ; Tout le dossier du programme (Python, composants, fichiers mis à jour par le bouton MAJ).
 ; Les clés et réglages (%APPDATA%\Alicia) et les modèles vocaux sont conservés.
 Type: filesandordirs; Name: "{app}"
+; Raccourcis renommés selon le profil choisi (VERIS…) par COP'IA'LOTE lui-même.
+Type: files; Name: "{autodesktop}\VERIS.lnk"
+Type: files; Name: "{autoprograms}\VERIS.lnk"
 
 [Code]
 var

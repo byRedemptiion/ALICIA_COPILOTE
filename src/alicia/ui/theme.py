@@ -43,6 +43,7 @@ STATE_LABELS = {
     "error": "ERREUR",
 }
 
+PROJECT_NAME = "COP'IA'LOTE"  # le projet ; le personnage (ALICIA, VERIS…) est un profil
 FONT_FAMILY = "Bahnschrift"  # police « DIN » fournie avec Windows ; repli automatique sinon
 
 
@@ -141,6 +142,33 @@ QPushButton#nav:hover {{
 QPushButton#nav:checked {{
     color: {PINK};
     border-bottom-color: {PINK};
+}}
+QPushButton#navIcon {{
+    font-size: 15pt;
+    padding: 1px 10px 3px 10px;
+    color: {MUTED};
+    background: transparent;
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+}}
+QPushButton#navIcon:hover {{
+    color: {TEXT};
+    border-color: {PINK};
+}}
+QPushButton#navIcon:checked {{
+    color: {PINK};
+    border-color: {PINK};
+}}
+QPushButton#chipButton {{
+    color: {MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 3px 10px;
+    background: rgba(18, 59, 79, 0.35);
+}}
+QPushButton#chipButton:hover {{
+    color: {TEXT};
+    border-color: {CYAN};
 }}
 QFrame#gameCard {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
