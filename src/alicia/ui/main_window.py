@@ -209,6 +209,7 @@ class MainWindow(QMainWindow):
         rename_widgets(self.orb)
         self.tray = self._build_tray(icon)
         self._attach_logs()
+        self._setup_copilot()
         self.refresh_windows()
         self._update_state()
         self._setup_hotkey()
@@ -786,6 +787,13 @@ class MainWindow(QMainWindow):
 
     def change_setting(self, key: str, value: object) -> None:
         log.info("Réglage : %s = %s", key, value)
+        if key == "copilot":
+            self.set_copilot(bool(value))
+            return
+        if key.startswith("copilot_"):
+            name = key.removeprefix("copilot_")
+            self._copilot_tune(name, int(value) if name == "threshold" else float(value))  # type: ignore[arg-type]
+            return
         if key == "input_device":
             self._update_voice(input_device=str(value or ""))
             if self.services.recorder is not None:
@@ -1129,6 +1137,7 @@ class MainWindow(QMainWindow):
         self.orb.twitch_requested.connect(self.open_twitch_chat)
         self.orb.duo_requested.connect(self.ask_duo_topic)
         self.orb.duo_replay_requested.connect(self.replay_duo_message)
+        self.orb.copilot_toggled.connect(self.set_copilot)
         self.orb.twitch_channel = settings.stream.twitch_channel
         self.orb.set_stream_visible(settings.stream_visible)
         self.settings_page.stream_box.blockSignals(True)
@@ -2420,6 +2429,7 @@ class MainWindow(QMainWindow):
             ("Chat Twitch", self.open_twitch_chat),
             ("Message à l'autre robot…", self.ask_duo_topic),
             ("Réécouter le dernier message", self.replay_duo_message),
+            ("copilot", None),
             ("Réglages", lambda: (self.show_panel(), self.show_page(2))),
             ("Mettre à jour", self.update_now),
             (None, None),
@@ -2428,6 +2438,12 @@ class MainWindow(QMainWindow):
         for text, slot in entries:
             if text is None:
                 menu.addSeparator()
+                continue
+            if text == "copilot":  # case à cocher : le robot parle de lui-même
+                self.copilot_action = QAction("Mode Copilote", menu)
+                self.copilot_action.setCheckable(True)
+                self.copilot_action.triggered.connect(lambda on: self.set_copilot(on))
+                menu.addAction(self.copilot_action)
                 continue
             action = QAction(text, menu)
             action.triggered.connect(slot)
@@ -2931,6 +2947,132 @@ class MainWindow(QMainWindow):
             self._listen_for_reply()
         QTimer.singleShot(1800, self._core_settle)
         self.analysis_done.emit(outcome)
+
+    # --- mode Copilote ----------------------------------------------------------------------
+
+    def _setup_copilot(self) -> None:
+        from alicia.core.copilot import Copilot, CopilotGate
+
+        settings = self.services.settings.copilot
+        self.copilot = Copilot(CopilotGate(settings.threshold, settings.cooldown_s))
+        self._copilot_running = False
+        self.copilot_timer = QTimer(self)
+        self.copilot_timer.timeout.connect(self._copilot_tick)
+        self.settings_page.load_copilot(settings)
+        self.set_copilot(settings.enabled, save=False)
+
+    def set_copilot(self, on: bool, save: bool = True) -> None:
+        """Mode Copilote : il regarde de temps en temps et parle seulement si ça compte."""
+        from dataclasses import replace
+
+        settings = replace(self.services.settings.copilot, enabled=bool(on))
+        self.services.settings = replace(self.services.settings, copilot=settings)
+        if save:
+            self._save("copilot", "enabled", bool(on))
+        self.copilot.gate.threshold = settings.threshold
+        self.copilot.gate.cooldown_s = settings.cooldown_s
+        if on:
+            self.copilot_timer.start(int(settings.interval_s * 1000))
+        else:
+            self.copilot_timer.stop()
+        self.orb.copilot_on = bool(on)
+        action = getattr(self, "copilot_action", None)
+        if action is not None:
+            action.setChecked(bool(on))
+        page = self.settings_page
+        page.copilot_box.blockSignals(True)
+        page.copilot_box.setChecked(bool(on))
+        page.copilot_box.blockSignals(False)
+        if save or on:
+            log.info(
+                "Mode Copilote %s%s",
+                "activé" if on else "coupé",
+                f" : coup d'œil toutes les {settings.interval_s:.0f} s, seuil "
+                f"{settings.threshold}/10, silence {settings.cooldown_s:.0f} s entre deux "
+                "interventions"
+                if on
+                else "",
+            )
+
+    def _copilot_tune(self, key: str, value: float) -> None:
+        from dataclasses import replace
+
+        settings = replace(self.services.settings.copilot, **{key: value})
+        self.services.settings = replace(self.services.settings, copilot=settings)
+        self._save("copilot", key, value)
+        self.set_copilot(settings.enabled, save=False)
+
+    def _copilot_skip(self) -> str | None:
+        """Pourquoi ne pas regarder maintenant (None = on peut)."""
+        speaker = self.services.speaker
+        if self._copilot_running:
+            return "coup d'œil précédent pas fini"
+        if self.busy or self._wake_paused():
+            return "tu parles ou une question est en cours"
+        if (speaker is not None and speaker.speaking) or self._peer_talking():
+            return "quelqu'un parle déjà"
+        return None
+
+    def _copilot_tick(self) -> None:
+        if not self.services.settings.copilot.enabled:
+            return
+        why = self._copilot_skip()
+        if why:
+            log.debug("Copilote : pas de coup d'œil (%s)", why)
+            return
+        frame = self._live_frame(self.services.settings.copilot.interval_s)
+        model = self.services.model
+        self._copilot_running = True
+
+        def look():  # type: ignore[no-untyped-def]
+            from alicia.core.ai.image_prep import prepare_image
+            from alicia.games.profiles import resolve_profile
+
+            shot = frame
+            if shot is None:
+                window = self.services.capture.foreground_window()
+                if window is None:
+                    return None, False, "pas de jeu au premier plan"
+                shot = self.services.capture.capture(
+                    window, self._vision(), self.services.settings.capture.cursor_box
+                )
+            elif shot.window is None:
+                return None, False, "pas de jeu au premier plan"
+            capture = self.services.settings.capture
+            image = prepare_image(
+                shot.image, min(capture.max_image_side, 1024), capture.jpeg_quality
+            )
+            context = resolve_profile(shot.window, self.services.analysis.game_profile)
+            return self.copilot.observe(model, image, context.prompt_context(False))
+
+        def done(value) -> None:  # type: ignore[no-untyped-def]
+            self._copilot_running = False
+            decision, speak, why = value
+            if decision is None and why:
+                log.debug("Copilote : %s", why)
+            if speak and decision is not None and self.services.settings.copilot.enabled:
+                self._copilot_speak(decision.message, decision.importance)
+
+        def failed(exc: Exception) -> None:
+            self._copilot_running = False
+            detail = exc.detail if isinstance(exc, AliciaError) else repr(exc)
+            log.warning("Copilote : coup d'œil impossible (%s)", detail)
+
+        self._background(look, done, failed)
+
+    def _copilot_speak(self, message: str, importance: int) -> None:
+        if self._copilot_skip() not in (None, "coup d'œil précédent pas fini"):
+            log.info("Copilote : intervention annulée, tu as pris la parole entre-temps")
+            return
+        mark = "⚠" if importance >= 9 else "💡"
+        self.asked_label.setText(f"{mark} {current_persona().title.upper()} (COPILOTE)  ›")
+        self.answer.setPlainText(message)
+        self._set_status(f"{mark} {message}")
+        if self._bubble_active():
+            self.bubble.ask("")
+        self._core("speaking")
+        self._bubble_finish(f"{mark} {message}", self._say(message))
+        QTimer.singleShot(1800, self._core_settle)
 
     def _say(self, text: str) -> bool:
         speaker = self.services.speaker

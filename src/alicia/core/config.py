@@ -242,6 +242,16 @@ class DuoSettings:
 
 
 @dataclass(frozen=True)
+class CopilotSettings:
+    """Mode Copilote : le robot regarde de temps en temps et parle seulement si ça compte."""
+
+    enabled: bool = False
+    interval_s: float = 30.0  # coup d'œil à l'écran (15 s minimum : le PC ne doit pas chauffer)
+    threshold: int = 7  # importance minimale (1-10) pour parler sans qu'on lui demande
+    cooldown_s: float = 60.0  # silence minimum entre deux interventions spontanées
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
@@ -255,6 +265,7 @@ class Settings:
     stream: StreamSettings = field(default_factory=StreamSettings)
     duo: DuoSettings = field(default_factory=DuoSettings)
     player: PlayerSettings = field(default_factory=PlayerSettings)
+    copilot: CopilotSettings = field(default_factory=CopilotSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
     stream_visible: bool = False  # True : OBS / Discord voient le rond et la bulle
@@ -484,6 +495,7 @@ def load_settings(
             ).strip()[:40],
             phonetic=str(_section(data, "player").get("phonetic", "")).strip()[:60],
         ),
+        copilot=_copilot_settings(_section(data, "copilot")),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),
             branch=str(_section(data, "update").get("branch", UpdateSettings.branch)).strip(),
@@ -519,4 +531,20 @@ def load_settings(
         ),
         sources=tuple(sources),
         captures_dir=cwd / "captures",
+    )
+
+
+def _copilot_settings(section: dict) -> CopilotSettings:  # type: ignore[type-arg]
+    def number(key: str, default: float, low: float, high: float) -> float:
+        try:
+            value = float(section.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(low, min(high, value))
+
+    return CopilotSettings(
+        enabled=bool(section.get("enabled", False)),
+        interval_s=number("interval_s", 30.0, 15.0, 300.0),
+        threshold=int(number("threshold", 7, 1, 10)),
+        cooldown_s=number("cooldown_s", 60.0, 10.0, 900.0),
     )

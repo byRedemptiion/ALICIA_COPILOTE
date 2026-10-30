@@ -406,6 +406,7 @@ class OrbWindow(QWidget):
     twitch_requested = Signal()
     duo_requested = Signal()
     duo_replay_requested = Signal()
+    copilot_toggled = Signal(bool)
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -436,6 +437,7 @@ class OrbWindow(QWidget):
         self.games: list[tuple[str, str]] = []  # (clé, nom) proposés dans le menu « Jeu »
         self.current_game = "auto"
         self.wake_on = False
+        self.copilot_on = False  # mode Copilote (interventions spontanées)
         self.vision = "window"
         self._drag: QPoint | None = None
         self._placed = False
@@ -600,6 +602,10 @@ class OrbWindow(QWidget):
             ("Chat Twitch", self.twitch_requested.emit),
             ("Message à l'autre robot…", self.duo_requested.emit),
             ("Réécouter le dernier message", self.duo_replay_requested.emit),
+            (
+                "Mode Copilote : activé ✓" if self.copilot_on else "Mode Copilote : coupé",
+                lambda: self.copilot_toggled.emit(not self.copilot_on),
+            ),
             (
                 "Visible en stream (OBS) ✓" if stream_visible else "Visible en stream (OBS)",
                 lambda: self.stream_toggled.emit(not stream_visible),

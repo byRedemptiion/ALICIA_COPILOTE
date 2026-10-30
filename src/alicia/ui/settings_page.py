@@ -674,6 +674,56 @@ class SettingsPage(QWidget):
         grid.addWidget(self.github_state, 7, 1, 1, 2)
         self._tab_layouts["general"].addWidget(general)
 
+        copilot, grid = _panel()
+        grid.addWidget(_title("MODE COPILOTE"), 0, 0, 1, 3)
+        self.copilot_box = QCheckBox("Il parle de lui-même quand c'est important")
+        self.copilot_box.toggled.connect(lambda on: self._emit("copilot", on))
+        grid.addWidget(self.copilot_box, 1, 0, 1, 3)
+        self.copilot_interval = QComboBox()
+        for seconds in (15, 20, 30, 45, 60, 90, 120):
+            self.copilot_interval.addItem(f"toutes les {seconds} s", float(seconds))
+        self.copilot_threshold = QComboBox()
+        for level, text in (
+            (9, "9 — seulement les urgences"),
+            (8, "8 — urgences et vrais bons conseils"),
+            (7, "7 — conseils utiles (conseillé)"),
+            (6, "6 — bavard"),
+            (5, "5 — très bavard"),
+        ):
+            self.copilot_threshold.addItem(text, level)
+        self.copilot_cooldown = QComboBox()
+        for seconds in (20, 30, 60, 90, 120, 180, 300):
+            label = (
+                f"{seconds} s"
+                if seconds < 60
+                else f"{seconds // 60} min" + (" 30" if seconds % 60 else "")
+            )
+            self.copilot_cooldown.addItem(label, float(seconds))
+        for row, (label, box, key) in enumerate(
+            (
+                ("Coup d'œil", self.copilot_interval, "copilot_interval_s"),
+                ("Importance minimale", self.copilot_threshold, "copilot_threshold"),
+                ("Silence entre deux", self.copilot_cooldown, "copilot_cooldown_s"),
+            ),
+            start=2,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(box, row, 1, 1, 2)
+            box.currentIndexChanged.connect(lambda _i, b=box, k=key: self._emit(k, b.currentData()))
+        grid.addWidget(
+            _muted(
+                "Le cerveau rapide jette un coup d'œil à l'écran et note l'importance de 1 à 10. "
+                "Il ne parle que si la note atteint le seuil, après le délai de silence (sauf "
+                "urgence 9-10) et jamais deux fois la même chose. Il se tait quand tu parles. "
+                "Chaque coup d'œil est une requête à l'IA : espace-les avec Gemini gratuit."
+            ),
+            5,
+            0,
+            1,
+            3,
+        )
+        self._tab_layouts["general"].addWidget(copilot)
+
         # --- Raccourcis ---------------------------------------------------------------------------
         self.shortcuts = shortcuts
         self._tab_layouts["keys"].addWidget(shortcuts)
@@ -787,6 +837,23 @@ class SettingsPage(QWidget):
             self.speed_label.setText(f"{percent:+d} %")
             self.mode_box.setCurrentIndex(max(0, self.mode_box.findData(ui_mode)))
             self.ai_label.setText(ai_text)
+        finally:
+            self._loading = False
+
+    def load_copilot(self, copilot) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            self.copilot_box.setChecked(copilot.enabled)
+            for box, value in (
+                (self.copilot_interval, float(copilot.interval_s)),
+                (self.copilot_threshold, int(copilot.threshold)),
+                (self.copilot_cooldown, float(copilot.cooldown_s)),
+            ):
+                index = box.findData(value)
+                if index < 0:
+                    box.addItem(str(value), value)
+                    index = box.count() - 1
+                box.setCurrentIndex(index)
         finally:
             self._loading = False
 
