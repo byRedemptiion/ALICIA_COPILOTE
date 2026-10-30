@@ -184,6 +184,7 @@ class MainWindow(QMainWindow):
             self.orb.setWindowIcon(icon)
         rename_widgets(self)  # VERIS : son nom partout à la place d'ALICIA
         rename_widgets(self.orb)
+        self.tray = self._build_tray(icon)
         self._attach_logs()
         self.refresh_windows()
         self._update_state()
@@ -1527,6 +1528,50 @@ class MainWindow(QMainWindow):
             log.warning("Redémarrage automatique indisponible : relance ALICIA à la main.")
         self.quit_app()
 
+    def _build_tray(self, icon):  # type: ignore[no-untyped-def]
+        """Icône près de l'horloge (zone de notification) : clic = panneau, clic droit = menu."""
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu, QSystemTrayIcon
+
+        if icon.isNull() or not QSystemTrayIcon.isSystemTrayAvailable():
+            return None
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip(f"{current_persona().title} · {PROJECT_NAME}")
+        menu = QMenu(self)
+        entries = (
+            ("Ouvrir le panneau", self.show_panel),
+            ("Mode bulle", self.show_orb),
+            ("Couper la voix", self.stop_voice),
+            ("Chat Twitch", self.open_twitch_chat),
+            ("Réglages", lambda: (self.show_panel(), self.show_page(2))),
+            ("Mettre à jour", self.update_now),
+            (None, None),
+            (f"Quitter {current_persona().title}", self.quit_app),
+        )
+        for text, slot in entries:
+            if text is None:
+                menu.addSeparator()
+                continue
+            action = QAction(text, menu)
+            action.triggered.connect(slot)
+            menu.addAction(action)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_clicked)
+        tray.show()
+        return tray
+
+    def _tray_clicked(self, reason) -> None:  # type: ignore[no-untyped-def]
+        from PySide6.QtWidgets import QSystemTrayIcon
+
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            if self.isVisible() and not self.isMinimized():
+                self.show_orb()  # panneau ouvert : retour au rond
+            else:
+                self.show_panel()
+
     def show_orb(self) -> None:
         self.orb_mode = True
         self.hide()
@@ -1537,7 +1582,7 @@ class MainWindow(QMainWindow):
     def show_panel(self) -> None:
         self.orb_mode = False
         self.orb.hide()
-        self.show()
+        self.showNormal() if self.isMinimized() else self.show()
         self.raise_()
         self.activateWindow()
         self._core_settle()
@@ -1611,6 +1656,8 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        if getattr(self, "tray", None) is not None:
+            self.tray.hide()
         if self.overlay is not None:
             self.overlay.stop()
         if self.wake is not None:
