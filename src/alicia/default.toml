@@ -72,6 +72,9 @@ level = "INFO"               # INFO | DEBUG
 mode = "orb"
 # Personnage : "alicia" ou "veris" (nom, mot de réveil, portrait, couleurs, voix).
 persona = "alicia"
+# true : le rond et la bulle apparaissent dans OBS / Discord (stream). Par défaut ils sont
+# cachés des captures, pour que l'IA ne les voie pas non plus.
+stream_visible = false
 orb_size = 210               # diamètre du rond, en pixels (120 à 600)
 
 [update]

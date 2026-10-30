@@ -217,6 +217,7 @@ class Settings:
     update: UpdateSettings = field(default_factory=UpdateSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
+    stream_visible: bool = False  # True : OBS / Discord voient le rond et la bulle
     persona: str = "alicia"  # « alicia » ou « veris » : nom, portrait, couleurs, voix
     sources: tuple[str, ...] = field(default_factory=tuple)
     log_dir: Path = field(default_factory=lambda: state_dir() / "logs")
@@ -399,6 +400,7 @@ def load_settings(
         actions=_actions(_section(data, "actions")),
         ui_mode=_choice(_section(data, "ui"), "mode", "orb", ("orb", "full")),
         persona=_choice(_section(data, "ui"), "persona", "alicia", ("alicia", "veris")),
+        stream_visible=bool(_section(data, "ui").get("stream_visible", False)),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),
             branch=str(_section(data, "update").get("branch", UpdateSettings.branch)).strip(),

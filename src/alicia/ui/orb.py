@@ -34,15 +34,21 @@ MAX_BUBBLE_CHARS = 900
 MARGIN = 24
 
 
+WDA_NONE = 0
+# Visible en stream : OBS / Discord voient le rond et la bulle (réglage [ui] stream_visible).
+stream_visible = False
+
+
 def exclude_from_capture(widget: QWidget) -> None:
-    """Demande à Windows de ne pas inclure cette fenêtre dans les captures."""
+    """Demande à Windows de ne pas inclure cette fenêtre dans les captures (sauf si le
+    joueur veut la montrer en stream)."""
     if sys.platform != "win32":
         return
     try:
         import ctypes
 
         ok = ctypes.windll.user32.SetWindowDisplayAffinity(  # type: ignore[attr-defined]
-            int(widget.winId()), WDA_EXCLUDEFROMCAPTURE
+            int(widget.winId()), WDA_NONE if stream_visible else WDA_EXCLUDEFROMCAPTURE
         )
         if not ok:
             log.debug("Exclusion de capture refusée par Windows pour %s", widget.objectName())
@@ -355,6 +361,7 @@ class OrbWindow(QWidget):
     setup_requested = Signal()
     layout_changed = Signal()
     vision_chosen = Signal(str)
+    stream_toggled = Signal(bool)
 
     def __init__(self, size: int = 210, position_file: Path | None = None) -> None:
         super().__init__(
@@ -489,6 +496,14 @@ class OrbWindow(QWidget):
         exclude_from_capture(self)
         self.bubble.follow(self.frameGeometry())
 
+    def set_stream_visible(self, visible: bool) -> None:
+        """Montre (ou cache) le rond et la bulle aux logiciels de stream, tout de suite."""
+        global stream_visible
+        stream_visible = visible
+        for window in (self, self.bubble):
+            if window.isVisible():
+                exclude_from_capture(window)
+
     def hideEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
         super().hideEvent(event)
         self.bubble.keep()
@@ -536,6 +551,10 @@ class OrbWindow(QWidget):
             (
                 "Réveil « Alicia » : activé ✓" if self.wake_on else "Réveil « Alicia » : coupé",
                 lambda: self.wake_toggled.emit(not self.wake_on),
+            ),
+            (
+                "Visible en stream (OBS) ✓" if stream_visible else "Visible en stream (OBS)",
+                lambda: self.stream_toggled.emit(not stream_visible),
             ),
             ("Choisir l'IA / la clé", self.setup_requested.emit),
             ("Mettre à jour ALICIA", self.update_requested.emit),

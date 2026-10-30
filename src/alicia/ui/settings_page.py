@@ -338,6 +338,21 @@ class SettingsPage(QScrollArea):
         grid.addWidget(QLabel("Personnage"), 3, 0)
         grid.addWidget(self.persona_box, 3, 1)
         grid.addWidget(_muted("nom, portrait, couleurs, voix (redémarrage)"), 3, 2)
+        self.stream_box = QCheckBox(
+            "Visible en stream : OBS / Discord montrent le rond et la bulle"
+        )
+        self.stream_box.toggled.connect(lambda on: self._emit("stream_visible", on))
+        grid.addWidget(self.stream_box, 4, 0, 1, 3)
+        grid.addWidget(
+            _muted(
+                "Coupé : ils sont invisibles pour les captures. Activé en vision « écran entier » "
+                "ou « curseur », l'IA peut aussi les voir sur l'image."
+            ),
+            5,
+            0,
+            1,
+            3,
+        )
         layout.addWidget(general)
 
         # --- Raccourcis (onglet précédent, intégré ici) --------------------------------------

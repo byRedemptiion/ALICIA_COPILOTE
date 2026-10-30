@@ -783,6 +783,22 @@ class MainWindow(QMainWindow):
 
             self.services.settings = replace(self.services.settings, ui_mode=str(value))
             self._save("ui", "mode", value)
+        elif key == "stream_visible":
+            from dataclasses import replace
+
+            on = bool(value)
+            self.services.settings = replace(self.services.settings, stream_visible=on)
+            self.orb.set_stream_visible(on)
+            box = self.settings_page.stream_box
+            box.blockSignals(True)
+            box.setChecked(on)
+            box.blockSignals(False)
+            self._save("ui", "stream_visible", on)
+            self._notify(
+                "Le rond et la bulle sont visibles en stream (OBS : capture d'écran ou de fenêtre)."
+                if on
+                else "Le rond et la bulle sont de nouveau cachés des captures."
+            )
         elif key == "persona":
             self.change_persona(str(value))
 
@@ -911,6 +927,11 @@ class MainWindow(QMainWindow):
         self.orb.wake_toggled.connect(self.wake_box.setChecked)
         self.orb.vision = self.services.settings.capture.mode
         self.orb.vision_chosen.connect(self.set_vision)
+        self.orb.stream_toggled.connect(lambda on: self.change_setting("stream_visible", on))
+        self.orb.set_stream_visible(settings.stream_visible)
+        self.settings_page.stream_box.blockSignals(True)
+        self.settings_page.stream_box.setChecked(settings.stream_visible)
+        self.settings_page.stream_box.blockSignals(False)
         self.orb_mode = settings.ui_mode == "orb"
 
     def start(self) -> None:
