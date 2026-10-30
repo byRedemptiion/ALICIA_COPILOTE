@@ -469,8 +469,10 @@ class MainWindow(QMainWindow):
         footer.addWidget(self.provider_label)
         footer.addStretch(1)
         version = QLabel(
-            f"{PROJECT_NAME} v{__version__}" + (" · DÉMO" if self.services.demo else "")
+            f"{PROJECT_NAME} v{__version__}{self._build_text()}"
+            + (" · DÉMO" if self.services.demo else "")
         )
+        version.setToolTip("Version et mise à jour installée (MAJ)")
         version.setObjectName("muted")
         footer.addWidget(version)
         footer.addWidget(self.update_button)
@@ -1961,6 +1963,22 @@ class MainWindow(QMainWindow):
             self.bubble.fade_out()
 
     # --- mise à jour ----------------------------------------------------------------------------
+
+    @staticmethod
+    def _build_text() -> str:
+        """« · MAJ du 30/10 22:00 » : la dernière mise à jour installée par le bouton MAJ."""
+        import json
+        from datetime import datetime
+
+        root = install_root()
+        if root is None:
+            return ""
+        try:
+            data = json.loads((root / ".alicia-version").read_text("utf-8"))
+            when = datetime.fromisoformat(str(data["date"]).replace("Z", "+00:00")).astimezone()
+            return f" · MAJ du {when:%d/%m %H:%M} ({str(data['sha'])[:7]})"
+        except (OSError, ValueError, KeyError, TypeError):
+            return ""
 
     def _make_updater(self) -> Updater | None:
         root = install_root()
