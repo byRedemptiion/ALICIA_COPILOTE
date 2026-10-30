@@ -152,6 +152,10 @@ overlay_port = 8765
 # Le code de duo (le même sur les deux PC) est dans %APPDATA%\Alicia\.env (DUO_CODE) :
 # il chiffre les messages, qui passent par un relais public gratuit (ntfy.sh).
 enabled = false
-max_turns = 6
+max_turns = 4
+allow_chat = false   # true : les robots se répondent tout seuls (dans la limite de max_turns)
+player = ""          # ton prénom, dit à l'autre joueur quand ton robot transmet un message
+provider = "main"    # IA du duo : main (la même que d'habitude), gemini, openai ou ollama
+key_slot = ""        # quelle clé (ex. GEMINI_API_KEY_2) ; vide = la clé utilisée
 relay = "https://ntfy.sh"
 

@@ -411,12 +411,12 @@ class SettingsPage(QScrollArea):
         grid.addWidget(self.duo_code, 2, 1)
         grid.addLayout(code_buttons, 2, 2)
         self.duo_turns = QComboBox()
-        for turns in (4, 6, 10):
+        for turns in (2, 4, 6):
             self.duo_turns.addItem(f"{turns} répliques", turns)
         self.duo_turns.currentIndexChanged.connect(
             lambda _i: self._emit("duo_turns", self.duo_turns.currentData())
         )
-        self.duo_start = QPushButton("Lancer une discussion…")
+        self.duo_start = QPushButton("Envoyer un message…")
         self.duo_start.clicked.connect(lambda: self._emit("duo_start", True))
         grid.addWidget(QLabel("Longueur"), 3, 0)
         grid.addWidget(self.duo_turns, 3, 1)
@@ -426,17 +426,38 @@ class SettingsPage(QScrollArea):
         self.duo_hear = QCheckBox("Entendre l'autre robot sur mon PC, avec sa voix")
         self.duo_hear.toggled.connect(lambda on: self._emit("duo_hear", on))
         grid.addWidget(self.duo_hear, 6, 0, 1, 3)
+        self.duo_chat = QCheckBox(
+            "Autoriser les robots à discuter entre eux (sinon ils transmettent seulement)"
+        )
+        self.duo_chat.toggled.connect(lambda on: self._emit("duo_allow_chat", on))
+        grid.addWidget(self.duo_chat, 8, 0, 1, 3)
+        self.duo_player = QLineEdit()
+        self.duo_player.setPlaceholderText("ex. Redem")
+        self.duo_player.setMaxLength(24)
+        self.duo_player.editingFinished.connect(
+            lambda: self._emit("duo_player", self.duo_player.text())
+        )
+        grid.addWidget(QLabel("Ton prénom"), 9, 0)
+        grid.addWidget(self.duo_player, 9, 1)
+        grid.addWidget(_muted("dit à l'autre joueur avec tes messages"), 9, 2)
+        self.duo_ai = QComboBox()
+        self.duo_ai.currentIndexChanged.connect(
+            lambda _i: self._emit("duo_ai", str(self.duo_ai.currentData() or "main|"))
+        )
+        grid.addWidget(QLabel("IA du duo"), 10, 0)
+        grid.addWidget(self.duo_ai, 10, 1, 1, 2)
         duo_help = _muted(
-            "Crée un code ici, envoie-le à ton pote (en privé), il le colle chez lui. Puis "
-            f"dis par exemple <b>« {me.name}, dis bonjour à {other.name} »</b> ou <b>« {me.name}, "
-            f"discute avec {other.name} de WoW »</b>. « Stop » arrête la discussion des deux "
-            "côtés.<br>"
+            "Crée un code ici, envoie-le à ton pote (en privé), il le colle chez lui.<br>"
+            f"<b>Porte-parole</b> : « {me.name}, demande à {other.name} ce que fait ton pote » → "
+            f"{other.title} le dit à ton pote ; il répond « {other.name}, réponds-lui que… ».<br>"
+            f"<b>Discussion entre robots</b> (si autorisée) : « {me.name}, discute avec "
+            f"{other.name} de WoW ». « Stop » l'arrête des deux côtés.<br>"
             "Les messages sont chiffrés avec ce code et passent par un relais gratuit "
             "(ntfy.sh). Un message de l'autre robot ne peut jamais agir sur ton PC."
         )
         duo_help.setTextFormat(Qt.TextFormat.RichText)
         duo_help.setProperty("keep_names", True)
-        grid.addWidget(duo_help, 7, 0, 1, 3)
+        grid.addWidget(duo_help, 11, 0, 1, 3)
         layout.addWidget(duo)
 
         # --- Général -------------------------------------------------------------------------------
@@ -595,10 +616,17 @@ class SettingsPage(QScrollArea):
         finally:
             self._loading = False
 
-    def load_duo(self, duo, has_token: bool) -> None:  # type: ignore[no-untyped-def]
+    def load_duo(self, duo, has_token: bool, ai_choices=()) -> None:  # type: ignore[no-untyped-def]
         self._loading = True
         try:
             self.duo_box.setChecked(duo.enabled)
+            self.duo_chat.setChecked(duo.allow_chat)
+            self.duo_player.setText(duo.player)
+            self.duo_ai.clear()
+            for label, (provider, slot) in ai_choices:
+                self.duo_ai.addItem(label, f"{provider}|{slot}")
+            index = self.duo_ai.findData(f"{duo.provider}|{duo.key_slot}")
+            self.duo_ai.setCurrentIndex(max(0, index))
             self.duo_hear.setChecked(duo.hear_peer)
             self.duo_code.setText(duo.code.get())
             index = self.duo_turns.findData(duo.max_turns)

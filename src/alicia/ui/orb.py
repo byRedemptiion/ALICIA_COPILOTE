@@ -597,7 +597,7 @@ class OrbWindow(QWidget):
                 lambda: self.wake_toggled.emit(not self.wake_on),
             ),
             ("Chat Twitch", self.twitch_requested.emit),
-            ("Discussion avec l'autre robot…", self.duo_requested.emit),
+            ("Message à l'autre robot…", self.duo_requested.emit),
             (
                 "Visible en stream (OBS) ✓" if stream_visible else "Visible en stream (OBS)",
                 lambda: self.stream_toggled.emit(not stream_visible),

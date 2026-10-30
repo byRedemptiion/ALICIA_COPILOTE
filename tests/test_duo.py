@@ -23,18 +23,19 @@ def test_new_code_format():
 
 
 @pytest.mark.parametrize(
-    ("text", "topic"),
+    ("text", "expected"),
     [
-        ("dis bonjour à Alicia", "bonjour"),
-        ("Discute avec Alicia de World of Warcraft", "de world of warcraft"),
-        ("demande à alicia comment elle va", "comment elle va"),
-        ("salue Alicia", "salut"),
+        ("dis bonjour à Alicia", ("relay", "dis bonjour à Alicia")),
+        ("demande à alicia ce qu'elle fait", ("relay", "demande à alicia ce qu'elle fait")),
+        ("réponds-lui que j'arrive", ("relay", "réponds-lui que j'arrive")),
+        ("Discute avec Alicia de World of Warcraft", ("chat", "de world of warcraft")),
+        ("parle avec alicia", ("chat", "")),
         ("quel objet pour Ashe ?", None),
         ("dis-moi quoi acheter", None),
     ],
 )
-def test_parse_duo_request(text, topic):
-    assert parse_duo_request(text, ["ALICIA"]) == topic
+def test_parse_duo_request(text, expected):
+    assert parse_duo_request(text, ["ALICIA"]) == expected
 
 
 def test_link_sends_sealed_messages_and_ignores_its_own():
@@ -81,6 +82,10 @@ def test_robots_take_turns(qt_app, tmp_path, monkeypatch):
 
     window.duo_link = Link()
     window.voice_box.setChecked(False)  # pas de voix : envoi immédiat
+    from dataclasses import replace
+
+    duo = replace(window.services.settings.duo, allow_chat=True, max_turns=6)
+    window.services.settings = replace(window.services.settings, duo=duo)
     window._duo_received({"kind": "hello", "name": "VERIS", "sender": "lui"})
     assert window.duo_peer == "VERIS"
     window._duo_received(
@@ -97,9 +102,10 @@ def test_robots_take_turns(qt_app, tmp_path, monkeypatch):
         {"kind": "say", "name": "VERIS", "conv": "c1", "turn": 3, "max": 3, "text": "Ciao"}
     )
     assert window.duo_conv["ended"]
-    # « Veris, dis bonjour à Alicia » passe par le routeur, sans IA
-    reply = window.services.analysis.router("dis bonjour à VERIS")
-    assert reply.intent == "duo" and reply.text == "bonjour"
+    # « Alicia, demande à Veris… » passe par le routeur, sans IA
+    reply = window.services.analysis.router("demande à VERIS ce qu'il fait")
+    assert reply.intent == "duo_relay"
+    assert window.services.analysis.router("discute avec VERIS de WoW").intent == "duo_chat"
     window.duo_link = None
     window.close()
 
@@ -160,4 +166,73 @@ def test_talk_key_works_without_a_game_window(qt_app, tmp_path, monkeypatch):
     monkeypatch.setattr(window, "_start_analysis", lambda *args: started.append(args))
     window.talk_released()
     assert started  # la question part à l'analyse (actions, duo ou message d'erreur)
+    window.close()
+
+
+def _window(qt_app, tmp_path, monkeypatch, **duo_changes):
+    from dataclasses import replace
+
+    from alicia.app import build_services
+    from alicia.core.ai.providers.fake import FakeModel
+    from alicia.core.config import load_settings
+    from alicia.ui.main_window import MainWindow
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow(
+        build_services(
+            load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True, model=FakeModel()
+        )
+    )
+    duo = replace(window.services.settings.duo, **duo_changes)
+    window.services.settings = replace(window.services.settings, duo=duo)
+    sent = []
+
+    class Link:
+        def send(self, kind, **data):
+            sent.append((kind, data))
+            return True
+
+        def stop(self):
+            pass
+
+    window.duo_link = Link()
+    window.voice_box.setChecked(False)
+    return window, sent
+
+
+def _wait(qt_app, condition, seconds=5):
+    deadline = time.monotonic() + seconds
+    while not condition() and time.monotonic() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.02)
+
+
+def test_robots_do_not_answer_each_other_unless_allowed(qt_app, tmp_path, monkeypatch):
+    window, sent = _window(qt_app, tmp_path, monkeypatch, allow_chat=False)
+    window._duo_received(
+        {"kind": "say", "name": "VERIS", "conv": "c1", "turn": 1, "max": 6, "text": "Salut !"}
+    )
+    _wait(qt_app, lambda: bool(sent), seconds=1)
+    assert not [kind for kind, _ in sent if kind == "say"]  # il écoute sans répondre
+    window.duo_chat("WoW")
+    assert not sent  # discussion refusée tant que ce n'est pas autorisé
+    window.duo_link = None
+    window.close()
+
+
+def test_relay_message_goes_to_the_other_player(qt_app, tmp_path, monkeypatch):
+    window, sent = _window(qt_app, tmp_path, monkeypatch, player="Redem")
+    window.duo_peer = "VERIS"
+    window.duo_relay("demande-lui ce qu'il fait")
+    _wait(qt_app, lambda: bool(sent))
+    kind, data = sent[0]
+    assert kind == "relay" and data["player"] == "Redem" and data["text"]
+    # Côté réception : le robot annonce le message à son joueur
+    window._duo_received(
+        {"kind": "relay", "name": "VERIS", "text": "Redem veut savoir ce que tu fais."}
+    )
+    assert (
+        "Message de VERIS" in window.answer.toPlainText() or "Redem" in window.answer.toPlainText()
+    )
+    window.duo_link = None
     window.close()

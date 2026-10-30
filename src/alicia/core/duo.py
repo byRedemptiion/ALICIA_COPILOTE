@@ -224,22 +224,30 @@ def _plain(text: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).replace("’", "'")
 
 
-def parse_duo_request(text: str, others: list[str]) -> str | None:
-    """Sujet de discussion si on demande au robot de parler à l'autre, sinon None.
+def parse_duo_request(text: str, others: list[str]) -> tuple[str, str] | None:
+    """Ce que le joueur demande à son robot vis-à-vis de l'autre robot, ou None.
 
-    « dis bonjour à Alicia » → « bonjour » ; « discute avec Alicia de WoW » → « de WoW »."""
+    - ("relay", demande) : porte-parole vers l'autre joueur (« demande à Alicia ce qu'elle
+      fait », « dis bonjour à Alicia », « réponds-lui que j'arrive ») ;
+    - ("chat", sujet) : les deux robots discutent entre eux (« discute avec Alicia de WoW »)."""
     plain = _plain(text)
     names = [re.escape(_plain(n)) for n in others if n] + [r"l'autre robot", r"ton pote"]
     who = "(?:" + "|".join(names) + ")"
-    pattern = re.compile(
-        r"\b(?:dis|dites|demande|raconte|parle|discute|papote|salue|reponds|explique)\b"
-        r"(?P<before>.{0,60}?)\b(?:a|avec)\s+" + who + r"\b(?P<after>.*)$"
+    chat = re.search(
+        r"\b(?:discute|discutez|papote|parle|bavarde|debattez|debats)\b\s+(?:un peu\s+)?avec\s+"
+        + who
+        + r"\b(?P<after>.*)$",
+        plain,
     )
-    match = pattern.search(plain)
-    if not match:
-        greet = re.search(r"\bsalue\s+" + who + r"\b(?P<after>.*)$", plain)
-        if not greet:
-            return None
-        return ("salut " + greet.group("after")).strip(" ,.!?")
-    topic = f"{match.group('before')} {match.group('after')}".strip(" ,.!?")
-    return re.sub(r"\s+", " ", topic)
+    if chat:
+        return "chat", re.sub(r"\s+", " ", chat.group("after")).strip(" ,.!?")
+    if re.search(r"\b(?:reponds|repond|dis|demande)[- ]?(?:lui|leur)\b", plain):
+        return "relay", text.strip()
+    relay = re.search(
+        r"\b(?:dis|dites|demande|raconte|reponds|explique|previens|transmets|salue|souhaite)\b"
+        r".{0,80}?\b(?:a|au|aupres de)?\s*" + who + r"\b",
+        plain,
+    )
+    if relay:
+        return "relay", text.strip()
+    return None

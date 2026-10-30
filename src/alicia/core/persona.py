@@ -26,6 +26,7 @@ class Persona:
     colors: dict[str, str] = field(default_factory=dict)
     states: dict[str, tuple[int, int, int]] = field(default_factory=dict)
     round_portrait: bool = False  # portrait déjà rond : même cadrage dans le panneau
+    feminine: bool = True  # accords des textes (« elle » / « il »)
 
 
 ALICIA = Persona(
@@ -85,6 +86,7 @@ VERIS = Persona(
     ),
     voice_engine="veris",
     round_portrait=True,
+    feminine=False,
     colors={
         "BG": "#07041c",
         "PANEL": "rgba(22, 12, 58, 0.74)",

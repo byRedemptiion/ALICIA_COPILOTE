@@ -82,3 +82,11 @@ def test_stream_visibility_setting(qt_app, tmp_path, monkeypatch):
     assert orb.stream_visible is False
     assert window.settings_page.stream_box.isChecked() is False
     window.close()
+
+
+def test_veris_is_masculine_in_the_interface(veris, qt_app):
+    from alicia.ui.naming import named
+
+    assert named("ALICIA se réveille toute seule quand elle t'entend") == (
+        "VERIS se réveille tout seul quand il t'entend"
+    )

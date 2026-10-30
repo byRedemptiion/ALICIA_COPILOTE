@@ -219,8 +219,12 @@ class StreamSettings:
 class DuoSettings:
     enabled: bool = False  # ALICIA chez l'un, VERIS chez l'autre : ils se parlent
     code: Secret = field(default_factory=lambda: Secret(None))  # DUO_CODE dans .env
-    max_turns: int = 6  # répliques au total (les deux robots)
+    max_turns: int = 4  # répliques au total quand les robots discutent entre eux
     hear_peer: bool = True  # entendre aussi l'autre robot sur ce PC, avec sa voix
+    allow_chat: bool = False  # les robots ne se répondent tout seuls que si c'est autorisé
+    player: str = ""  # ton prénom, pour les messages transmis (« Redem veut savoir… »)
+    provider: str = "main"  # IA du duo : main (la même) | gemini | openai | ollama
+    key_slot: str = ""  # clé à utiliser (ex. GEMINI_API_KEY_2) ; vide = la clé utilisée
     relay: str = "https://ntfy.sh"
 
 
@@ -447,8 +451,14 @@ def load_settings(
         duo=DuoSettings(
             enabled=bool(_section(data, "duo").get("enabled", False)),
             code=Secret(env.get("DUO_CODE")),
-            max_turns=max(2, min(20, int(_section(data, "duo").get("max_turns", 6) or 6))),
+            max_turns=max(2, min(20, int(_section(data, "duo").get("max_turns", 4) or 4))),
             hear_peer=bool(_section(data, "duo").get("hear_peer", True)),
+            allow_chat=bool(_section(data, "duo").get("allow_chat", False)),
+            player=str(_section(data, "duo").get("player", "")).strip()[:24],
+            provider=_choice(
+                _section(data, "duo"), "provider", "main", ("main", "gemini", "openai", "ollama")
+            ),
+            key_slot=str(_section(data, "duo").get("key_slot", "")).strip(),
             relay=str(_section(data, "duo").get("relay", DuoSettings.relay)).rstrip("/"),
         ),
         update=UpdateSettings(

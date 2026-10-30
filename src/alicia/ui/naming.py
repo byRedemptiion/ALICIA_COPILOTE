@@ -23,6 +23,16 @@ _NAME = re.compile(r"(?<![\\/%])\b(d'|qu'|D'|QU'|d’|qu’)?(ALICIA|Alicia)\b(?
 _ELISION = {"d'": "de ", "qu'": "que ", "D'": "DE ", "QU'": "QUE ", "d’": "de ", "qu’": "que "}
 
 
+_MASCULINE = [
+    (re.compile(r"\bqu'elle\b"), "qu'il"),
+    (re.compile(r"\bQu'elle\b"), "Qu'il"),
+    (re.compile(r"\belle\b"), "il"),
+    (re.compile(r"\bElle\b"), "Il"),
+    (re.compile(r"\btoute seule\b"), "tout seul"),
+    (re.compile(r"\bseule\b"), "seul"),
+]
+
+
 def spaced(title: str, sep: str = " ") -> str:
     return sep.join(title)
 
@@ -42,7 +52,11 @@ def named(text: str) -> str:
             prefix = _ELISION[prefix]
         return (prefix or "") + name
 
-    return _NAME.sub(swap, text)
+    text = _NAME.sub(swap, text)
+    if not persona.feminine:  # VERIS : « il se réveille tout seul »
+        for pattern, value in _MASCULINE:
+            text = pattern.sub(value, text)
+    return text
 
 
 def rename_widgets(root: QWidget) -> None:
