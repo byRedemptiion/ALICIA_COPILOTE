@@ -50,6 +50,22 @@ def build_system_prompt(game_context: str | None = None, *, spoken: bool = False
             f"\nTon joueur s'appelle {player().name}. Appelle-le par ce prénom de temps en "
             "temps (pas à chaque réponse), toujours écrit ainsi.\n"
         )
+    from alicia.core.personality import load
+
+    character = load(current().key)
+    if character:
+        mate = (
+            "une coéquipière de jeu bienveillante"
+            if current().feminine
+            else ("un coéquipier de jeu bienveillant")
+        )
+        prompt += (
+            "\nPersonnalité choisie par le joueur (elle décide de ton ton, de ton humour et "
+            "de ta façon de parler ; les règles ci-dessus restent prioritaires : tu conseilles "
+            f"sans jamais jouer à sa place, et tu restes {mate}, "
+            "sans aucun contenu romantique ou sexuel) :\n"
+            f"<personnalite>\n{character}\n</personnalite>\n"
+        )
     if spoken:
         prompt += "\n" + VOICE_RULES
     if game_context:

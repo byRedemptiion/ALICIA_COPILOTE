@@ -8,6 +8,7 @@ import re
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -716,6 +717,7 @@ class MainWindow(QMainWindow):
         self.settings_page.load_memory(capture, self.memory_usage_text())
         self.settings_page.load_stream(self.services.settings.stream)
         self.settings_page.load_player(self.services.settings.player)
+        self._show_personality()
         self.settings_page.load_duo(
             self.services.settings.duo,
             bool(self.services.settings.update.token),
@@ -906,6 +908,8 @@ class MainWindow(QMainWindow):
                 self._save("player", "phonetic", player.phonetic)
             self.services.settings = replace(self.services.settings, player=player)
             set_player(player.name, player.phonetic)
+        elif key in ("personality_load", "personality_edit", "personality_remove"):
+            self._personality_action(key)
         elif key == "player_test":
             from alicia.core.persona import player
 
@@ -1419,6 +1423,58 @@ class MainWindow(QMainWindow):
             self.bubble.hide_after(self.bubble.linger_ms(text))
         self.overlay_gesture("nod")
         self._set_status(f"Message transmis à {other}.")
+
+    def _show_personality(self) -> None:
+        from alicia.core.personality import load, personality_file
+
+        persona = current_persona()
+        text = load(persona.key)
+        if text:
+            path = personality_file(persona.key)
+            self.settings_page.show_personality(
+                f"{persona.title} : personnalité chargée ({len(text) // 100 / 10:g} k caractères)"
+                f" — {path.name}"
+            )
+        else:
+            self.settings_page.show_personality(
+                f"{persona.title} : personnalité de base (charge un .md pour la personnaliser)"
+            )
+
+    def _personality_action(self, key: str) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtWidgets import QFileDialog
+
+        from alicia.core import personality
+
+        persona = current_persona()
+        path = personality.personality_file(persona.key)
+        if key == "personality_load":
+            chosen, _ = QFileDialog.getOpenFileName(
+                self, f"Personnalité de {persona.title}", "", "Texte (*.md *.txt)"
+            )
+            if not chosen:
+                return
+            try:
+                personality.install(persona.key, Path(chosen))
+            except (OSError, UnicodeDecodeError) as exc:
+                log.error("Personnalité non chargée : %r", exc)
+                self._notify("⚠ Fichier illisible : choisis un fichier texte .md en UTF-8.")
+                return
+            self._notify(f"Personnalité de {persona.title} chargée ✓ (dès la prochaine réponse)")
+        elif key == "personality_edit":
+            if not path.is_file():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    f"# Personnalité de {persona.title}\n\n"
+                    "Décris ici son caractère, son ton, son humour, quand parler ou se taire…\n",
+                    encoding="utf-8",
+                )
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            personality.remove(persona.key)
+            self._notify(f"{persona.title} reprend sa personnalité de base.")
+        self._show_personality()
 
     def _player_name(self) -> str:
         from alicia.core.persona import player

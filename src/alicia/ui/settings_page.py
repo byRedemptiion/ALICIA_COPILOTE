@@ -162,6 +162,20 @@ class SettingsPage(QScrollArea):
         grid.addWidget(QLabel("Prononciation"), 3, 0)
         grid.addWidget(self.player_phonetic, 3, 1)
         grid.addWidget(listen, 3, 2)
+        self.personality_state = _muted("")
+        self.personality_state.setProperty("keep_names", True)
+        personality_buttons = QHBoxLayout()
+        for text, key in (
+            ("Charger un .md…", "personality_load"),
+            ("Modifier", "personality_edit"),
+            ("Retirer", "personality_remove"),
+        ):
+            button = QPushButton(text)
+            button.clicked.connect(lambda _=False, k=key: self._emit(k, True))
+            personality_buttons.addWidget(button)
+        grid.addWidget(QLabel("Personnalité"), 4, 0)
+        grid.addWidget(self.personality_state, 4, 1)
+        grid.addLayout(personality_buttons, 4, 2)
         self.player_name.setProperty("keep_names", True)
         self.player_phonetic.setProperty("keep_names", True)
         grid.setColumnStretch(2, 1)
@@ -630,6 +644,9 @@ class SettingsPage(QScrollArea):
             self.ai_label.setText(ai_text)
         finally:
             self._loading = False
+
+    def show_personality(self, text: str) -> None:
+        self.personality_state.setText(text)
 
     def load_player(self, player) -> None:  # type: ignore[no-untyped-def]
         self._loading = True

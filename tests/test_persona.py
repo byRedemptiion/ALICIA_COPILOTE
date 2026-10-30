@@ -130,3 +130,22 @@ def test_player_settings_are_saved(qt_app, tmp_path, monkeypatch):
     finally:
         set_player("", "")
         window.close()
+
+
+def test_personality_file_is_added_to_the_prompt(tmp_path, monkeypatch):
+    from alicia.core import personality
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    source = tmp_path / "Alic.ia_profil.md"
+    source.write_text(
+        "# Alic.ia\n\nTu es malicieuse et tu parles simplement.\n\n"
+        "## À régler séparément\n\nNotes pour les humains.\n",
+        encoding="utf-8",
+    )
+    personality.install("alicia", source)
+    prompt = build_system_prompt()
+    assert "Tu es malicieuse" in prompt and "Notes pour les humains" not in prompt
+    assert "sans jamais jouer à sa place" in prompt
+    personality.remove("alicia")
+    assert "<personnalite>" not in build_system_prompt()
