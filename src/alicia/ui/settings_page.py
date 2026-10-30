@@ -553,6 +553,60 @@ class SettingsPage(QWidget):
         )
         self._tab_layouts["ai"].addWidget(ai_panel)
 
+        brains, grid = _panel()
+        grid.addWidget(_title("DEUX CERVEAUX"), 0, 0, 1, 3)
+        self.ollama_model = QComboBox()
+        self.ollama_model.setEditable(True)
+        for name, label in (
+            ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go, voit bien l'écran (actuel)"),
+            ("qwen3-vl:8b", "qwen3-vl:8b — 6 Go, plus récent"),
+            ("lfm3-omni:2b", "lfm3-omni:2b — 2,4 Go, ultra rapide, réflexion limitée"),
+        ):
+            self.ollama_model.addItem(label, name)
+        self.ollama_model.activated.connect(
+            lambda _i: self._emit("ollama_model", self._combo_value(self.ollama_model))
+        )
+        self.ollama_model.lineEdit().editingFinished.connect(
+            lambda: self._emit("ollama_model", self._combo_value(self.ollama_model))
+        )
+        grid.addWidget(QLabel("Modèle Ollama"), 1, 0)
+        grid.addWidget(self.ollama_model, 1, 1, 1, 2)
+        self.deep_box = QComboBox()
+        for key, label in (
+            ("", "Aucun : la même IA pour tout"),
+            ("gemini", "Gemini (en ligne, rien sur ton PC) — conseillé en jeu"),
+            ("openai", "ChatGPT (en ligne, réflexion moyenne)"),
+            ("ollama", "Ollama sur ton PC (gros modèle : hors jeu)"),
+        ):
+            self.deep_box.addItem(label, key)
+        self.deep_box.currentIndexChanged.connect(
+            lambda _i: self._emit("deep_provider", self.deep_box.currentData())
+        )
+        self.deep_model = QLineEdit()
+        self.deep_model.setPlaceholderText(
+            "modèle (vide = celui par défaut ; Ollama : qwen3.8:27b)"
+        )
+        self.deep_model.editingFinished.connect(
+            lambda: self._emit("deep_model", self.deep_model.text())
+        )
+        grid.addWidget(QLabel("Cerveau réfléchi"), 2, 0)
+        grid.addWidget(self.deep_box, 2, 1)
+        grid.addWidget(self.deep_model, 2, 2)
+        grid.addWidget(
+            _muted(
+                "Le cerveau rapide (l'IA utilisée) répond à tout. Les questions de réflexion "
+                "(« analyse ma partie », « meilleure stratégie », « mon build », « réfléchis "
+                "bien… ») partent au cerveau réfléchi. En jeu, préfère Gemini ou ChatGPT : un "
+                "gros modèle Ollama (18 Go) ne tient pas en VRAM à côté du jeu et ferait "
+                "chauffer le processeur."
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
+        self._tab_layouts["ai"].addWidget(brains)
+
         general, grid = _panel()
         grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
         self.mode_box = QComboBox()
@@ -700,6 +754,28 @@ class SettingsPage(QWidget):
             self.speed_label.setText(f"{percent:+d} %")
             self.mode_box.setCurrentIndex(max(0, self.mode_box.findData(ui_mode)))
             self.ai_label.setText(ai_text)
+        finally:
+            self._loading = False
+
+    @staticmethod
+    def _combo_value(box: QComboBox) -> str:
+        """Valeur d'une liste modifiable : le modèle choisi, ou le texte tapé."""
+        text = box.currentText().strip()
+        index = box.findText(text)
+        if index >= 0 and box.itemData(index):
+            return str(box.itemData(index))
+        return text.split(" ")[0]
+
+    def load_brains(self, ai) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            index = self.ollama_model.findData(ai.ollama.model)
+            if index < 0:
+                self.ollama_model.addItem(ai.ollama.model, ai.ollama.model)
+                index = self.ollama_model.findData(ai.ollama.model)
+            self.ollama_model.setCurrentIndex(index)
+            self.deep_box.setCurrentIndex(max(0, self.deep_box.findData(ai.deep_provider)))
+            self.deep_model.setText(ai.deep_model)
         finally:
             self._loading = False
 

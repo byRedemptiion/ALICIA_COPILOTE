@@ -57,6 +57,7 @@ class AnalysisService:
         self.settings = settings
         self.capture = capture
         self.model = model
+        self.deep_model = None  # cerveau « réfléchi » (optionnel)
         self.session = session
 
     def analyze(
@@ -177,10 +178,17 @@ class AnalysisService:
                 if web_search and profile.sources
                 else "",
             )
+            model = self.model
+            if self.deep_model is not None and audio is None:
+                from alicia.core.ai.factory import wants_deep_thinking
+
+                if wants_deep_thinking(question):
+                    model = self.deep_model  # stratégie, build, analyse : le cerveau réfléchi
+                    log.info("Question de réflexion : cerveau réfléchi")
             log.info(
                 "Appel IA %s/%s — image %dx%d, %d Ko, profil %s, historique %d",
-                self.model.provider,
-                self.model.model,
+                model.provider,
+                model.model,
                 image.width,
                 image.height,
                 len(image.data) // 1024,
@@ -195,7 +203,7 @@ class AnalysisService:
                 )
                 sink = splitter.feed
             try:
-                result = self.model.analyze(request, on_delta=sink, cancel=cancel)
+                result = model.analyze(request, on_delta=sink, cancel=cancel)
             except ProviderError as exc:
                 level = logging.INFO if exc.kind is ProviderErrorKind.CANCELLED else logging.ERROR
                 log.log(level, "Appel IA échoué [%s] : %s", exc.kind, exc.detail)

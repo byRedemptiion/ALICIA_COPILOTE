@@ -17,6 +17,7 @@ from alicia.core.audio.speaker import Speaker
 from alicia.core.audio.stt import LocalTranscriber
 from alicia.core.capture.service import CaptureService
 from alicia.core.config import Settings
+from alicia.core.errors import AliciaError
 from alicia.core.session.context import SessionContext
 
 log = logging.getLogger("alicia.app")
@@ -60,6 +61,13 @@ def build_services(
         actions = ActionController(settings.actions, None if demo else _system())
     router = actions.route if actions is not None else None
     analysis = AnalysisService(settings, capture, model, session, transcriber, router)
+    if settings.ai.deep_provider and settings.ai.provider != "fake":
+        from alicia.core.ai.factory import create_deep_model
+
+        try:
+            analysis.deep_model = create_deep_model(settings.ai)
+        except AliciaError as exc:
+            log.warning("Cerveau réfléchi indisponible : %s", exc.detail)
     speaker = speaker or Speaker(voice)
     recorder = recorder or Recorder(voice.sample_rate, voice.input_device, voice.max_record_s)
     return Services(

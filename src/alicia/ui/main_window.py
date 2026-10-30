@@ -718,6 +718,7 @@ class MainWindow(QMainWindow):
         self.settings_page.load_memory(capture, self.memory_usage_text())
         self.settings_page.load_stream(self.services.settings.stream)
         self.settings_page.load_player(self.services.settings.player)
+        self.settings_page.load_brains(self.services.settings.ai)
         self._show_personality()
         self.settings_page.load_duo(
             self.services.settings.duo,
@@ -909,6 +910,15 @@ class MainWindow(QMainWindow):
                 self._save("player", "phonetic", player.phonetic)
             self.services.settings = replace(self.services.settings, player=player)
             set_player(player.name, player.phonetic)
+        elif key in ("ollama_model", "deep_provider", "deep_model"):
+            text = str(value or "").strip()
+            if key == "ollama_model":
+                if not text or text == self.services.settings.ai.ollama.model:
+                    return
+                self._save("ai.ollama", "model", text)
+            else:
+                self._save("ai", key, text)
+            self._reload_ai()
         elif key in ("personality_load", "personality_edit", "personality_remove"):
             self._personality_action(key)
         elif key == "player_test":
@@ -1858,6 +1868,12 @@ class MainWindow(QMainWindow):
             speaker.synthesizer = make_synthesizer(settings.voice)
         self.services.model = model
         self.services.analysis.model = model
+        from alicia.core.ai.factory import create_deep_model
+
+        try:
+            self.services.analysis.deep_model = create_deep_model(settings.ai)
+        except AliciaError as exc:
+            log.warning("Cerveau réfléchi indisponible : %s", exc.detail)
         self.provider_label.setText(f"IA · {model.provider} / {model.model}")
         log.info("IA choisie : %s/%s", model.provider, model.model)
         problem = model.check()
@@ -1865,24 +1881,63 @@ class MainWindow(QMainWindow):
         self._update_state()
         self.prepare_ollama()
 
+    def _reload_ai(self) -> None:
+        """Relit les réglages d'IA et recrée les deux cerveaux, sans redémarrer."""
+        from dataclasses import replace
+
+        from alicia.core.ai.factory import create_deep_model, create_model
+        from alicia.core.config import load_settings
+
+        try:
+            ai = load_settings().ai
+        except AliciaError as exc:
+            log.error("Réglages d'IA illisibles : %s", exc.detail)
+            return
+        self.services.settings = replace(self.services.settings, ai=ai)
+        if not self.services.demo:
+            model = create_model(ai)
+            self.services.model = self.services.analysis.model = model
+            self.provider_label.setText(f"IA · {model.provider} / {model.model}")
+        try:
+            deep = create_deep_model(ai) if not self.services.demo else None
+        except AliciaError as exc:
+            log.warning("Cerveau réfléchi indisponible : %s", exc.detail)
+            deep = None
+        self.services.analysis.deep_model = deep
+        log.info(
+            "Cerveaux : rapide %s/%s, réfléchi %s",
+            self.services.model.provider,
+            self.services.model.model,
+            f"{deep.provider}/{deep.model}" if deep is not None else "aucun",
+        )
+        self.prepare_ollama()
+
     def prepare_ollama(self) -> None:
         """IA locale choisie : démarre Ollama s'il ne tourne pas, télécharge son modèle au besoin."""
         ai = self.services.settings.ai
-        if ai.provider != "ollama":
+        models = [ai.ollama.model] if ai.provider == "ollama" else []
+        if ai.deep_provider == "ollama":
+            models.append(ai.deep_model or "qwen3.8:27b")
+        if not models or self.services.demo:
             return
         from alicia.core.ai.providers.ollama_runtime import OllamaRuntime
 
-        if self.ollama_runtime is None or self.ollama_runtime.model != ai.ollama.model:
-            self.ollama_runtime = OllamaRuntime(ai.ollama.base_url, ai.ollama.model)
+        if self.ollama_runtime is None or self.ollama_runtime.model != models[0]:
+            self.ollama_runtime = OllamaRuntime(ai.ollama.base_url, models[0])
         runtime = self.ollama_runtime
 
         def work(emit):  # type: ignore[no-untyped-def]
             started = runtime.ensure_running()
             if started:
                 emit(("status", "Ollama démarré ✓"))
-            if not runtime.has_model():
-                emit(("status", f"Téléchargement du modèle « {runtime.model} » (plusieurs Go)…"))
-                runtime.pull(lambda percent: emit(("pull", percent)))
+            pulled = False
+            for name in models:
+                one = OllamaRuntime(ai.ollama.base_url, name)
+                if not one.has_model():
+                    emit(("status", f"Téléchargement du modèle « {name} » (plusieurs Go)…"))
+                    one.pull(lambda percent: emit(("pull", percent)))
+                    pulled = True
+            if pulled:
                 return "pulled"
             return "started" if started else "ready"
 

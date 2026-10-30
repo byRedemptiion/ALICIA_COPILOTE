@@ -81,6 +81,7 @@ class OllamaRuntime:
     def _launch(exe: Path) -> subprocess.Popen:
         return subprocess.Popen(  # programme fixe (ollama.exe), aucune commande libre
             [str(exe), "serve"],
+            env=_ollama_env(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -179,3 +180,23 @@ class OllamaRuntime:
         if process is not None and process.poll() is None:
             process.terminate()
             log.info("Ollama arrêté (démarré par ALICIA)")
+
+
+def _ollama_env() -> dict[str, str]:
+    """Environnement d'Ollama : reprend OLLAMA_MODELS tout juste réglé dans Windows (dossier
+    des modèles sur un autre disque) sans attendre un redémarrage du PC."""
+    import os
+    import sys
+
+    env = dict(os.environ)
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+                value, _kind = winreg.QueryValueEx(key, "OLLAMA_MODELS")
+            if value:
+                env["OLLAMA_MODELS"] = str(value)
+        except OSError:
+            pass
+    return env

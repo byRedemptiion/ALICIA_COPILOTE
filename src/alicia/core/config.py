@@ -134,6 +134,10 @@ class AISettings:
     ollama: OllamaSettings
     web_search: bool = False
     openai: OpenAISettings = field(default_factory=OpenAISettings)
+    # Deuxième cerveau, pour les questions qui demandent de réfléchir (stratégie, build,
+    # analyse de partie) : "" = aucun, sinon gemini | openai | ollama (+ modèle au choix).
+    deep_provider: str = ""
+    deep_model: str = ""
 
 
 @dataclass(frozen=True)
@@ -391,6 +395,8 @@ def load_settings(
     thinking_budget = gemini.get("thinking_budget")
     return Settings(
         ai=AISettings(
+            deep_provider=_choice(ai, "deep_provider", "", ("", "gemini", "openai", "ollama")),
+            deep_model=str(ai.get("deep_model", "")).strip(),
             provider=provider,
             timeout_s=_number(ai, "timeout_s", float, 1),
             max_output_tokens=_number(ai, "max_output_tokens", int, 16),
