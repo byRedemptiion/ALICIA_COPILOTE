@@ -118,3 +118,17 @@ def test_other_requests_wait_while_she_talks():
     listener.stop_only = lambda: True
     feed(listener, np.concatenate([silence(1), tone(2.5), silence(1.2)]))
     assert events == {"wake": 0, "commands": [], "cancel": []}
+
+
+def test_reply_is_heard_without_saying_alicia():
+    listener, events = make("oui")
+    listener.listen_now(5)
+    feed(listener, np.concatenate([silence(0.5), tone(0.8), silence(1.2)]))
+    assert events["wake"] == 0 and len(events["commands"]) == 1
+
+
+def test_no_reply_cancels_after_the_window():
+    listener, events = make("oui")
+    listener.listen_now(2)
+    feed(listener, silence(3))
+    assert not events["commands"] and events["cancel"]

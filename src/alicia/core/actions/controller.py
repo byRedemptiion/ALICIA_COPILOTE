@@ -31,6 +31,10 @@ class ActionReply:
     intent: str
     awaiting_confirmation: bool = False
     done: bool = False
+    expects_reply: bool = False  # ALICIA écoute la réponse sans attendre « Alicia »
+
+    def __post_init__(self) -> None:
+        self.expects_reply = self.expects_reply or self.awaiting_confirmation
 
 
 def _duration(seconds: int) -> str:
@@ -166,7 +170,8 @@ class ActionController:
             log.error("Action %s échouée : %s", name, exc.detail)
             return ActionReply(exc.user_message, name, done=True)
         log.info("Action %s exécutée", name)
-        return ActionReply(text, name, done=True)
+        # Extinction programmée : on écoute « annule » sans qu'il faille redire « Alicia ».
+        return ActionReply(text, name, done=True, expects_reply=name in ("shutdown", "restart"))
 
     def _start_timer(self, seconds: int, label: str) -> str:
         if seconds <= 0:

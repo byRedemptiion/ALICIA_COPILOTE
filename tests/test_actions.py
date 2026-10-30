@@ -107,7 +107,8 @@ def test_shutdown_needs_confirmation_then_can_be_cancelled():
     assert reply.awaiting_confirmation and "confirmes" in reply.text
     assert system.calls == []
     reply = actions.route("oui")
-    assert system.calls == [("shutdown", 60)] and "annule" in reply.text
+    assert system.calls == [("shutdown", 20)] and "annule" in reply.text
+    assert reply.expects_reply  # ALICIA écoute « annule » sans redire son nom
     reply = actions.route("non non annule")
     assert system.calls[-1] == ("cancel",) and "reste allumé" in reply.text
 

@@ -191,7 +191,7 @@ DEFAULT_APPS = {
 @dataclass(frozen=True)
 class ActionSettings:
     enabled: bool = True
-    shutdown_delay_s: int = 60
+    shutdown_delay_s: int = 20
     confirm_timeout_s: float = 20.0
     apps: dict[str, AppEntry] = field(default_factory=lambda: dict(DEFAULT_APPS))
 

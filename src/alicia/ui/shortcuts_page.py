@@ -44,7 +44,8 @@ VOICE_COMMANDS = (
     ("« Alicia, lance Discord »", "ouvre une appli de ta liste (Discord, Spotify, Steam…)"),
     ("« Alicia, monte le son » / « volume à 30 »", "règle le volume de Windows"),
     ("« Alicia, rappelle-moi dans 10 minutes de … »", "rappel dit à voix haute"),
-    ("« Alicia, éteins le PC »", "demande un « oui », puis 60 s pour dire « annule »"),
+    ("« Alicia, éteins le PC »", "« oui » directement (sans redire Alicia), puis 20 s pour « annule »"),
+    ("« Alicia, … » pendant qu'elle parle", "elle se tait et écoute ta nouvelle demande"),
 )
 
 

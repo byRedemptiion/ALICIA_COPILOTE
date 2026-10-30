@@ -302,7 +302,7 @@ def test_typed_action_works_without_game_or_ai(qt_app, settings):
     assert "confirmes" in window.answer.toPlainText()
     window.question.setText("oui")
     window.analyze_or_cancel()
-    assert system.calls == [("shutdown", 60)]
+    assert system.calls == [("shutdown", 20)]
     assert model.requests == []
     window.close()
 
@@ -630,3 +630,33 @@ def test_question_about_the_past_sends_remembered_images(settings, tmp_path):
     assert "mémoire de partie" in request.system_prompt
     services.analysis.analyze(DEMO_WINDOW, "Quel objet maintenant ?")
     assert len(model.requests[-1].images) == 1
+
+
+def test_confirmation_question_opens_the_mic_for_the_answer(qt_app, settings):
+    from alicia.ui.main_window import MainWindow
+
+    class FakeWake:
+        running = True
+        level = 0.0
+
+        def __init__(self):
+            self.listened = []
+
+        def listen_now(self, seconds):
+            self.listened.append(seconds)
+
+        def stop(self):
+            pass
+
+    window = MainWindow(build_services(settings, demo=True, model=FakeModel()))
+    window.wake = FakeWake()
+    from alicia.core.actions.controller import ActionReply
+    from alicia.core.analysis.service import AnalysisOutcome
+
+    question = ActionReply("J'éteins le PC. Tu confirmes ?", "shutdown", awaiting_confirmation=True)
+    window._action_done(AnalysisOutcome("action", None, None, "", 0, action=question))
+    assert window.wake.listened == [8.0]
+    assert window._awaiting_answer and window.core.state == "listening"
+    window._wake_cancel("rien")
+    assert not window._awaiting_answer
+    window.close()

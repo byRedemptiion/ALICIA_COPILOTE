@@ -52,7 +52,8 @@ Au lancement, **seul le rond d'ALICIA s'affiche**, en haut à droite, toujours a
 Plus besoin de F10 : **commence ta phrase par « Alicia »**. « Alicia, lance Discord », « Alicia, quel objet je prends ? », « Alicia, éteins le PC ». Tu peux aussi dire « Alicia » seul, attendre que le rond passe au cyan, puis faire ta demande.
 
 - Tout reste **sur ton PC** : un petit modèle Whisper local repère son nom au début des phrases ; tant qu'il n'est pas dit, rien n'est envoyé ni gardé.
-- **« Alicia, stop »** (ou « tais-toi », « chut ») la coupe pendant qu'elle parle et annule l'analyse en cours. Pendant qu'elle parle ou réfléchit, c'est la seule phrase qu'elle écoute.
+- **Elle écoute même quand elle parle** : « Alicia, … » la coupe et devient ta nouvelle demande. **« Alicia, stop »** (ou « tais-toi », « chut ») la fait taire et annule l'analyse en cours (pendant qu'elle réfléchit, c'est la seule phrase écoutée).
+- **Pas besoin de redire « Alicia » pour répondre** : après « Tu confirmes ? » ou « Dis annule… », elle écoute ta réponse pendant 8 s (le rond passe au cyan).
 - **Onglet RACCOURCIS** : change la touche pour lui parler (F10) ou celle de l'analyse (F9) — clique, puis appuie sur la nouvelle touche, ou sur un **bouton latéral de souris** (4/5, le jeu le reçoit toujours). La liste des commandes vocales y est aussi.
 - Case **Réveil « Alicia »** dans le panneau, ou **clic droit sur le rond**, pour la couper (par exemple en vocal avec des amis qui disent son nom).
 - Premier lancement : le petit modèle (~140 Mo) se télécharge tout seul en arrière-plan.
@@ -78,7 +79,7 @@ Avec **F10** ou à l'écrit, Alicia exécute certaines demandes **sur Windows, j
 | « Lance Discord », « ouvre Spotify » | Applis de la liste `[actions.apps]` | immédiat |
 | « Rappelle-moi dans 20 minutes de manger », « minuteur de 5 minutes » | Rappel dit à voix haute | immédiat |
 | « Verrouille le PC », « mets le PC en veille », « ferme Discord » | Session, veille, fermeture d'appli | **confirmation** (« oui » / « non ») |
-| « Éteins le PC », « redémarre le PC » | Extinction / redémarrage | **confirmation + 60 s**, « annule » l'arrête |
+| « Éteins le PC », « redémarre le PC » | Extinction / redémarrage | **confirmation + 20 s**, « annule » l'arrête |
 
 - Les demandes sont reconnues **sur ton PC, sans IA** (instantané, gratuit, hors ligne). Seules les actions de cette liste existent : Alicia ne peut jamais lancer une commande libre.
 - Un « non » l'emporte toujours, et une confirmation expire au bout de 20 s.

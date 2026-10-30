@@ -156,6 +156,8 @@ class MainWindow(QMainWindow):
         self.wake = None  # WakeListener, créé quand le réveil vocal est activé
         self.live = None  # LiveCapture : capture récente toujours prête
         self._speech_frame: Frame | None = None
+        self._expect_reply = False  # elle attend « oui / non / annule » après une action
+        self._awaiting_answer = False  # elle écoute cette réponse en ce moment
         self._shown_frame: Frame | None = None
         self.ollama_runtime = None  # OllamaRuntime quand l'IA locale est choisie
         self.update_info: UpdateInfo | None = None
@@ -1047,9 +1049,9 @@ class MainWindow(QMainWindow):
         return bool(recorder is not None and recorder.recording)
 
     def _wake_stop_only(self) -> bool:
-        """Pendant qu'ALICIA analyse ou parle, seul « Alicia, stop » est écouté."""
-        speaker = self.services.speaker
-        return bool(self.busy or (speaker is not None and getattr(speaker, "speaking", False)))
+        """Pendant qu'ALICIA analyse, seul « Alicia, stop » est écouté. Pendant qu'elle parle,
+        « Alicia, … » la coupe et devient la nouvelle demande (comme une enceinte connectée)."""
+        return bool(self.busy)
 
     def voice_stop(self) -> None:
         """« Alicia, stop » : elle se tait et annule l'analyse en cours."""
@@ -1062,6 +1064,7 @@ class MainWindow(QMainWindow):
             self.bubble.fade_out()
 
     def _wake_heard(self) -> None:
+        self.stop_voice()  # « Alicia » pendant qu'elle parle : elle se tait et t'écoute
         self._speech_frame = self._live_frame()
         self._core("listening")
         self._set_status("🎙 Je t'écoute…")
@@ -1069,6 +1072,7 @@ class MainWindow(QMainWindow):
             self.bubble.ask("🎙 …")
 
     def _wake_command(self, audio: PreparedAudio) -> None:
+        self._awaiting_answer = False
         if self.busy:
             return
         window = self.services.capture.foreground_window() or self.observed
@@ -1078,10 +1082,25 @@ class MainWindow(QMainWindow):
         self.question.setText("🎙 …")
         self._start_analysis(window, "", audio, self._take_speech_frame())  # type: ignore[arg-type]
 
+    def _listen_for_reply(self) -> None:
+        """Après « Tu confirmes ? » : elle écoute ta réponse sans que tu redises « Alicia »."""
+        self._expect_reply = False
+        if self.wake is None or not self.wake.running:
+            self._set_status("Réponds « oui » ou « non » (F10, ou écris-le).")
+            return
+        self.wake.listen_now(8.0)
+        self._awaiting_answer = True
+        self._core("listening")
+        self._set_status("🎙 Je t'écoute : oui ou non ?")
+        if self._bubble_active():
+            self.bubble.set_question("🎙 …")
+            self.bubble.keep()
+
     def _wake_cancel(self, reason: str) -> None:
+        self._awaiting_answer = False
         log.info("Réveil sans demande : %s", reason)
         self._core_settle()
-        self._set_status("Je n'ai pas entendu de demande après « Alicia ».")
+        self._set_status("Je n'ai rien entendu.")
         if self._bubble_active() and self.bubble.isVisible():
             self.bubble.fade_out()
 
@@ -1287,7 +1306,9 @@ class MainWindow(QMainWindow):
     def _core_settle(self) -> None:
         """Retour au repos, sauf si ALICIA est occupée ou parle."""
         speaker = self.services.speaker
-        if self.busy:
+        if self._awaiting_answer:
+            self._core("listening")
+        elif self.busy:
             self._core("thinking")
         elif speaker is not None and getattr(speaker, "speaking", False):
             self._core("speaking")
@@ -1677,6 +1698,7 @@ class MainWindow(QMainWindow):
             self.bubble.ask(asked)
         self.sources_label.setText("")
         self.answer_info.setText(f"Action sur le PC : {reply.intent} · [{outcome.operation_id}]")
+        self._expect_reply = reply.expects_reply
         if reply.awaiting_confirmation:
             self._set_status(
                 "Confirmation demandée : réponds « oui » ou « non » (F10 ou à l'écrit)."
@@ -1684,7 +1706,10 @@ class MainWindow(QMainWindow):
         else:
             self._set_status("Action traitée.")
         self._core("action")
-        self._bubble_finish(reply.text, self._say(reply.text))
+        spoken = self._say(reply.text)
+        self._bubble_finish(reply.text, spoken)
+        if self._expect_reply and not spoken:
+            self._listen_for_reply()
         QTimer.singleShot(1800, self._core_settle)
         self.analysis_done.emit(outcome)
 
@@ -1726,8 +1751,15 @@ class MainWindow(QMainWindow):
                 self._flash_error()
             else:
                 self._core_settle()
+            if self._expect_reply:
+                self._listen_for_reply()
             # Elle a fini de parler : la bulle s'efface peu après (sauf nouvelle question).
-            if self._bubble_active() and not self.busy and self.bubble.isVisible():
+            if (
+                self._bubble_active()
+                and not self.busy
+                and not self._awaiting_answer
+                and self.bubble.isVisible()
+            ):
                 self.bubble.hide_after(self.bubble.after_voice_ms())
 
     def _show_sources(self, result) -> None:  # type: ignore[no-untyped-def]

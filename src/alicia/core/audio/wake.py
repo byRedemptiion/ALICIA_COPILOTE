@@ -223,6 +223,17 @@ class WakeListener:
         self._waited = 0.0
         self._name_only = False
         self._spoke_after = False
+        self._follow_limit = FOLLOW_UP_S
+
+    def listen_now(self, seconds: float = FOLLOW_UP_S) -> None:
+        """Écoute la prochaine phrase comme une demande, sans mot de réveil (réponse attendue :
+        « oui », « non », « annule »…). Appelé quand ALICIA a fini de parler."""
+        floor = self._floor
+        self.reset()
+        self._floor = floor
+        self.state = self.FOLLOW_UP
+        self._follow_limit = seconds
+        log.info("Écoute de ta réponse pendant %.0f s (sans dire « Alicia »)", seconds)
 
     def _duration(self) -> float:
         return sum(len(b) for b in self._buffer) / self.sample_rate
@@ -267,7 +278,7 @@ class WakeListener:
                     return
             else:
                 self._loud = 0
-            if self._waited >= FOLLOW_UP_S:
+            if self._waited >= getattr(self, "_follow_limit", FOLLOW_UP_S):
                 self._finish_idle()
                 self.on_cancel("rien entendu après « Alicia »")
             return

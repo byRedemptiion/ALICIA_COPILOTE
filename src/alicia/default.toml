@@ -118,7 +118,7 @@ wake_model = "base"          # petit Whisper dédié au mot de réveil ("tiny" =
 # Actions sur le PC à la voix (F10) ou à l'écrit : éteindre, redémarrer, veille, verrouiller,
 # volume, lancer/fermer une appli de la liste, minuteur. Jamais d'action dans le jeu.
 enabled = true
-shutdown_delay_s = 60        # délai avant extinction/redémarrage (« annule » l'arrête)
+shutdown_delay_s = 20        # délai avant extinction/redémarrage (« annule » l'arrête)
 confirm_timeout_s = 20       # temps pour répondre « oui » à une confirmation
 
 # Applis que tu peux lancer/fermer à la voix : nom = { launch = chemin ou lien, process = .exe }
