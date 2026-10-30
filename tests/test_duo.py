@@ -126,3 +126,38 @@ def test_peer_line_shows_its_head_in_the_bubble(qt_app, tmp_path, monkeypatch):
     window.bubble.ask("question normale")
     assert not window.bubble.avatar.isVisibleTo(window.bubble)
     window.close()
+
+
+def test_talk_key_works_without_a_game_window(qt_app, tmp_path, monkeypatch):
+    """Touche pour parler sans jeu au premier plan : la demande part quand même (avant, rien)."""
+    from alicia.app import build_services
+    from alicia.core.ai.base import PreparedAudio
+    from alicia.core.ai.providers.fake import FakeModel
+    from alicia.core.config import load_settings
+    from alicia.ui.main_window import MainWindow
+
+    class Recorder:
+        recording = True
+        level = 0.0
+        device = ""
+
+        def stop(self):
+            self.recording = False
+            return PreparedAudio(b"RIFF", "audio/wav", 1.0)
+
+        def cancel(self):
+            pass
+
+    monkeypatch.chdir(tmp_path)
+    services = build_services(
+        load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True, model=FakeModel()
+    )
+    services.recorder = Recorder()
+    window = MainWindow(services)
+    monkeypatch.setattr(window.services.capture, "foreground_window", lambda: None)
+    window.observed = None
+    started = []
+    monkeypatch.setattr(window, "_start_analysis", lambda *args: started.append(args))
+    window.talk_released()
+    assert started  # la question part à l'analyse (actions, duo ou message d'erreur)
+    window.close()

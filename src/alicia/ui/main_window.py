@@ -2345,9 +2345,8 @@ class MainWindow(QMainWindow):
             return
         frame = self._take_speech_frame()
         window = self.services.capture.foreground_window() or self.observed
-        if window is None and frame is None and self._vision() == "window":
-            self._set_status("Mets le jeu au premier plan, puis reparle.")
-            return
+        # Même sans jeu au premier plan, on écoute : les demandes (« lance Discord », « dis
+        # bonjour à Alicia »…) n'ont pas besoin d'écran, et sinon le message s'affiche.
         if window is not None and (self.observed is None or self.observed.handle != window.handle):
             self.observed = window
             self._update_state()
