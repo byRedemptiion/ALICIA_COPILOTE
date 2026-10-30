@@ -35,6 +35,7 @@ model = "qwen2.5vl:7b"
 base_url = "http://127.0.0.1:11434"
 keep_alive = "2m"   # modèle libéré 2 min après la dernière question (mémoire, chaleur)
 num_thread = 0       # cœurs du processeur pour Ollama : 0 = la moitié (6 au plus)
+num_ctx = 8192       # contexte : 8K suffit et laisse de la VRAM au jeu (Ollama met 32K par défaut)
 
 [capture]
 backend = "auto"             # auto | wgc | printwindow

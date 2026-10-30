@@ -110,6 +110,9 @@ class OllamaSettings:
     # Cœurs du processeur laissés à Ollama : sans carte graphique compatible, il calcule sur
     # le processeur et le fait chauffer. 0 = la moitié des cœurs (6 au plus).
     num_thread: int = 0
+    # Taille de la mémoire de conversation du modèle : Ollama prend 32K par défaut sur une
+    # grosse carte, ce qui gaspille plusieurs Go de VRAM (et peut faire échouer le chargement).
+    num_ctx: int = 8192
 
 
 @dataclass(frozen=True)
@@ -410,6 +413,7 @@ def load_settings(
                 base_url=str(ollama.get("base_url", "")).rstrip("/"),
                 keep_alive=str(ollama.get("keep_alive", "2m")),
                 num_thread=max(0, min(64, int(ollama.get("num_thread", 0) or 0))),
+                num_ctx=max(2048, min(262144, int(ollama.get("num_ctx", 8192) or 8192))),
             ),
             web_search=bool(ai.get("web_search", False)),
             openai=OpenAISettings(

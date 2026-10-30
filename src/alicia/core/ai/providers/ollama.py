@@ -65,6 +65,7 @@ class OllamaModel(HttpVisionModel):
                 "temperature": request.temperature,
                 # Jamais tout le processeur : sans carte graphique, Ollama le ferait chauffer.
                 "num_thread": self.settings.num_thread or default_threads(),
+                "num_ctx": self.settings.num_ctx,  # 8K : assez pour ALICIA, économise la VRAM
             },
         }
         return f"{self.settings.base_url}/api/chat", {}, body
