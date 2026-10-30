@@ -107,7 +107,66 @@ def kokoro_synthesizer(voice: str, speed: float, lang: str = "fr-fr") -> Synthes
     return synthesize
 
 
+OPENAI_VOICE_STYLE = (
+    "Parle en français naturel, comme une coéquipière de jeu vidéo : ton chaleureux, "
+    "vif et complice, phrases courtes, sans lire la ponctuation ni les symboles."
+)
+
+
+def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    """Voix OpenAI (API audio/speech) : très naturelle, payante à l'usage."""
+    import httpx
+
+    percent = 0
+    try:
+        percent = int(settings.tts_rate.strip().rstrip("%"))
+    except ValueError:
+        pass
+    pace = (
+        "" if abs(percent) < 5 else (" Parle un peu vite." if percent > 0 else " Parle posément.")
+    )
+
+    def synthesize(text: str) -> np.ndarray:
+        if not settings.openai_key:
+            raise AudioError(
+                "Voix OpenAI : il faut une clé OpenAI (bouton IA → ChatGPT), ou choisis la voix "
+                "Edge dans les réglages.",
+                detail="OPENAI_API_KEY absente",
+            )
+        try:
+            response = httpx.post(
+                f"{settings.openai_base_url}/audio/speech",
+                headers={"Authorization": f"Bearer {settings.openai_key.get()}"},
+                json={
+                    "model": settings.openai_tts_model,
+                    "voice": settings.openai_voice,
+                    "input": text,
+                    "instructions": OPENAI_VOICE_STYLE + pace,
+                    "response_format": "pcm",  # 24 kHz, 16 bits, mono
+                },
+                timeout=30,
+            )
+        except httpx.HTTPError as exc:
+            raise AudioError("Voix OpenAI injoignable.", detail=repr(exc)) from exc
+        if response.status_code == 401:
+            raise AudioError("Voix OpenAI : clé refusée.", detail="HTTP 401")
+        if response.status_code == 429:
+            raise AudioError(
+                "Voix OpenAI : plus de crédit ou trop de demandes.", detail=response.text[:200]
+            )
+        if response.status_code >= 400:
+            raise AudioError(
+                f"Voix OpenAI : erreur {response.status_code}.", detail=response.text[:300]
+            )
+        data = response.content
+        return np.frombuffer(data[: len(data) - len(data) % 2], dtype=np.int16)
+
+    return synthesize
+
+
 def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    if settings.tts_engine == "openai":
+        return openai_synthesizer(settings)
     if settings.tts_engine == "kokoro":
         return kokoro_synthesizer(settings.kokoro_voice, settings.kokoro_speed)
     return edge_synthesizer(settings.tts_voice, settings.tts_rate)

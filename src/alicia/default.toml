@@ -96,7 +96,8 @@ speak_answers = true         # lire les réponses à voix haute (case à cocher 
 stt = "local"
 # Modèle Whisper : "large-v3-turbo" (précis) ou "small" (plus rapide, moins précis)
 whisper_model = "large-v3-turbo"
-# Voix d'Alicia : "edge" (voix Microsoft en ligne) ou "kokoro" (voix locale, hors ligne)
+# Voix d'Alicia : "edge" (voix Microsoft en ligne), "kokoro" (voix locale, hors ligne) ou
+# "openai" (voix OpenAI très réaliste, payante à l'usage, clé OPENAI_API_KEY)
 tts_engine = "edge"
 kokoro_voice = "ff_siwis"    # voix française de Kokoro
 kokoro_speed = 1.05

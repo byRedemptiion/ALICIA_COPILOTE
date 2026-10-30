@@ -132,3 +132,37 @@ def test_speaker_error_is_reported():
     speaker.speak("Bonjour, ceci est un test de voix.")
     wait_idle(speaker, states)
     assert states == [("error", "La voix en ligne ne répond pas.")]
+
+
+def test_openai_voice_sends_text_and_plays_pcm(monkeypatch):
+    import httpx
+    import numpy as np
+
+    from alicia.core.audio.speaker import make_synthesizer
+    from alicia.core.config import Secret, VoiceSettings
+
+    seen = {}
+
+    def fake_post(url, headers, json, timeout):
+        seen.update(url=url, auth=headers["Authorization"], body=json)
+        return httpx.Response(200, content=np.array([1, -1, 300], dtype=np.int16).tobytes())
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    settings = VoiceSettings(tts_engine="openai", openai_key=Secret("sk-test"), openai_voice="nova")
+    samples = make_synthesizer(settings)("Salut, je suis ALICIA.")
+    assert list(samples) == [1, -1, 300]
+    assert seen["url"].endswith("/audio/speech") and seen["auth"] == "Bearer sk-test"
+    assert seen["body"]["voice"] == "nova" and seen["body"]["response_format"] == "pcm"
+    assert "français" in seen["body"]["instructions"]
+
+
+def test_openai_voice_without_key_explains():
+    import pytest
+
+    from alicia.core.audio.devices import AudioError
+    from alicia.core.audio.speaker import make_synthesizer
+    from alicia.core.config import VoiceSettings
+
+    with pytest.raises(AudioError) as info:
+        make_synthesizer(VoiceSettings(tts_engine="openai"))("Salut")
+    assert "clé OpenAI" in info.value.user_message

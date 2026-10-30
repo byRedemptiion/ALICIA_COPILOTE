@@ -36,6 +36,17 @@ EDGE_VOICES = (
     ("fr-CH-ArianeNeural", "Ariane (Suisse)"),
     ("fr-FR-HenriNeural", "Henri (France) — voix d'homme"),
 )
+OPENAI_VOICES = (
+    ("coral", "Coral — chaleureuse"),
+    ("nova", "Nova — jeune et vive"),
+    ("shimmer", "Shimmer — douce"),
+    ("sage", "Sage — calme"),
+    ("marin", "Marin — naturelle"),
+    ("ballad", "Ballad — expressive"),
+    ("alloy", "Alloy — neutre"),
+    ("verse", "Verse — dynamique"),
+    ("cedar", "Cedar — voix grave"),
+)
 SENSITIVITY = {
     1: "Peu sensible (pièce bruyante, casque ouvert)",
     2: "Plutôt peu sensible",
@@ -272,6 +283,7 @@ class SettingsPage(QScrollArea):
         self.engine_box = QComboBox()
         self.engine_box.addItem("Edge — voix Microsoft en ligne (plus naturelle)", "edge")
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
+        self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
         self.voice_box = QComboBox()
@@ -280,6 +292,10 @@ class SettingsPage(QScrollArea):
         self.voice_label = QLabel("Voix")
         grid.addWidget(self.voice_label, 3, 0)
         grid.addWidget(self.voice_box, 3, 1, 1, 2)
+        self.openai_voice_box = QComboBox()
+        for name, label in OPENAI_VOICES:
+            self.openai_voice_box.addItem(label, name)
+        grid.addWidget(self.openai_voice_box, 3, 1, 1, 2)
         self.speed = QSlider(Qt.Orientation.Horizontal)
         self.speed.setRange(-20, 40)
         self.speed.setSingleStep(2)
@@ -328,6 +344,9 @@ class SettingsPage(QScrollArea):
         self.voice_box.currentIndexChanged.connect(
             lambda _i: self._emit("tts_voice", self.voice_box.currentData())
         )
+        self.openai_voice_box.currentIndexChanged.connect(
+            lambda _i: self._emit("openai_voice", self.openai_voice_box.currentData())
+        )
         self.speed.valueChanged.connect(lambda v: self.speed_label.setText(f"{v:+d} %"))
         self.speed.sliderReleased.connect(lambda: self._emit("speed", self.speed.value()))
         self.output_box.currentIndexChanged.connect(
@@ -368,10 +387,13 @@ class SettingsPage(QScrollArea):
         self.sensitivity_label.setText(SENSITIVITY.get(value, ""))
         self._emit("wake_sensitivity", value)
 
+    def _show_voice_list(self, engine: str) -> None:
+        self.voice_box.setVisible(engine == "edge")
+        self.openai_voice_box.setVisible(engine == "openai")
+        self.voice_label.setVisible(engine in ("edge", "openai"))
+
     def _engine_changed(self) -> None:
-        edge = self.engine_box.currentData() == "edge"
-        self.voice_box.setVisible(edge)
-        self.voice_label.setVisible(edge)
+        self._show_voice_list(self.engine_box.currentData())
         self._emit("tts_engine", self.engine_box.currentData())
 
     @staticmethod
@@ -403,9 +425,12 @@ class SettingsPage(QScrollArea):
             self.sensitivity_label.setText(SENSITIVITY.get(voice.wake_sensitivity, ""))
             self.speak_box.setChecked(voice.speak_answers)
             self.engine_box.setCurrentIndex(max(0, self.engine_box.findData(voice.tts_engine)))
-            edge = voice.tts_engine == "edge"
-            self.voice_box.setVisible(edge)
-            self.voice_label.setVisible(edge)
+            self._show_voice_list(voice.tts_engine)
+            if self.openai_voice_box.findData(voice.openai_voice) < 0:
+                self.openai_voice_box.addItem(voice.openai_voice, voice.openai_voice)
+            self.openai_voice_box.setCurrentIndex(
+                self.openai_voice_box.findData(voice.openai_voice)
+            )
             if self.voice_box.findData(voice.tts_voice) < 0:
                 self.voice_box.addItem(voice.tts_voice, voice.tts_voice)
             self.voice_box.setCurrentIndex(self.voice_box.findData(voice.tts_voice))

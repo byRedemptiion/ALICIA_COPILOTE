@@ -331,6 +331,7 @@ class MainWindow(QMainWindow):
         self.engine_box = QComboBox()
         self.engine_box.addItem("Edge (en ligne)", "edge")
         self.engine_box.addItem("Kokoro (locale)", "kokoro")
+        self.engine_box.addItem("OpenAI (réaliste)", "openai")
         self.engine_box.setCurrentIndex(
             max(0, self.engine_box.findData(self.services.settings.voice.tts_engine))
         )
@@ -711,6 +712,8 @@ class MainWindow(QMainWindow):
             self._update_voice(tts_engine=str(value))
         elif key == "tts_voice":
             self._update_voice(tts_voice=str(value))
+        elif key == "openai_voice":
+            self._update_voice(openai_voice=str(value))
         elif key == "speed":
             percent = int(value)  # type: ignore[call-overload]
             self._update_voice(tts_rate=f"{percent:+d}%", kokoro_speed=round(1 + percent / 100, 2))
@@ -932,6 +935,13 @@ class MainWindow(QMainWindow):
             return
         model = create_model(settings.ai)
         self.services.settings = settings
+        speaker = self.services.speaker
+        if speaker is not None and hasattr(speaker, "synthesizer"):
+            # La voix OpenAI utilise la même clé : on la donne tout de suite au haut-parleur.
+            from alicia.core.audio.speaker import make_synthesizer
+
+            speaker.settings = settings.voice
+            speaker.synthesizer = make_synthesizer(settings.voice)
         self.services.model = model
         self.services.analysis.model = model
         self.provider_label.setText(f"IA · {model.provider} / {model.model}")
