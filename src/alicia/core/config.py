@@ -216,6 +216,14 @@ class StreamSettings:
 
 
 @dataclass(frozen=True)
+class DuoSettings:
+    enabled: bool = False  # ALICIA chez l'un, VERIS chez l'autre : ils se parlent
+    code: Secret = field(default_factory=lambda: Secret(None))  # DUO_CODE dans .env
+    max_turns: int = 6  # répliques au total (les deux robots)
+    relay: str = "https://ntfy.sh"
+
+
+@dataclass(frozen=True)
 class Settings:
     ai: AISettings
     capture: CaptureSettings
@@ -227,6 +235,7 @@ class Settings:
     actions: ActionSettings = field(default_factory=ActionSettings)
     update: UpdateSettings = field(default_factory=UpdateSettings)
     stream: StreamSettings = field(default_factory=StreamSettings)
+    duo: DuoSettings = field(default_factory=DuoSettings)
     ui_mode: str = "orb"  # "orb" : seule la bulle d'ALICIA à l'écran ; "full" : le panneau
     orb_size: int = 210
     stream_visible: bool = False  # True : OBS / Discord voient le rond et la bulle
@@ -433,6 +442,12 @@ def load_settings(
                 65000,
                 max(1024, int(_section(data, "stream").get("overlay_port", 8765) or 8765)),
             ),
+        ),
+        duo=DuoSettings(
+            enabled=bool(_section(data, "duo").get("enabled", False)),
+            code=Secret(env.get("DUO_CODE")),
+            max_turns=max(2, min(20, int(_section(data, "duo").get("max_turns", 6) or 6))),
+            relay=str(_section(data, "duo").get("relay", DuoSettings.relay)).rstrip("/"),
         ),
         update=UpdateSettings(
             repo=str(_section(data, "update").get("repo", UpdateSettings.repo)).strip(),

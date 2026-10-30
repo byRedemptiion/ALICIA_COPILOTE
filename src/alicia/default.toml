@@ -147,3 +147,11 @@ twitch_channel = ""
 overlay = true
 overlay_port = 8765
 
+[duo]
+# Duo : deux robots COP'IA'LOTE qui se parlent (ex. ALICIA chez l'un, VERIS chez l'autre).
+# Le code de duo (le même sur les deux PC) est dans %APPDATA%\Alicia\.env (DUO_CODE) :
+# il chiffre les messages, qui passent par un relais public gratuit (ntfy.sh).
+enabled = false
+max_turns = 6
+relay = "https://ntfy.sh"
+

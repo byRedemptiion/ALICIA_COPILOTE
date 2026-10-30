@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QProgressBar,
@@ -384,6 +385,50 @@ class SettingsPage(QScrollArea):
         grid.addWidget(obs_help, 6, 0, 1, 3)
         layout.addWidget(stream)
 
+        # --- Duo -----------------------------------------------------------------------------------
+        duo, grid = _panel()
+        grid.addWidget(_title("DUO : DEUX ROBOTS QUI SE PARLENT"), 0, 0, 1, 3)
+        self.duo_box = QCheckBox("Activer le duo (ex. VERIS chez toi, ALICIA chez ton pote)")
+        self.duo_box.toggled.connect(lambda on: self._emit("duo", on))
+        grid.addWidget(self.duo_box, 1, 0, 1, 3)
+        self.duo_code = QLineEdit()
+        self.duo_code.setEchoMode(QLineEdit.EchoMode.Password)
+        self.duo_code.setPlaceholderText("le même code sur les deux PC")
+        self.duo_code.editingFinished.connect(lambda: self._emit("duo_code", self.duo_code.text()))
+        code_buttons = QHBoxLayout()
+        new_code = QPushButton("Nouveau code")
+        new_code.clicked.connect(lambda: self._emit("duo_new_code", True))
+        copy_code = QPushButton("Copier")
+        copy_code.clicked.connect(lambda: self._emit("duo_copy_code", True))
+        code_buttons.addWidget(new_code)
+        code_buttons.addWidget(copy_code)
+        grid.addWidget(QLabel("Code de duo"), 2, 0)
+        grid.addWidget(self.duo_code, 2, 1)
+        grid.addLayout(code_buttons, 2, 2)
+        self.duo_turns = QComboBox()
+        for turns in (4, 6, 10):
+            self.duo_turns.addItem(f"{turns} répliques", turns)
+        self.duo_turns.currentIndexChanged.connect(
+            lambda _i: self._emit("duo_turns", self.duo_turns.currentData())
+        )
+        self.duo_start = QPushButton("Lancer une discussion…")
+        self.duo_start.clicked.connect(lambda: self._emit("duo_start", True))
+        grid.addWidget(QLabel("Longueur"), 3, 0)
+        grid.addWidget(self.duo_turns, 3, 1)
+        grid.addWidget(self.duo_start, 3, 2)
+        self.duo_state = _muted("")
+        grid.addWidget(self.duo_state, 4, 1, 1, 2)
+        duo_help = _muted(
+            "Crée un code ici, envoie-le à ton pote (en privé), il le colle chez lui. Puis "
+            "dis par exemple <b>« Veris, dis bonjour à Alicia »</b> ou <b>« Alicia, discute "
+            "avec Veris de WoW »</b>. « Stop » arrête la discussion des deux côtés.<br>"
+            "Les messages sont chiffrés avec ce code et passent par un relais gratuit "
+            "(ntfy.sh). Un message de l'autre robot ne peut jamais agir sur ton PC."
+        )
+        duo_help.setTextFormat(Qt.TextFormat.RichText)
+        grid.addWidget(duo_help, 5, 0, 1, 3)
+        layout.addWidget(duo)
+
         # --- Général -------------------------------------------------------------------------------
         general, grid = _panel()
         grid.addWidget(_title("GÉNÉRAL"), 0, 0, 1, 3)
@@ -413,6 +458,16 @@ class SettingsPage(QScrollArea):
             1,
             3,
         )
+        self.github_token = QLineEdit()
+        self.github_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.github_token.setPlaceholderText("seulement si le dépôt est privé (github_pat_…)")
+        save_token = QPushButton("Enregistrer")
+        save_token.clicked.connect(lambda: self._emit("github_token", self.github_token.text()))
+        grid.addWidget(QLabel("Jeton MAJ"), 6, 0)
+        grid.addWidget(self.github_token, 6, 1)
+        grid.addWidget(save_token, 6, 2)
+        self.github_state = _muted("")
+        grid.addWidget(self.github_state, 7, 1, 1, 2)
         layout.addWidget(general)
 
         # --- Raccourcis (onglet précédent, intégré ici) --------------------------------------
@@ -529,6 +584,25 @@ class SettingsPage(QScrollArea):
             self.ai_label.setText(ai_text)
         finally:
             self._loading = False
+
+    def load_duo(self, duo, has_token: bool) -> None:  # type: ignore[no-untyped-def]
+        self._loading = True
+        try:
+            self.duo_box.setChecked(duo.enabled)
+            self.duo_code.setText(duo.code.get())
+            index = self.duo_turns.findData(duo.max_turns)
+            if index < 0:
+                self.duo_turns.addItem(f"{duo.max_turns} répliques", duo.max_turns)
+                index = self.duo_turns.findData(duo.max_turns)
+            self.duo_turns.setCurrentIndex(index)
+        finally:
+            self._loading = False
+        self.github_state.setText(
+            "Jeton enregistré ✓ (les MAJ marchent avec un dépôt privé)" if has_token else ""
+        )
+
+    def show_duo(self, text: str) -> None:
+        self.duo_state.setText(text)
 
     def load_stream(self, stream) -> None:  # type: ignore[no-untyped-def]
         self._loading = True

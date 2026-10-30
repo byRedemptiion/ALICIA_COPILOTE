@@ -50,6 +50,7 @@ class VoiceBridge(QObject):
     wake_cancel = Signal(str)  # mot de réveil sans demande exploitable
     wake_stop = Signal()  # « Alicia, stop »
     notice = Signal(str)  # message court venu d'un thread de fond
+    duo = Signal(object)  # message reçu de l'autre robot (dict déchiffré)
 
 
 class QtLogHandler(logging.Handler):
