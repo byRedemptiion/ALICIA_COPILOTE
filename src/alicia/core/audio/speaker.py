@@ -315,11 +315,11 @@ def gemini_synthesizer(settings: VoiceSettings) -> Synthesizer:
 # (hauteur en cents, passe-haut, présence, métal, consigne de jeu pour Gemini / OpenAI)
 VOICE_EFFECTS: dict[str, tuple[int, float, float, float, str]] = {
     "enfant": (
-        380,
-        220.0,
-        3800.0,
+        620,
+        280.0,
+        4300.0,
         0.0,
-        "avec la voix, l'énergie et la spontanéité d'un enfant de 8 ans",
+        "avec la petite voix aiguë, l'énergie et la spontanéité d'un enfant de 7 ans",
     ),
     "robot": (
         200,
