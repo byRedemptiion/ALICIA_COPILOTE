@@ -184,6 +184,9 @@ class VoiceSettings:
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_key: Secret = field(default_factory=lambda: Secret(None))  # même clé que l'IA OpenAI
     openai_base_url: str = "https://api.openai.com/v1"
+    gemini_voice: str = "Leda"  # voix Gemini (moteur « gemini »)
+    gemini_tts_model: str = "gemini-3.1-flash-tts-preview"
+    gemini_key: Secret = field(default_factory=lambda: Secret(None))  # même clé que l'IA Gemini
 
 
 @dataclass(frozen=True)
@@ -521,7 +524,10 @@ def load_settings(
             stt=_choice(voice, "stt", "local", ("local", "gemini")),
             whisper_model=str(voice.get("whisper_model", "large-v3-turbo")).strip(),
             tts_engine=_choice(
-                voice, "tts_engine", "edge", ("edge", "kokoro", "openai", "veris", "voixc")
+                voice,
+                "tts_engine",
+                "edge",
+                ("edge", "kokoro", "openai", "gemini", "veris", "voixc"),
             ),
             kokoro_voice=str(voice.get("kokoro_voice", "ff_siwis")).strip(),
             kokoro_speed=_number({"v": voice.get("kokoro_speed", 1.05)}, "v", float, 0.5),
@@ -538,6 +544,11 @@ def load_settings(
             openai_tts_model=str(voice.get("openai_tts_model", "gpt-4o-mini-tts")).strip(),
             openai_key=Secret(env.get("OPENAI_API_KEY")),
             openai_base_url=str(openai.get("base_url", "https://api.openai.com/v1")).rstrip("/"),
+            gemini_voice=str(voice.get("gemini_voice", "Leda")).strip() or "Leda",
+            gemini_tts_model=str(
+                voice.get("gemini_tts_model", "gemini-3.1-flash-tts-preview")
+            ).strip(),
+            gemini_key=Secret(env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY")),
         ),
         sources=tuple(sources),
         captures_dir=cwd / "captures",

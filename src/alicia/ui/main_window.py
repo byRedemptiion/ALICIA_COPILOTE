@@ -782,7 +782,13 @@ class MainWindow(QMainWindow):
 
             self.stop_voice()
             speaker.settings = voice
-            if {"tts_engine", "tts_voice", "tts_rate", "kokoro_speed"} & changes.keys():
+            if {
+                "tts_engine",
+                "tts_voice",
+                "tts_rate",
+                "kokoro_speed",
+                "gemini_voice",
+            } & changes.keys():
                 speaker.synthesizer = make_synthesizer(voice)
                 speaker.warm_up_async()
             if "output_device" in changes:
@@ -826,6 +832,16 @@ class MainWindow(QMainWindow):
             self._update_voice(tts_voice=str(value))
         elif key == "openai_voice":
             self._update_voice(openai_voice=str(value))
+        elif key == "gemini_voice":
+            self._update_voice(gemini_voice=str(value))
+        elif key == "voice_preview":
+            self.preview_voice(str(value))
+        elif key == "voice_choose":
+            engine, _, name = str(value).partition("|")
+            field = "gemini_voice" if engine == "gemini" else "tts_voice"
+            self._update_voice(tts_engine=engine, **{field: name})
+            self._load_settings_page()
+            self._notify(f"Voix choisie : {name}")
         elif key == "speed":
             percent = int(value)  # type: ignore[call-overload]
             self._update_voice(tts_rate=f"{percent:+d}%", kokoro_speed=round(1 + percent / 100, 2))
@@ -1055,6 +1071,30 @@ class MainWindow(QMainWindow):
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.restart()
+
+    def preview_voice(self, key: str) -> None:
+        """Catalogue des voix : la même phrase avec la voix ``engine|nom``, sans la choisir."""
+        from dataclasses import replace
+
+        from alicia.core.audio.speaker import make_synthesizer
+
+        engine, _, name = key.partition("|")
+        voice = self.services.settings.voice
+        field = "gemini_voice" if engine == "gemini" else "tts_voice"
+        trial = replace(voice, tts_engine=engine, **{field: name})  # type: ignore[arg-type]
+        speaker = self.services.speaker
+        text = (
+            f"Salut, moi c'est {current_persona().name} ! Attention, un ennemi arrive sur ta "
+            "gauche : recule et soigne-toi, je surveille la carte."
+        )
+        log.info("Écoute d'essai : voix %s (%s)", name, engine)
+        self.settings_page.gallery_state.setText(f"▶ {name}…")
+        if speaker is None or not speaker.speak(text, make_synthesizer(trial)):
+            self.settings_page.gallery_state.setText(
+                "⚠ Voix indisponible : vérifie la sortie audio."
+            )
+            return
+        self.stop_voice_button.setEnabled(True)
 
     def test_voice(self) -> None:
         speaker = self.services.speaker

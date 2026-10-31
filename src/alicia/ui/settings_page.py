@@ -33,13 +33,52 @@ from alicia.ui.shortcuts_page import ShortcutsPage
 from alicia.ui.theme import PROJECT_NAME
 
 EDGE_VOICES = (
-    ("fr-FR-DeniseNeural", "Denise (France) — douce"),
-    ("fr-FR-VivienneMultilingualNeural", "Vivienne (France) — naturelle"),
-    ("fr-FR-EloiseNeural", "Éloïse (France) — jeune"),
-    ("fr-CA-SylvieNeural", "Sylvie (Québec)"),
-    ("fr-BE-CharlineNeural", "Charline (Belgique)"),
-    ("fr-CH-ArianeNeural", "Ariane (Suisse)"),
-    ("fr-FR-HenriNeural", "Henri (France) — voix d'homme"),
+    ("fr-FR-DeniseNeural", "Denise (France) — femme, douce"),
+    ("fr-FR-VivienneMultilingualNeural", "Vivienne (France) — femme, naturelle"),
+    ("fr-FR-EloiseNeural", "Éloïse (France) — voix d'enfant"),
+    ("fr-FR-HenriNeural", "Henri (France) — homme"),
+    ("fr-FR-RemyMultilingualNeural", "Rémy (France) — homme, naturel"),
+    ("fr-CA-SylvieNeural", "Sylvie (Québec) — femme"),
+    ("fr-CA-AntoineNeural", "Antoine (Québec) — homme"),
+    ("fr-CA-JeanNeural", "Jean (Québec) — homme"),
+    ("fr-CA-ThierryNeural", "Thierry (Québec) — homme"),
+    ("fr-BE-CharlineNeural", "Charline (Belgique) — femme"),
+    ("fr-BE-GerardNeural", "Gérard (Belgique) — homme"),
+    ("fr-CH-ArianeNeural", "Ariane (Suisse) — femme"),
+    ("fr-CH-FabriceNeural", "Fabrice (Suisse) — homme"),
+)
+# Voix Gemini (mêmes 30 voix pour toutes les langues) : genre et style donnés par Google
+GEMINI_VOICES = (
+    ("Leda", "femme — jeune"),
+    ("Zephyr", "femme — lumineuse"),
+    ("Kore", "femme — ferme"),
+    ("Aoede", "femme — légère"),
+    ("Callirrhoe", "femme — décontractée"),
+    ("Autonoe", "femme — lumineuse"),
+    ("Despina", "femme — fluide"),
+    ("Erinome", "femme — claire"),
+    ("Laomedeia", "femme — enjouée"),
+    ("Achernar", "femme — douce"),
+    ("Gacrux", "femme — mûre"),
+    ("Pulcherrima", "femme — directe"),
+    ("Vindemiatrix", "femme — tendre"),
+    ("Sulafat", "femme — chaleureuse"),
+    ("Puck", "homme — enjoué"),
+    ("Fenrir", "homme — excité"),
+    ("Charon", "homme — informatif"),
+    ("Orus", "homme — ferme"),
+    ("Enceladus", "homme — soufflé"),
+    ("Iapetus", "homme — clair"),
+    ("Umbriel", "homme — décontracté"),
+    ("Algieba", "homme — fluide"),
+    ("Algenib", "homme — rocailleux"),
+    ("Rasalgethi", "homme — informatif"),
+    ("Alnilam", "homme — ferme"),
+    ("Schedar", "homme — posé"),
+    ("Achird", "homme — amical"),
+    ("Zubenelgenubi", "homme — détendu"),
+    ("Sadachbia", "homme — vif"),
+    ("Sadaltager", "homme — savant"),
 )
 OPENAI_VOICES = (
     ("coral", "Coral — chaleureuse"),
@@ -394,6 +433,7 @@ class SettingsPage(QWidget):
         self.engine_box.addItem("Edge — voix Microsoft en ligne (plus naturelle)", "edge")
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
+        self.engine_box.addItem("Gemini — 30 voix expressives (ta clé Gemini)", "gemini")
         self.engine_box.addItem("VIIRUS — voix robot (de VERIS MOD, sur ton PC)", "veris")
         self.engine_box.addItem("ALICIA — voix C, petite fille (sur ton PC)", "voixc")
         grid.addWidget(QLabel("Moteur"), 2, 0)
@@ -408,6 +448,10 @@ class SettingsPage(QWidget):
         for name, label in OPENAI_VOICES:
             self.openai_voice_box.addItem(label, name)
         grid.addWidget(self.openai_voice_box, 3, 1, 1, 2)
+        self.gemini_voice_box = QComboBox()
+        for name, label in GEMINI_VOICES:
+            self.gemini_voice_box.addItem(f"{name} — {label}", name)
+        grid.addWidget(self.gemini_voice_box, 3, 1, 1, 2)
         self.speed = QSlider(Qt.Orientation.Horizontal)
         self.speed.setRange(-20, 40)
         self.speed.setSingleStep(2)
@@ -422,6 +466,7 @@ class SettingsPage(QWidget):
         self.voice_test.clicked.connect(self.test_voice.emit)
         grid.addWidget(self.voice_test, 6, 0)
         self._tab_layouts["voice"].addWidget(voice)
+        self._tab_layouts["voice"].addWidget(self._voice_gallery())
 
         # --- Stream ---------------------------------------------------------------------------------
         stream, grid = _panel()
@@ -789,6 +834,9 @@ class SettingsPage(QWidget):
         self.voice_box.currentIndexChanged.connect(
             lambda _i: self._emit("tts_voice", self.voice_box.currentData())
         )
+        self.gemini_voice_box.currentIndexChanged.connect(
+            lambda _i: self._emit("gemini_voice", self.gemini_voice_box.currentData())
+        )
         self.openai_voice_box.currentIndexChanged.connect(
             lambda _i: self._emit("openai_voice", self.openai_voice_box.currentData())
         )
@@ -832,10 +880,55 @@ class SettingsPage(QWidget):
         self.sensitivity_label.setText(SENSITIVITY.get(value, ""))
         self._emit("wake_sensitivity", value)
 
+    def _voice_gallery(self) -> QWidget:
+        """Toutes les voix, chacune avec ▶ Écouter et Choisir."""
+        panel, grid = _panel()
+        grid.addWidget(_title("🎧  CATALOGUE DES VOIX"), 0, 0, 1, 4)
+        grid.addWidget(
+            _muted(
+                "Écoute chaque voix avec la même phrase, puis choisis-la. Edge : gratuit, en "
+                "ligne. Gemini : ta clé Gemini (modèle en préversion, quota gratuit limité)."
+            ),
+            1,
+            0,
+            1,
+            4,
+        )
+        self.gallery_buttons: dict[str, QPushButton] = {}
+        row = 2
+        for engine, title, voices in (
+            ("edge", "VOIX EDGE (MICROSOFT)", [(n, label) for n, label in EDGE_VOICES]),
+            ("gemini", "VOIX GEMINI (GOOGLE)", [(n, f"{n} — {d}") for n, d in GEMINI_VOICES]),
+        ):
+            header = QLabel(title)
+            header.setObjectName("sectionTitle")
+            grid.addWidget(header, row, 0, 1, 4)
+            row += 1
+            for name, label in voices:
+                key = f"{engine}|{name}"
+                grid.addWidget(QLabel(label), row, 0, 1, 2)
+                listen = QPushButton("▶ Écouter")
+                listen.clicked.connect(lambda _=False, k=key: self._emit("voice_preview", k))
+                choose = QPushButton("Choisir")
+                choose.setObjectName("ghost")
+                choose.clicked.connect(lambda _=False, k=key: self._emit("voice_choose", k))
+                grid.addWidget(listen, row, 2)
+                grid.addWidget(choose, row, 3)
+                self.gallery_buttons[key] = choose
+                row += 1
+        self.gallery_state = _muted("")
+        grid.addWidget(self.gallery_state, row, 0, 1, 4)
+        return panel
+
+    def mark_chosen_voice(self, key: str) -> None:
+        for name, button in self.gallery_buttons.items():
+            button.setText("✓ Choisie" if name == key else "Choisir")
+
     def _show_voice_list(self, engine: str) -> None:
         self.voice_box.setVisible(engine == "edge")
         self.openai_voice_box.setVisible(engine == "openai")
-        self.voice_label.setVisible(engine in ("edge", "openai"))
+        self.gemini_voice_box.setVisible(engine == "gemini")
+        self.voice_label.setVisible(engine in ("edge", "openai", "gemini"))
 
     def _engine_changed(self) -> None:
         self._show_voice_list(self.engine_box.currentData())
@@ -879,6 +972,13 @@ class SettingsPage(QWidget):
             if self.voice_box.findData(voice.tts_voice) < 0:
                 self.voice_box.addItem(voice.tts_voice, voice.tts_voice)
             self.voice_box.setCurrentIndex(self.voice_box.findData(voice.tts_voice))
+            if self.gemini_voice_box.findData(voice.gemini_voice) < 0:
+                self.gemini_voice_box.addItem(voice.gemini_voice, voice.gemini_voice)
+            self.gemini_voice_box.setCurrentIndex(
+                self.gemini_voice_box.findData(voice.gemini_voice)
+            )
+            chosen = {"edge": voice.tts_voice, "gemini": voice.gemini_voice}.get(voice.tts_engine)
+            self.mark_chosen_voice(f"{voice.tts_engine}|{chosen}" if chosen else "")
             percent = rate_percent(voice.tts_rate)
             self.speed.setValue(percent)
             self.speed_label.setText(f"{percent:+d} %")

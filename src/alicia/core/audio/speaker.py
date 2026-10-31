@@ -236,6 +236,65 @@ def veris_synthesizer(
     return synthesize
 
 
+GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+GEMINI_TTS_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_VOICE_STYLE = "Dis en français, d'un ton naturel et vivant de coéquipier de jeu : "
+
+
+def gemini_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    """Voix Gemini (30 voix, avec ta clé Gemini) : PCM 24 kHz 16 bits mono."""
+    import base64
+
+    import httpx
+
+    def synthesize(text: str) -> np.ndarray:
+        if not settings.gemini_key:
+            raise AudioError(
+                "Voix Gemini : il faut une clé Gemini (bouton IA → Gemini).",
+                detail="GEMINI_API_KEY absente",
+            )
+        try:
+            response = httpx.post(
+                GEMINI_TTS_URL.format(model=settings.gemini_tts_model),
+                headers={"x-goog-api-key": settings.gemini_key.get()},
+                json={
+                    "contents": [{"parts": [{"text": GEMINI_VOICE_STYLE + text}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {"voiceName": settings.gemini_voice}
+                            }
+                        },
+                    },
+                },
+                timeout=30,
+            )
+        except httpx.HTTPError as exc:
+            raise AudioError("Voix Gemini injoignable.", detail=repr(exc)) from exc
+        if response.status_code == 429:
+            raise AudioError(
+                "Voix Gemini : quota gratuit atteint pour l'instant, réessaie plus tard.",
+                detail=response.text[:200],
+            )
+        if response.status_code >= 400:
+            raise AudioError(
+                f"Voix Gemini : erreur {response.status_code}.", detail=response.text[:300]
+            )
+        try:
+            parts = response.json()["candidates"][0]["content"]["parts"]
+            data = base64.b64decode(
+                next(p["inlineData"]["data"] for p in parts if "inlineData" in p)
+            )
+        except (KeyError, IndexError, StopIteration, ValueError) as exc:
+            raise AudioError(
+                "Voix Gemini : réponse sans audio.", detail=response.text[:300]
+            ) from exc
+        return np.frombuffer(data[: len(data) - len(data) % 2], dtype=np.int16)
+
+    return synthesize
+
+
 def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
     if settings.tts_engine == "veris":
         return veris_synthesizer(settings.kokoro_speed)
@@ -244,6 +303,8 @@ def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
         return veris_synthesizer(settings.kokoro_speed, 1.30, 220.0, 3800.0, metallic=0.0)
     if settings.tts_engine == "openai":
         return openai_synthesizer(settings)
+    if settings.tts_engine == "gemini":
+        return gemini_synthesizer(settings)
     if settings.tts_engine == "kokoro":
         return kokoro_synthesizer(settings.kokoro_voice, settings.kokoro_speed)
     return edge_synthesizer(settings.tts_voice, settings.tts_rate)
@@ -311,7 +372,8 @@ class Speaker:
     def speaking(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    def speak(self, text: str) -> bool:
+    def speak(self, text: str, synthesizer: Synthesizer | None = None) -> bool:
+        """Lit ``text`` (avec une autre voix si ``synthesizer`` est donné : écoute d'essai)."""
         from alicia.core.persona import pronounce
 
         self.stop()
@@ -320,7 +382,10 @@ class Speaker:
             return False
         self._stop = threading.Event()
         self._thread = threading.Thread(
-            target=self._run, args=(sentences, self._stop), name="alicia-voice", daemon=True
+            target=self._run,
+            args=(sentences, self._stop, synthesizer or self.synthesizer),
+            name="alicia-voice",
+            daemon=True,
         )
         self._thread.start()
         return True
@@ -345,19 +410,22 @@ class Speaker:
             log.info("Voix coupée")
             self._thread.join(1.0)  # type: ignore[union-attr]
 
-    def _run(self, sentences: list[str], stop: threading.Event) -> None:
+    def _run(
+        self, sentences: list[str], stop: threading.Event, synthesizer: Synthesizer | None = None
+    ) -> None:
+        synthesize = synthesizer or self.synthesizer
         started = time.perf_counter()
         stream = None
         error: str | None = None
         pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alicia-tts")
-        futures: list[Future] = [pool.submit(self.synthesizer, s) for s in sentences[:2]]
+        futures: list[Future] = [pool.submit(synthesize, s) for s in sentences[:2]]
         try:
             for index in range(len(sentences)):
                 if stop.is_set():
                     break
                 samples = futures[index].result()
                 if index + 2 < len(sentences):
-                    futures.append(pool.submit(self.synthesizer, sentences[index + 2]))
+                    futures.append(pool.submit(synthesize, sentences[index + 2]))
                 if stream is None:
                     stream = self.player.open()
                     log.info(
