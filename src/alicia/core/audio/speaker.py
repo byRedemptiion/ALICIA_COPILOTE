@@ -164,7 +164,8 @@ def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
     return synthesize
 
 
-VERIS_PITCH_CENTS = 450  # même recette que VERIS MOD : Kokoro ff_siwis, +450 cents
+VERIS_PITCH_CENTS = 450  # recette VERIS MOD : Kokoro ff_siwis, +450 cents (= voix C d'ALICIA)
+VIIRUS_PITCH_CENTS = 200  # VIIRUS : moins aigu, et une voix métallique de robot
 
 
 def robot_voice(
@@ -174,6 +175,7 @@ def robot_voice(
     *,
     highpass_hz: float = 200.0,
     presence_hz: float = 3500.0,
+    metallic: float = 0.0,
 ) -> np.ndarray:
     """Voix de VIIRUS à partir d'une voix générée ``ratio`` fois plus lente : on la raccourcit
     (la hauteur monte d'autant, la durée redevient normale), puis passe-haut 200 Hz,
@@ -192,6 +194,15 @@ def robot_voice(
         octaves = np.log2(np.maximum(freqs, 1.0) / presence_hz)
     presence = 1.0 + (10 ** (3 / 20) - 1.0) * np.exp(-(octaves**2) / (2 * 0.5**2))
     out = np.fft.irfft(spectrum * highpass * presence, m) * (m / n)
+    if metallic > 0:
+        # Timbre de robot : écho très court (filtre en peigne, son « boîte de conserve »)
+        # et légère modulation en anneau, comme un haut-parleur de petit robot.
+        delay = max(1, int(rate * 0.0045))
+        comb = out.copy()
+        comb[delay:] += 0.55 * metallic * out[:-delay]
+        t = np.arange(m, dtype=np.float32) / rate
+        ring = 1.0 - 0.35 * metallic + 0.35 * metallic * np.sin(2 * np.pi * 55.0 * t)
+        out = comb * ring
     rms = float(np.sqrt(np.mean(out**2))) or 1.0
     out *= 10 ** (-17 / 20) / rms
     peak = float(np.abs(out).max(initial=0))
@@ -202,9 +213,10 @@ def robot_voice(
 
 def veris_synthesizer(
     speed: float = 1.0,
-    ratio: float = 2 ** (VERIS_PITCH_CENTS / 1200),
+    ratio: float = 2 ** (VIIRUS_PITCH_CENTS / 1200),
     highpass_hz: float = 200.0,
     presence_hz: float = 3500.0,
+    metallic: float = 1.0,
 ) -> Synthesizer:
     """La voix de VIIRUS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique.
     Avec d'autres réglages : la « voix C » d'ALICIA (petite fille)."""
@@ -216,7 +228,9 @@ def veris_synthesizer(
         from alicia.core.audio.models import kokoro_ready
 
         source = fallback(text) if not kokoro_ready() else base(text)
-        return robot_voice(source, ratio, highpass_hz=highpass_hz, presence_hz=presence_hz)
+        return robot_voice(
+            source, ratio, highpass_hz=highpass_hz, presence_hz=presence_hz, metallic=metallic
+        )
 
     synthesize.warm_up = base.warm_up  # type: ignore[attr-defined]
     return synthesize
@@ -227,7 +241,7 @@ def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
         return veris_synthesizer(settings.kokoro_speed)
     if settings.tts_engine == "voixc":
         # Voix C d'ALICIA : ff_siwis, hauteur ×1,30 (formants suivis), 220 Hz / +3 dB à 3,8 kHz
-        return veris_synthesizer(settings.kokoro_speed, 1.30, 220.0, 3800.0)
+        return veris_synthesizer(settings.kokoro_speed, 1.30, 220.0, 3800.0, metallic=0.0)
     if settings.tts_engine == "openai":
         return openai_synthesizer(settings)
     if settings.tts_engine == "kokoro":

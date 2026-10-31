@@ -601,6 +601,7 @@ class MainWindow(QMainWindow):
     # --- mémoire de partie ------------------------------------------------------------------
 
     def _remember_frame(self, frame: Frame) -> None:
+        self.services.analysis.note_window(frame.window)  # le jeu en cours, même hors focus
         timeline = self.services.analysis.timeline
         if timeline is not None:
             timeline.add(frame)
@@ -3077,7 +3078,6 @@ class MainWindow(QMainWindow):
 
         def look():  # type: ignore[no-untyped-def]
             from alicia.core.ai.image_prep import prepare_image
-            from alicia.games.profiles import resolve_profile
 
             shot = frame
             if shot is None:
@@ -3093,8 +3093,8 @@ class MainWindow(QMainWindow):
             image = prepare_image(
                 shot.image, min(capture.max_image_side, 1024), capture.jpeg_quality
             )
-            context = resolve_profile(shot.window, self.services.analysis.game_profile)
-            return self.copilot.observe(model, image, context.prompt_context(False))
+            profile, note = self.services.analysis.game_for(shot.window)
+            return self.copilot.observe(model, image, profile.prompt_context(False) + note)
 
         def done(value) -> None:  # type: ignore[no-untyped-def]
             self._copilot_running = False

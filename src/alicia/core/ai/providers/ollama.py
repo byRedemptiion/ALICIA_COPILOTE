@@ -43,7 +43,9 @@ class OllamaModel(HttpVisionModel):
                 "Tape ta question ou repasse sur Gemini.",
             )
         if request.web_search:
-            log.info("Recherche web non disponible avec Ollama : ignorée")
+            log.info(
+                "Ollama ne cherche pas sur le web : COP'IA'LOTE cherche dans tes sites de référence"
+            )
         messages: list[dict[str, Any]] = [{"role": "system", "content": request.system_prompt}]
         for turn in request.history:
             messages.append({"role": "user", "content": turn.question})

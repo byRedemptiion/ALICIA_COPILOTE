@@ -29,7 +29,7 @@ from alicia.core.errors import AliciaError, CaptureError, ProviderError, Provide
 from alicia.core.logging_setup import operation
 from alicia.core.persona import current as current_persona
 from alicia.core.session.context import SessionContext
-from alicia.games.profiles import resolve_profile
+from alicia.games.profiles import GENERIC, GameProfile, resolve_profile
 
 BRAIN_LABELS = {"rapide": "Cerveau rapide", "reflechi": "Cerveau réfléchi"}
 
@@ -66,6 +66,9 @@ class AnalysisService:
         self.capture = capture
         self.model = model
         self.deep_model = None  # cerveau « réfléchi » (optionnel)
+        # Dernier jeu vu au premier plan : sert quand tu poses la question depuis le bureau
+        # ou depuis COP'IA'LOTE (la fenêtre du jeu n'est alors plus devant).
+        self.last_game: tuple[GameProfile, WindowInfo, float] | None = None
         self.session = session
 
     def analyze(
@@ -174,7 +177,7 @@ class AnalysisService:
                 self.settings.capture.max_image_side,
                 self.settings.capture.jpeg_quality,
             )
-            profile = resolve_profile(frame.window, self.game_profile)
+            profile, game_note = self.game_for(frame.window)
             past_images, past_note = self._past_images(question if audio is None else "")
             # Cerveau rapide ou réfléchi : la personnalité (ALICIA / VIIRUS) reste la même.
             model, brain, reason = self.model, "rapide", ""
@@ -184,11 +187,19 @@ class AnalysisService:
                 found = deep_reason(question)
                 if found:
                     model, brain, reason = self.deep_model, "reflechi", found
+            found_pages: list = []  # type: ignore[type-arg]
+            if web_search and model.provider == "ollama" and profile.sources and audio is None:
+                # Ollama ne sait pas chercher : on cherche pour lui dans tes sites de référence
+                from alicia.core.ai.local_search import search_sources
+
+                found_pages = search_sources(question, profile.sources, profile.name)
             request = AnalysisRequest(
                 question=question,
                 images=(image, *past_images),
                 system_prompt=build_system_prompt(
                     profile.prompt_context(web_search)
+                    + game_note
+                    + _pages_note(found_pages)
                     + vision_note(frame)
                     + past_note
                     + ("\n" + UNDERSTOOD_QUESTION if dictated else ""),
@@ -289,6 +300,10 @@ class AnalysisService:
                         result = again
                     else:
                         log.warning("Toujours la même réponse : le modèle est trop petit pour ça")
+            if found_pages and not result.sources:
+                from alicia.core.ai.base import Source
+
+                result.sources = [Source(p.title, p.url) for p in found_pages]
             self.session.record(question, result.text)
             if result.sources:
                 log.info(
@@ -327,6 +342,56 @@ class AnalysisService:
                 total,
                 transcript or (question if dictated else local_transcript),
             )
+
+    def note_window(self, window: WindowInfo | None) -> None:
+        """Retient le jeu au premier plan (appelé à chaque capture de la vision en direct)."""
+        if window is None or not window.handle:
+            return
+        profile = resolve_profile(window, "auto")
+        if profile is not GENERIC or window.fullscreen:
+            previous = self.last_game
+            self.last_game = (profile, window, time.monotonic())
+            if previous is None or previous[1].exe_name != window.exe_name:
+                log.info(
+                    "Jeu au premier plan : %s (%s)",
+                    profile.name if profile is not GENERIC else window.title,
+                    window.exe_name or "?",
+                )
+
+    def game_for(self, window: WindowInfo | None) -> tuple[GameProfile, str]:
+        """Le jeu de la question, et une note pour l'IA quand il n'est pas dans la liste."""
+        if self.game_profile != "auto":
+            return resolve_profile(window, self.game_profile), ""
+        profile = resolve_profile(window, "auto")
+        has_app = window is not None and bool(window.handle) and bool(window.exe_name)
+        if profile is not GENERIC:
+            self.note_window(window)
+            return profile, ""
+        if has_app and window is not None and window.fullscreen:
+            self.note_window(window)
+            return profile, _app_note(window)
+        recent = self.last_game
+        if recent is not None and time.monotonic() - recent[2] < GAME_MEMORY_S:
+            last_profile, last_window, seen = recent
+            minutes = int((time.monotonic() - seen) // 60)
+            log.info(
+                "Jeu : %s (dernier jeu vu au premier plan, il y a %d min)",
+                last_profile.name if last_profile is not GENERIC else last_window.title,
+                minutes,
+            )
+            note = (
+                "\nLe joueur pose sa question hors du jeu (bureau ou fenêtre de COP'IA'LOTE), "
+                f"mais il jouait à ce jeu il y a {minutes or 'moins d’une'} minute(s)."
+            )
+            if last_profile is GENERIC:
+                return last_profile, _app_note(last_window) + note
+            return last_profile, note
+        if has_app and window is not None:
+            return profile, _app_note(window)
+        return profile, (
+            "\nAucun jeu n'est reconnu au premier plan. Si la question parle d'un jeu, déduis "
+            "lequel de l'image ou de la question ; si ce n'est pas clair, demande-le."
+        )
 
     def _past_images(self, question: str) -> tuple[tuple, str]:  # type: ignore[type-arg]
         """Question sur le passé (« il y a une heure ») : images de ce moment, si gardées."""
@@ -412,6 +477,25 @@ def repeats(answer: str, history) -> bool:  # type: ignore[no-untyped-def]
         if old and (new == old or difflib.SequenceMatcher(None, new, old).ratio() >= 0.95):
             return True
     return False
+
+
+GAME_MEMORY_S = 30 * 60  # le dernier jeu vu reste « le jeu en cours » pendant 30 min
+
+
+def _app_note(window: WindowInfo) -> str:
+    return (
+        f"\nApplication du joueur au premier plan : « {window.title} » ({window.exe_name}). "
+        "Ce jeu n'a pas de profil dans COP'IA'LOTE : déduis-le du titre et de l'image, "
+        "et dis-le si tu n'es pas sûr."
+    )
+
+
+def _pages_note(pages: list) -> str:  # type: ignore[type-arg]
+    if not pages:
+        return ""
+    from alicia.core.ai.local_search import pages_context
+
+    return pages_context(pages)
 
 
 def vision_note(frame: Frame) -> str:
