@@ -550,8 +550,7 @@ class SettingsPage(QWidget):
                 "state": _muted("● pas encore testé"),
             }
             self.brain_labels[kind] = labels
-            grid.addWidget(QLabel("Fournisseur"), 1, 0)
-            grid.addWidget(labels["provider"], 1, 1)
+            grid.addWidget(QLabel("Fournisseur"), 1, 0)  # liste ajoutée par l'appelant
             grid.addWidget(QLabel("Modèle"), 2, 0)
             grid.addWidget(labels["model"], 2, 1)
             grid.addWidget(QLabel("Rôle"), 3, 0)
@@ -571,28 +570,23 @@ class SettingsPage(QWidget):
             self._tab_layouts["ai"].addWidget(card)
             return grid
 
+        # Fournisseur de chaque cerveau : Gemini, ChatGPT ou Ollama (modèles Ollama plus bas)
         grid = brain_card("rapide", "⚡  CERVEAU RAPIDE")
         self.ai_label = self.brain_labels["rapide"]["provider"]
-        change_ai = QPushButton("Changer d'IA / gérer mes clés")
-        change_ai.clicked.connect(self.open_ai.emit)
-        grid.addWidget(change_ai, 1, 2)
-        self.ollama_model = QComboBox()
-        self.ollama_model.setEditable(True)
-        for name, label in (
-            ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go, voit bien l'écran"),
-            ("qwen3-vl:8b", "qwen3-vl:8b — 6 Go, plus récent"),
-            ("lfm3-omni:2b", "lfm3-omni:2b — 2,4 Go, ultra rapide, réflexion limitée"),
+        self.fast_box = QComboBox()
+        for key, label in (
+            ("gemini", "Gemini (en ligne, rien sur ton PC) — conseillé en jeu"),
+            ("openai", "ChatGPT (en ligne)"),
+            ("ollama", "Ollama sur ton PC (modèle choisi plus bas)"),
         ):
-            self.ollama_model.addItem(label, name)
-        self.ollama_model.activated.connect(
-            lambda _i: self._emit("ollama_model", self._combo_value(self.ollama_model))
+            self.fast_box.addItem(label, key)
+        self.fast_box.currentIndexChanged.connect(
+            lambda _i: self._emit("fast_provider", self.fast_box.currentData())
         )
-        self.ollama_model.lineEdit().editingFinished.connect(
-            lambda: self._emit("ollama_model", self._combo_value(self.ollama_model))
-        )
-        self.ollama_row = QLabel("Modèle Ollama")
-        grid.addWidget(self.ollama_row, 6, 0)
-        grid.addWidget(self.ollama_model, 6, 1, 1, 2)
+        change_ai = QPushButton("Gérer mes clés")
+        change_ai.clicked.connect(self.open_ai.emit)
+        grid.addWidget(self.fast_box, 1, 1)
+        grid.addWidget(change_ai, 1, 2)
 
         grid = brain_card("reflechi", "🧠  CERVEAU RÉFLÉCHI")
         self.deep_box = QComboBox()
@@ -600,27 +594,79 @@ class SettingsPage(QWidget):
             ("", "Aucun : le cerveau rapide répond à tout"),
             ("gemini", "Gemini (en ligne, rien sur ton PC) — conseillé en jeu"),
             ("openai", "ChatGPT (en ligne, réflexion moyenne)"),
-            ("ollama", "Ollama sur ton PC (gros modèle : hors jeu)"),
+            ("ollama", "Ollama sur ton PC (modèle choisi plus bas, plutôt hors jeu)"),
         ):
             self.deep_box.addItem(label, key)
         self.deep_box.currentIndexChanged.connect(
             lambda _i: self._emit("deep_provider", self.deep_box.currentData())
         )
         self.deep_model = QLineEdit()
-        self.deep_model.setPlaceholderText("modèle (optionnel)")
-        self.deep_model.setToolTip("Vide = le modèle par défaut (Ollama : qwen3.8:27b)")
+        self.deep_model.setPlaceholderText("autre modèle (optionnel)")
+        self.deep_model.setToolTip("Vide = le modèle conseillé de ce fournisseur")
         self.deep_model.editingFinished.connect(
             lambda: self._emit("deep_model", self.deep_model.text())
         )
-        grid.addWidget(QLabel("Choisir"), 6, 0)
-        grid.addWidget(self.deep_box, 6, 1)
-        grid.addWidget(self.deep_model, 6, 2)
+        grid.addWidget(self.deep_box, 1, 1)
+        grid.addWidget(self.deep_model, 2, 2)
+
+        # --- Ollama : les modèles locaux des deux cerveaux --------------------------------------
+        ollama, grid = _panel()
+        grid.addWidget(_title("🖥  OLLAMA (SUR TON PC)"), 0, 0, 1, 3)
+
+        def ollama_box(choices, key: str) -> QComboBox:  # type: ignore[no-untyped-def]
+            box = QComboBox()
+            box.setEditable(True)
+            for name, label in choices:
+                box.addItem(label, name)
+            box.activated.connect(lambda _i: self._emit(key, self._combo_value(box)))
+            box.lineEdit().editingFinished.connect(lambda: self._emit(key, self._combo_value(box)))
+            return box
+
+        self.ollama_model = ollama_box(
+            (
+                ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go, voit bien l'écran"),
+                ("qwen3-vl:8b", "qwen3-vl:8b — 6 Go, plus récent"),
+                ("lfm3-omni:2b", "lfm3-omni:2b — 2,4 Go, ultra rapide, réflexion limitée"),
+            ),
+            "ollama_model",
+        )
+        self.ollama_deep_model = ollama_box(
+            (
+                ("qwen3.8:27b", "qwen3.8:27b — 18 Go, réfléchit bien (hors jeu)"),
+                ("qwen3-vl:8b", "qwen3-vl:8b — 6 Go, tient à côté d'un jeu"),
+                ("qwen2.5vl:7b", "qwen2.5vl:7b — 6 Go"),
+            ),
+            "ollama_deep_model",
+        )
+        self.ollama_states: dict[str, QLabel] = {}
+        for row, (label, box, kind) in enumerate(
+            (
+                ("⚡ Cerveau rapide", self.ollama_model, "rapide"),
+                ("🧠 Cerveau réfléchi", self.ollama_deep_model, "reflechi"),
+            ),
+            start=1,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(box, row, 1)
+            self.ollama_states[kind] = _muted("")
+            grid.addWidget(self.ollama_states[kind], row, 2)
+        grid.addWidget(
+            _muted(
+                "Ces modèles servent seulement au cerveau réglé sur « Ollama » au-dessus. Tu peux "
+                "taper le nom d'un autre modèle : il est téléchargé tout seul au besoin."
+            ),
+            3,
+            0,
+            1,
+            3,
+        )
+        self._tab_layouts["ai"].addWidget(ollama)
 
         routing, grid = _panel()
         grid.addWidget(_title("QUI RÉPOND ?"), 0, 0, 1, 3)
         grid.addWidget(
             _muted(
-                "Le profil (ALICIA ou VIIRUS) garde toujours sa personnalité : seul le cerveau "
+                "Le profil choisi garde toujours sa personnalité et sa voix : seul le cerveau "
                 "change. Par défaut, le <b>cerveau rapide</b> répond. Une question avec "
                 "« analyse », « stratégie », « build », « compare », « réfléchis », « pourquoi », "
                 "« plan », « meilleure option », « comment battre »… part au <b>cerveau "
@@ -715,6 +761,7 @@ class SettingsPage(QWidget):
                 "Le cerveau rapide jette un coup d'œil à l'écran et note l'importance de 1 à 10. "
                 "Il ne parle que si la note atteint le seuil, après le délai de silence (sauf "
                 "urgence 9-10) et jamais deux fois la même chose. Il se tait quand tu parles. "
+                "À la voix : « active le copilote » / « désactive le copilote ». "
                 "Chaque coup d'œil est une requête à l'IA : espace-les avec Gemini gratuit."
             ),
             5,
@@ -869,6 +916,14 @@ class SettingsPage(QWidget):
     def load_brains(self, ai) -> None:  # type: ignore[no-untyped-def]
         self._loading = True
         try:
+            for box, wanted in ((self.ollama_deep_model, ai.ollama.deep_model or "qwen3.8:27b"),):
+                found = box.findData(wanted)
+                if found < 0:
+                    box.addItem(wanted, wanted)
+                    found = box.findData(wanted)
+                box.setCurrentIndex(found)
+            self.fast_box.setCurrentIndex(max(0, self.fast_box.findData(ai.provider)))
+            self.deep_model.setVisible(ai.deep_provider in ("gemini", "openai"))
             index = self.ollama_model.findData(ai.ollama.model)
             if index < 0:
                 self.ollama_model.addItem(ai.ollama.model, ai.ollama.model)

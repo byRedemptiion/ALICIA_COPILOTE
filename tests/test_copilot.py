@@ -6,7 +6,13 @@ from alicia.app import build_services
 from alicia.core.ai.base import AnalysisResult, PreparedImage
 from alicia.core.capture.models import Frame, WindowInfo
 from alicia.core.config import load_settings
-from alicia.core.copilot import Copilot, CopilotGate, Decision, parse_decision
+from alicia.core.copilot import (
+    Copilot,
+    CopilotGate,
+    Decision,
+    parse_copilot_command,
+    parse_decision,
+)
 
 
 class JsonModel:
@@ -112,5 +118,28 @@ def test_window_copilot_speaks_only_when_it_matters(qt_app, tmp_path, monkeypatc
         window.copilot_button.click()  # le bouton du haut coupe aussi
         assert not window.copilot_timer.isActive() and not window.copilot_button.isChecked()
         assert not window.settings_page.copilot_box.isChecked()
+    finally:
+        window.close()
+
+
+def test_voice_command_turns_copilot_on_and_off(qt_app, tmp_path, monkeypatch):
+    from alicia.ui.main_window import MainWindow
+
+    assert parse_copilot_command("Active le copilote") is True
+    assert parse_copilot_command("désactive le mode co-pilote.") is False
+    assert parse_copilot_command("pourquoi le copilote parle autant alors que je joue") is None
+    assert parse_copilot_command("active la lumière") is None
+
+    monkeypatch.chdir(tmp_path)
+    settings = load_settings(environ={"ALICE_AI_PROVIDER": "fake"})
+    window = MainWindow(build_services(settings, demo=True, model=JsonModel("{}")))
+    window._say = lambda text: True
+    try:
+        outcome = window.services.analysis.analyze(None, "Active le copilote")
+        assert outcome.action.intent == "copilot_on"
+        window._action_done(outcome)
+        assert window.copilot_timer.isActive() and window.copilot_button.isChecked()
+        window._action_done(window.services.analysis.analyze(None, "coupe le copilote"))
+        assert not window.copilot_timer.isActive()
     finally:
         window.close()

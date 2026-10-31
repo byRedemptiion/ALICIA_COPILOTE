@@ -64,4 +64,29 @@ def test_brain_settings_are_saved(qt_app, tmp_path, monkeypatch):
     assert saved["ai"]["deep_provider"] == "gemini"
     assert saved["ai"]["ollama"]["model"] == "lfm3-omni:2b"
     assert window.services.settings.ai.deep_provider == "gemini"
+    assert not page.deep_model.isHidden()  # modèle en ligne optionnel
+
+    page.deep_box.setCurrentIndex(page.deep_box.findData("ollama"))
+    page.ollama_deep_model.setEditText("qwen3-vl:8b")
+    page.ollama_deep_model.lineEdit().editingFinished.emit()
+    saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))
+    assert saved["ai"]["ollama"]["deep_model"] == "qwen3-vl:8b"
+    assert window.services.settings.ai.ollama.deep_model == "qwen3-vl:8b"
+    assert page.deep_model.isHidden()
+    assert page.ollama_states["reflechi"].text() == "● utilisé"
+
+    page.fast_box.setCurrentIndex(page.fast_box.findData("ollama"))
+    saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))
+    assert saved["ai"]["provider"] == "ollama"
     window.close()
+
+
+def test_old_ollama_deep_model_moves_to_the_ollama_section(tmp_path):
+    path = tmp_path / "alicia.toml"
+    path.write_text(
+        '[ai]\nprovider = "gemini"\ndeep_provider = "ollama"\ndeep_model = "qwen3-vl:8b"\n',
+        encoding="utf-8",
+    )
+    ai = load_settings(cwd=tmp_path, user_dir=tmp_path, environ={}).ai
+    assert ai.ollama.deep_model == "qwen3-vl:8b" and ai.deep_model == ""
+    assert create_deep_model(ai).model == "qwen3-vl:8b"

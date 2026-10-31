@@ -155,3 +155,30 @@ class Copilot:
         if speak:
             self.gate.spoke(decision.message)
         return decision, speak, why
+
+
+_OFF = re.compile(
+    r"\b(?:desactive|desactiver|coupe|couper|arrete|arreter|eteins|eteindre|stoppe|stop|"
+    r"enleve|retire|plus de)\b(?:\s+\w+){0,3}?\s+(?:le\s+|du\s+)?(?:mode\s+)?copilote?\b"
+)
+_ON = re.compile(
+    r"\b(?:active|activer|reactive|allume|allumer|lance|lancer|demarre|demarrer|mets|mettre|"
+    r"remets|enclenche)\b(?:\s+\w+){0,3}?\s+(?:le\s+|du\s+)?(?:mode\s+)?copilote?\b"
+)
+
+
+def parse_copilot_command(text: str) -> bool | None:
+    """« Active le copilote » → True, « désactive le mode copilote » → False, sinon None."""
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", text.casefold())
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    plain = re.sub(r"[^\w\s]", " ", plain)
+    plain = re.sub(r"\bco[\s-]+pilote", "copilote", plain)
+    if len(plain.split()) > 9 or "copilot" not in plain:
+        return None  # une vraie question qui parle du copilote, pas un ordre
+    if _OFF.search(plain):
+        return False
+    if _ON.search(plain):
+        return True
+    return None

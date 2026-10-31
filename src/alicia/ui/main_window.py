@@ -941,15 +941,29 @@ class MainWindow(QMainWindow):
                 self._save("player", "phonetic", player.phonetic)
             self.services.settings = replace(self.services.settings, player=player)
             set_player(player.name, player.phonetic)
-        elif key in ("ollama_model", "deep_provider", "deep_model"):
+        elif key == "fast_provider":
+            provider = str(value or "")
+            if not provider or provider == self.services.settings.ai.provider:
+                return
+            self._save("ai", "provider", provider)
+            self._reload_ai()
+            self.settings_page.load_brains(self.services.settings.ai)
+            if self._needs_key():  # pas encore de clé pour ce fournisseur : on la demande
+                self.open_setup()
+        elif key in ("ollama_model", "ollama_deep_model", "deep_provider", "deep_model"):
             text = str(value or "").strip()
-            if key == "ollama_model":
-                if not text or text == self.services.settings.ai.ollama.model:
+            ollama = self.services.settings.ai.ollama
+            if key in ("ollama_model", "ollama_deep_model"):
+                name = "model" if key == "ollama_model" else "deep_model"
+                if not text or text == getattr(ollama, name):
                     return
-                self._save("ai.ollama", "model", text)
+                self._save("ai.ollama", name, text)
             else:
                 self._save("ai", key, text)
             self._reload_ai()
+            self.settings_page.deep_model.setVisible(
+                self.services.settings.ai.deep_provider in ("gemini", "openai")
+            )
         elif key == "brain_prompt":
             self.show_brain_prompt(str(value))
         elif key == "brain_test":
@@ -1315,11 +1329,21 @@ class MainWindow(QMainWindow):
     def _duo_router(self, text: str):  # type: ignore[no-untyped-def]
         """« Viirus, demande à Alicia… » (porte-parole) ou « discute avec Alicia… » (robots)."""
         from alicia.core.actions.controller import ActionReply
+        from alicia.core.copilot import parse_copilot_command
         from alicia.core.duo import parse_duo_request
+        from alicia.core.people import known_names
         from alicia.core.persona import PERSONAS
 
+        wanted = parse_copilot_command(text)  # « active / désactive le copilote »
+        if wanted is not None:
+            return ActionReply(
+                "Mode Copilote activé : je te préviens seulement si c'est important."
+                if wanted
+                else "Mode Copilote coupé : je ne parle que si tu me le demandes.",
+                "copilot_on" if wanted else "copilot_off",
+                done=True,
+            )
         me = current_persona()
-        from alicia.core.people import known_names
 
         others = [p.title for p in PERSONAS.values() if p.key != me.key] + [self.duo_peer]
         others += [n for n in known_names() if n not in others]
@@ -2005,9 +2029,14 @@ class MainWindow(QMainWindow):
         page.show_brain(
             "rapide", self._PROVIDER_NAMES.get(fast.provider, fast.provider), fast.model
         )
-        page.ollama_row.setVisible(fast.provider == "ollama")
-        page.ollama_model.setVisible(fast.provider == "ollama")
         deep = self.services.analysis.deep_model
+        ai = self.services.settings.ai
+        page.ollama_states["rapide"].setText(
+            "● utilisé" if ai.provider == "ollama" else "pas utilisé"
+        )
+        page.ollama_states["reflechi"].setText(
+            "● utilisé" if ai.deep_provider == "ollama" else "pas utilisé"
+        )
         if deep is None:
             page.show_brain("reflechi", "Aucun (le cerveau rapide répond à tout)", "—")
         else:
@@ -2096,7 +2125,7 @@ class MainWindow(QMainWindow):
         ai = self.services.settings.ai
         models = [ai.ollama.model] if ai.provider == "ollama" else []
         if ai.deep_provider == "ollama":
-            models.append(ai.deep_model or "qwen3.8:27b")
+            models.append(ai.ollama.deep_model or ai.deep_model or "qwen3.8:27b")
         if not models or self.services.demo:
             return
         from alicia.core.ai.providers.ollama_runtime import OllamaRuntime
@@ -2931,6 +2960,8 @@ class MainWindow(QMainWindow):
                 self.duo_chat(reply.text)
             self.analysis_done.emit(outcome)
             return
+        if reply.intent in ("copilot_on", "copilot_off"):
+            self.set_copilot(reply.intent == "copilot_on")
         if outcome.transcript is not None:
             self.question.setText(f"🎙 {outcome.transcript}")
         asked = outcome.transcript or self.question.text().strip()

@@ -33,7 +33,8 @@ def create_deep_model(settings: AISettings) -> VisionModel | None:
         return None
     ai = replace(settings, provider=provider)
     if provider == "ollama":
-        ai = replace(ai, ollama=replace(ai.ollama, model=model or "qwen3.8:27b"))
+        local = ai.ollama.deep_model or model or "qwen3.8:27b"
+        ai = replace(ai, ollama=replace(ai.ollama, model=local))
     elif provider == "gemini" and model:
         ai = replace(ai, gemini=replace(ai.gemini, model=model))
     elif provider == "openai":

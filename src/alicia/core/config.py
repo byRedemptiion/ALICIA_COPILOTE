@@ -113,6 +113,7 @@ class OllamaSettings:
     # Taille de la mémoire de conversation du modèle : Ollama prend 32K par défaut sur une
     # grosse carte, ce qui gaspille plusieurs Go de VRAM (et peut faire échouer le chargement).
     num_ctx: int = 8192
+    deep_model: str = ""  # modèle Ollama du cerveau réfléchi (vide = qwen3.8:27b)
 
 
 @dataclass(frozen=True)
@@ -407,7 +408,10 @@ def load_settings(
     return Settings(
         ai=AISettings(
             deep_provider=_choice(ai, "deep_provider", "", ("", "gemini", "openai", "ollama")),
-            deep_model=str(ai.get("deep_model", "")).strip(),
+            # deep_model : modèle en ligne du cerveau réfléchi ; celui d'Ollama est dans [ai.ollama]
+            deep_model=""
+            if ai.get("deep_provider") == "ollama"
+            else str(ai.get("deep_model", "")).strip(),
             provider=provider,
             timeout_s=_number(ai, "timeout_s", float, 1),
             max_output_tokens=_number(ai, "max_output_tokens", int, 16),
@@ -431,6 +435,10 @@ def load_settings(
                 keep_alive=str(ollama.get("keep_alive", "2m")),
                 num_thread=max(0, min(64, int(ollama.get("num_thread", 0) or 0))),
                 num_ctx=max(2048, min(262144, int(ollama.get("num_ctx", 8192) or 8192))),
+                deep_model=str(
+                    ollama.get("deep_model")
+                    or (ai.get("deep_model", "") if ai.get("deep_provider") == "ollama" else "")
+                ).strip(),
             ),
             web_search=bool(ai.get("web_search", False)),
             openai=OpenAISettings(
