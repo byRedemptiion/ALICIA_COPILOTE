@@ -475,6 +475,14 @@ class SoundDevicePlayer:
             pass
 
 
+def apply_volume(samples: np.ndarray, percent: int) -> np.ndarray:
+    """Volume de la voix du robot (100 = normal, jusqu'à 200 ; écrêtage évité)."""
+    if percent == 100:
+        return samples
+    gain = max(0, min(200, percent)) / 100
+    return np.clip(samples.astype(np.float32) * gain, -32768, 32767).astype(np.int16)
+
+
 class Speaker:
     """Lit une réponse ; ``stop()`` coupe la voix immédiatement."""
 
@@ -561,7 +569,7 @@ class Speaker:
                         len(sentences),
                     )
                     self.on_state("speaking", None)
-                self.player.play(stream, samples, stop)
+                self.player.play(stream, apply_volume(samples, self.settings.volume), stop)
         except AudioError as exc:
             log.error("Voix : %s", exc.detail)
             error = exc.user_message

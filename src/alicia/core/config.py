@@ -185,6 +185,7 @@ class VoiceSettings:
     openai_key: Secret = field(default_factory=lambda: Secret(None))  # même clé que l'IA OpenAI
     openai_base_url: str = "https://api.openai.com/v1"
     gemini_voice: str = "Leda"  # voix Gemini (moteur « gemini »)
+    volume: int = 100  # volume de la voix du robot, en % (0-200)
     voice_effect: str = ""  # "" | enfant | robot | gros_robot (sur Edge, Gemini, OpenAI, Kokoro)
     gemini_tts_model: str = "gemini-3.1-flash-tts-preview"
     gemini_key: Secret = field(default_factory=lambda: Secret(None))  # même clé que l'IA Gemini
@@ -546,6 +547,7 @@ def load_settings(
             openai_key=Secret(env.get("OPENAI_API_KEY")),
             openai_base_url=str(openai.get("base_url", "https://api.openai.com/v1")).rstrip("/"),
             gemini_voice=str(voice.get("gemini_voice", "Leda")).strip() or "Leda",
+            volume=max(0, min(200, int(voice.get("volume", 100) or 0))),
             voice_effect=_choice(
                 voice, "voice_effect", "", ("", "enfant", "robot", "robot_enfant", "gros_robot")
             ),

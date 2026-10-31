@@ -434,7 +434,7 @@ class SettingsPage(QWidget):
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
         self.engine_box.addItem("Gemini — 30 voix expressives (ta clé Gemini)", "gemini")
-        self.engine_box.addItem("VIIRUS — petit garçon robot (sur ton PC)", "veris")
+        self.engine_box.addItem("VIIRUS — sa voix de petit garçon robot (sur ton PC)", "veris")
         self.engine_box.addItem("ALICIA — voix C, petite fille (sur ton PC)", "voixc")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
@@ -459,6 +459,29 @@ class SettingsPage(QWidget):
         grid.addWidget(QLabel("Vitesse"), 4, 0)
         grid.addWidget(self.speed, 4, 1)
         grid.addWidget(self.speed_label, 4, 2)
+        self.volume = QSlider(Qt.Orientation.Horizontal)
+        self.volume.setRange(0, 200)
+        self.volume.setSingleStep(5)
+        self.volume.setPageStep(10)
+        self.volume_label = _muted("100 %")
+        self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v} %"))
+        self.volume.sliderReleased.connect(lambda: self._emit("volume", self.volume.value()))
+        self.volume.valueChanged.connect(
+            lambda v: None if self.volume.isSliderDown() else self._emit("volume", v)
+        )
+        grid.addWidget(QLabel("Volume"), 7, 0)
+        grid.addWidget(self.volume, 7, 1)
+        grid.addWidget(self.volume_label, 7, 2)
+        grid.addWidget(
+            _muted(
+                "Volume de la voix du robot seulement (100 % = normal). Si on ne l'entend presque "
+                "pas, vérifie aussi le mélangeur de volume de Windows."
+            ),
+            8,
+            0,
+            1,
+            3,
+        )
         self.output_box = QComboBox()
         grid.addWidget(QLabel("Sortie"), 5, 0)
         grid.addWidget(self.output_box, 5, 1, 1, 2)
@@ -899,7 +922,7 @@ class SettingsPage(QWidget):
             ("", "Aucun : la voix telle quelle"),
             ("enfant", "🧒 Enfant : plus aiguë, plus jeune"),
             ("robot", "🤖 Petit robot : métallique, un peu aiguë"),
-            ("robot_enfant", "🧒🤖 Enfant robot : petit garçon robot, aigu et espiègle"),
+            ("robot_enfant", "🤖 VIIRUS : petit garçon robot, aigu et espiègle"),
             ("gros_robot", "🦾 Gros robot : grave et métallique"),
         ):
             self.effect_box.addItem(label, key)
@@ -1003,6 +1026,8 @@ class SettingsPage(QWidget):
                 self.gemini_voice_box.findData(voice.gemini_voice)
             )
             self.effect_box.setCurrentIndex(max(0, self.effect_box.findData(voice.voice_effect)))
+            self.volume.setValue(voice.volume)
+            self.volume_label.setText(f"{voice.volume} %")
             chosen = {"edge": voice.tts_voice, "gemini": voice.gemini_voice}.get(voice.tts_engine)
             self.mark_chosen_voice(f"{voice.tts_engine}|{chosen}" if chosen else "")
             percent = rate_percent(voice.tts_rate)

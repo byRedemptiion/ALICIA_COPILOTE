@@ -6,7 +6,7 @@
 ; Les clés et réglages restent dans %APPDATA%\Alicia : une désinstallation ne les efface pas.
 
 #ifndef AppVersion
-  #define AppVersion "0.6.4"
+  #define AppVersion "0.6.5"
 #endif
 
 [Setup]

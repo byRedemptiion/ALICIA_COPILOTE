@@ -835,6 +835,10 @@ class MainWindow(QMainWindow):
             self._update_voice(openai_voice=str(value))
         elif key == "gemini_voice":
             self._update_voice(gemini_voice=str(value))
+        elif key == "volume":
+            volume = max(0, min(200, int(value)))  # type: ignore[call-overload]
+            if volume != self.services.settings.voice.volume:
+                self._update_voice(volume=volume)
         elif key == "voice_effect":
             self._update_voice(voice_effect=str(value or ""))
         elif key == "voice_preview":

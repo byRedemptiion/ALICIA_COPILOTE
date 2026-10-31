@@ -139,3 +139,25 @@ def test_gemini_gets_the_style_of_the_effect(monkeypatch):
     settings = VoiceSettings(tts_engine="gemini", gemini_key=Secret("k"), voice_effect="robot")
     speaker_module.make_synthesizer(settings)("Salut")
     assert "robot" in sent["contents"][0]["parts"][0]["text"]
+
+
+def test_voice_volume(qt_app, tmp_path, monkeypatch):
+    from alicia.ui.main_window import MainWindow
+
+    loud = speaker_module.apply_volume(np.array([1000, -30000], dtype=np.int16), 150)
+    assert loud.tolist() == [1500, -32768]  # pas de débordement
+    assert speaker_module.apply_volume(np.array([800], dtype=np.int16), 50).tolist() == [400]
+
+    monkeypatch.chdir(tmp_path)
+    settings = load_settings(environ={"ALICE_AI_PROVIDER": "fake"})
+    window = MainWindow(
+        build_services(settings, demo=True, speaker=RecordingSpeaker(settings.voice))
+    )
+    try:
+        window.settings_page.volume.setValue(140)
+        assert window.services.settings.voice.volume == 140
+        assert window.services.speaker.settings.volume == 140
+        saved = tomllib.loads((data_dir() / "alicia.toml").read_text("utf-8"))
+        assert saved["voice"]["volume"] == 140
+    finally:
+        window.close()
