@@ -546,7 +546,9 @@ def load_settings(
             openai_key=Secret(env.get("OPENAI_API_KEY")),
             openai_base_url=str(openai.get("base_url", "https://api.openai.com/v1")).rstrip("/"),
             gemini_voice=str(voice.get("gemini_voice", "Leda")).strip() or "Leda",
-            voice_effect=_choice(voice, "voice_effect", "", ("", "enfant", "robot", "gros_robot")),
+            voice_effect=_choice(
+                voice, "voice_effect", "", ("", "enfant", "robot", "robot_enfant", "gros_robot")
+            ),
             gemini_tts_model=str(
                 voice.get("gemini_tts_model", "gemini-3.1-flash-tts-preview")
             ).strip(),

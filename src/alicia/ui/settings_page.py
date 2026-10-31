@@ -434,7 +434,7 @@ class SettingsPage(QWidget):
         self.engine_box.addItem("Kokoro — voix sur ton PC (hors ligne)", "kokoro")
         self.engine_box.addItem("OpenAI — voix très réaliste (clé OpenAI, payant)", "openai")
         self.engine_box.addItem("Gemini — 30 voix expressives (ta clé Gemini)", "gemini")
-        self.engine_box.addItem("VIIRUS — voix robot (de VERIS MOD, sur ton PC)", "veris")
+        self.engine_box.addItem("VIIRUS — petit garçon robot (sur ton PC)", "veris")
         self.engine_box.addItem("ALICIA — voix C, petite fille (sur ton PC)", "voixc")
         grid.addWidget(QLabel("Moteur"), 2, 0)
         grid.addWidget(self.engine_box, 2, 1, 1, 2)
@@ -899,6 +899,7 @@ class SettingsPage(QWidget):
             ("", "Aucun : la voix telle quelle"),
             ("enfant", "🧒 Enfant : plus aiguë, plus jeune"),
             ("robot", "🤖 Petit robot : métallique, un peu aiguë"),
+            ("robot_enfant", "🧒🤖 Enfant robot : petit garçon robot, aigu et espiègle"),
             ("gros_robot", "🦾 Gros robot : grave et métallique"),
         ):
             self.effect_box.addItem(label, key)

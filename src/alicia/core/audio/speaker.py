@@ -172,7 +172,8 @@ def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
 
 
 VERIS_PITCH_CENTS = 450  # recette VERIS MOD : Kokoro ff_siwis, +450 cents (= voix C d'ALICIA)
-VIIRUS_PITCH_CENTS = 200  # VIIRUS : moins aigu, et une voix métallique de robot
+VIIRUS_PITCH_CENTS = 600  # VIIRUS : petit garçon robot, voix aiguë et vive, un peu métallique
+VIIRUS_METAL = 0.6
 
 
 def robot_voice(
@@ -223,9 +224,9 @@ def robot_voice(
 def veris_synthesizer(
     speed: float = 1.0,
     ratio: float = 2 ** (VIIRUS_PITCH_CENTS / 1200),
-    highpass_hz: float = 200.0,
-    presence_hz: float = 3500.0,
-    metallic: float = 1.0,
+    highpass_hz: float = 260.0,
+    presence_hz: float = 4200.0,
+    metallic: float = VIIRUS_METAL,
 ) -> Synthesizer:
     """La voix de VIIRUS (VERIS MOD) : Kokoro ff_siwis rendue plus aiguë et métallique.
     Avec d'autres réglages : la « voix C » d'ALICIA (petite fille)."""
@@ -327,6 +328,13 @@ VOICE_EFFECTS: dict[str, tuple[int, float, float, float, str]] = {
         3500.0,
         1.0,
         "comme un petit robot attachant : débit régulier, un peu mécanique, articulé",
+    ),
+    "robot_enfant": (
+        600,
+        260.0,
+        4200.0,
+        0.6,
+        "comme un petit garçon robot espiègle : voix aiguë, vive, rieuse, un peu mécanique",
     ),
     "gros_robot": (
         -350,
