@@ -2606,7 +2606,14 @@ class MainWindow(QMainWindow):
         timeline = self.services.analysis.timeline
         if timeline is not None and self.services.settings.capture.memory_clear_on_exit:
             timeline.clear()
+        if hasattr(self, "copilot_timer"):
+            self.copilot_timer.stop()
         if self.ollama_runtime is not None:
+            # Les modèles quittent la VRAM tout de suite (sinon Ollama les garde quelques minutes)
+            ai = self.services.settings.ai
+            self.ollama_runtime.unload(
+                [ai.ollama.model, ai.ollama.deep_model or ai.deep_model or "qwen3.8:27b"]
+            )
             self.ollama_runtime.stop()
         for hotkey in (self.hotkey, self.talk_hotkey):
             if hotkey is not None:

@@ -117,3 +117,27 @@ def test_ollama_never_takes_every_core():
     from alicia.core.ai.providers.ollama import default_threads
 
     assert 2 <= default_threads() <= 6
+
+
+def test_unload_frees_only_our_loaded_models():
+    posted = []
+
+    def handler(request):
+        if request.url.path == "/api/ps":
+            return httpx.Response(
+                200, json={"models": [{"name": "qwen2.5vl:7b"}, {"name": "x:1b"}]}
+            )
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={})
+
+    runtime = OllamaRuntime(
+        "http://127.0.0.1:11434", "qwen2.5vl:7b", transport=httpx.MockTransport(handler)
+    )
+    assert runtime.unload(["qwen2.5vl:7b", "qwen3.8:27b", "qwen2.5vl:7b"]) == ["qwen2.5vl:7b"]
+    assert posted == [{"model": "qwen2.5vl:7b", "keep_alive": 0}]
+
+    def down(request):
+        raise httpx.ConnectError("Ollama fermé")
+
+    closed = OllamaRuntime("http://127.0.0.1:11434", "m", transport=httpx.MockTransport(down))
+    assert closed.unload(["m"]) == []

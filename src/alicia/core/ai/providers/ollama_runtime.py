@@ -174,6 +174,31 @@ class OllamaRuntime:
                             progress(percent)
         log.info("Modèle Ollama « %s » téléchargé", self.model)
 
+    def unload(self, models: list[str]) -> list[str]:
+        """Libère tout de suite la VRAM et la RAM de ces modèles (keep_alive = 0).
+
+        Même si Ollama tourne tout seul (lancé avec Windows), nos modèles ne restent pas
+        chargés après la fermeture. Renvoie les modèles libérés."""
+        freed = []
+        try:
+            with self._client(3.0) as client:
+                loaded = {
+                    m.get("name") or m.get("model")
+                    for m in client.get(f"{self.base_url}/api/ps").json().get("models", [])
+                }
+                for name in dict.fromkeys(models):
+                    if name and (name in loaded or f"{name}:latest" in loaded):
+                        client.post(
+                            f"{self.base_url}/api/generate",
+                            json={"model": name, "keep_alive": 0},
+                        )
+                        freed.append(name)
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return freed
+        if freed:
+            log.info("Ollama : modèle(s) déchargé(s) de la mémoire : %s", ", ".join(freed))
+        return freed
+
     def stop(self) -> None:
         """Arrête Ollama seulement si c'est ALICIA qui l'a démarré."""
         process, self.process = self.process, None
