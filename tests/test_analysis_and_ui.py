@@ -677,3 +677,43 @@ def test_question_from_the_desktop_looks_at_the_whole_screen(settings):
     services.analysis.vision_mode = "window"
     outcome = services.analysis.analyze(None, "c'est quoi sur mon bureau ?")
     assert outcome.frame is not None and outcome.frame.mode == "screen"
+
+
+class LoopingModel:
+    """Petit modèle qui recopie sa réponse précédente tant qu'il a l'historique."""
+
+    provider, model = "fake", "petit-2b"
+
+    def __init__(self):
+        self.requests = []
+
+    def check(self):
+        return None
+
+    def analyze(self, request, on_delta=None, cancel=None):
+        from alicia.core.ai.base import AnalysisResult
+
+        self.requests.append(request)
+        if request.history:
+            text = request.history[-1].answer
+        else:
+            text = f"Réponse à : {request.question}"
+        return AnalysisResult(text, self.provider, self.model, 1)
+
+
+def test_a_repeated_answer_is_asked_again_without_history():
+    from alicia.core.analysis.service import repeats
+
+    model = LoopingModel()
+    services = build_services(
+        load_settings(environ={"ALICE_AI_PROVIDER": "fake"}), demo=True, model=model
+    )
+    services.analysis.analyze(DEMO_WINDOW, "Comment va le boss ?")
+    second = services.analysis.analyze(DEMO_WINDOW, "Et mes potions ?")
+    assert second.result.text == "Réponse à : Et mes potions ?"
+    assert len(model.requests) == 3  # 1re question, 2e (recopiée), relance sans historique
+    assert model.requests[2].history == () and "Ne la répète surtout pas" in (
+        model.requests[2].system_prompt
+    )
+    assert services.session.history()[-1].answer == "Réponse à : Et mes potions ?"
+    assert not repeats("Oui.", services.session.history())

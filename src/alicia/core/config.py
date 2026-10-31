@@ -197,6 +197,8 @@ DEFAULT_APPS = {
     "spotify": AppEntry("spotify:", "Spotify.exe"),
     "steam": AppEntry("steam://open/main", "steam.exe"),
     "battle.net": AppEntry("battlenet://", "Battle.net.exe"),
+    "youtube": AppEntry("https://www.youtube.com", ""),  # dans le navigateur
+    "twitch": AppEntry("https://www.twitch.tv", ""),
 }
 
 

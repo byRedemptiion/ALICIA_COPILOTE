@@ -134,6 +134,8 @@ discord = { launch = "discord://", process = "Discord.exe" }
 spotify = { launch = "spotify:", process = "Spotify.exe" }
 steam = { launch = "steam://open/main", process = "steam.exe" }
 "battle.net" = { launch = "battlenet://", process = "Battle.net.exe" }
+youtube = { launch = "https://www.youtube.com", process = "" }   # s'ouvre dans ton navigateur
+twitch = { launch = "https://www.twitch.tv", process = "" }
 
 [game]
 # Jeu joué : "auto" le reconnaît à la fenêtre. Sinon le nom d'un profil

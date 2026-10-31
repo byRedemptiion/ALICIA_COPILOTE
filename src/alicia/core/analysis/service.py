@@ -258,6 +258,37 @@ class AnalysisService:
                     question = transcript or question  # sinon la version comprise sur le PC
                 else:
                     question = transcript or "(question orale inaudible)"
+            if request.history and repeats(result.text, request.history):
+                # Petit modèle qui recopie sa réponse précédente au lieu de répondre :
+                # on relance une fois sans l'historique, en lui interdisant de la répéter.
+                log.warning(
+                    "[%s] [%s] réponse identique à une précédente (« %s ») : relance sans "
+                    "l'historique",
+                    current_persona().title,
+                    brain_label,
+                    result.text[:60],
+                )
+                from dataclasses import replace
+
+                retry = replace(
+                    request,
+                    history=(),
+                    system_prompt=request.system_prompt + NO_REPEAT.format(previous=result.text),
+                )
+                try:
+                    again = model.analyze(retry, cancel=cancel)
+                except ProviderError as exc:
+                    log.warning("Relance impossible, réponse gardée : %s", exc.detail)
+                else:
+                    if splitter is not None:
+                        from alicia.core.ai.prompts import split_transcript
+
+                        _, again.text = split_transcript(again.text)
+                    if again.text.strip() and not repeats(again.text, request.history):
+                        again.first_token_ms = result.first_token_ms
+                        result = again
+                    else:
+                        log.warning("Toujours la même réponse : le modèle est trop petit pour ça")
             self.session.record(question, result.text)
             if result.sources:
                 log.info(
@@ -355,6 +386,32 @@ class AnalysisService:
             log.info("Capture enregistrée : %s", path)
         except OSError as exc:
             log.warning("Capture non enregistrée : %s", exc)
+
+
+NO_REPEAT = (
+    "\nATTENTION : ta réponse précédente était « {previous} ». Ne la répète surtout pas : "
+    "réponds à la NOUVELLE question du joueur, avec d'autres mots.\n"
+)
+
+
+def _plain(text: str) -> str:
+    import re
+
+    return re.sub(r"[^\w]+", " ", text.casefold()).strip()
+
+
+def repeats(answer: str, history) -> bool:  # type: ignore[no-untyped-def]
+    """La réponse recopie-t-elle une réponse déjà donnée (« Non mais là… » en boucle) ?"""
+    import difflib
+
+    new = _plain(answer)
+    if len(new) < 8:
+        return False
+    for turn in history:
+        old = _plain(turn.answer)
+        if old and (new == old or difflib.SequenceMatcher(None, new, old).ratio() >= 0.95):
+            return True
+    return False
 
 
 def vision_note(frame: Frame) -> str:
