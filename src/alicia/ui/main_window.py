@@ -788,6 +788,7 @@ class MainWindow(QMainWindow):
                 "tts_rate",
                 "kokoro_speed",
                 "gemini_voice",
+                "voice_effect",
             } & changes.keys():
                 speaker.synthesizer = make_synthesizer(voice)
                 speaker.warm_up_async()
@@ -834,6 +835,8 @@ class MainWindow(QMainWindow):
             self._update_voice(openai_voice=str(value))
         elif key == "gemini_voice":
             self._update_voice(gemini_voice=str(value))
+        elif key == "voice_effect":
+            self._update_voice(voice_effect=str(value or ""))
         elif key == "voice_preview":
             self.preview_voice(str(value))
         elif key == "voice_choose":

@@ -894,8 +894,32 @@ class SettingsPage(QWidget):
             1,
             4,
         )
+        self.effect_box = QComboBox()
+        for key, label in (
+            ("", "Aucun : la voix telle quelle"),
+            ("enfant", "🧒 Enfant : plus aiguë, plus jeune"),
+            ("robot", "🤖 Petit robot : métallique, un peu aiguë"),
+            ("gros_robot", "🦾 Gros robot : grave et métallique"),
+        ):
+            self.effect_box.addItem(label, key)
+        self.effect_box.currentIndexChanged.connect(
+            lambda _i: self._emit("voice_effect", self.effect_box.currentData())
+        )
+        grid.addWidget(QLabel("Effet"), 2, 0)
+        grid.addWidget(self.effect_box, 2, 1, 1, 3)
+        grid.addWidget(
+            _muted(
+                "L'effet s'ajoute à la voix choisie (Edge, Gemini, OpenAI, Kokoro) et s'entend "
+                "aussi dans les écoutes d'essai. Avec Gemini et OpenAI, la voix reçoit en plus la "
+                "consigne de jouer un enfant ou un robot."
+            ),
+            3,
+            0,
+            1,
+            4,
+        )
         self.gallery_buttons: dict[str, QPushButton] = {}
-        row = 2
+        row = 4
         for engine, title, voices in (
             ("edge", "VOIX EDGE (MICROSOFT)", [(n, label) for n, label in EDGE_VOICES]),
             ("gemini", "VOIX GEMINI (GOOGLE)", [(n, f"{n} — {d}") for n, d in GEMINI_VOICES]),
@@ -977,6 +1001,7 @@ class SettingsPage(QWidget):
             self.gemini_voice_box.setCurrentIndex(
                 self.gemini_voice_box.findData(voice.gemini_voice)
             )
+            self.effect_box.setCurrentIndex(max(0, self.effect_box.findData(voice.voice_effect)))
             chosen = {"edge": voice.tts_voice, "gemini": voice.gemini_voice}.get(voice.tts_engine)
             self.mark_chosen_voice(f"{voice.tts_engine}|{chosen}" if chosen else "")
             percent = rate_percent(voice.tts_rate)

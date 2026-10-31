@@ -14,6 +14,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import replace
 
 import numpy as np
 
@@ -141,7 +142,13 @@ def openai_synthesizer(settings: VoiceSettings) -> Synthesizer:
                     "model": settings.openai_tts_model,
                     "voice": settings.openai_voice,
                     "input": text,
-                    "instructions": OPENAI_VOICE_STYLE + pace,
+                    "instructions": OPENAI_VOICE_STYLE
+                    + (
+                        f" Parle {VOICE_EFFECTS[settings.voice_effect][4]}."
+                        if settings.voice_effect in VOICE_EFFECTS
+                        else ""
+                    )
+                    + pace,
                     "response_format": "pcm",  # 24 kHz, 16 bits, mono
                 },
                 timeout=30,
@@ -188,6 +195,8 @@ def robot_voice(
         return (np.clip(audio, -1, 1) * 32767).astype(np.int16)
     m = max(1, round(n / ratio))
     spectrum = np.fft.rfft(audio)[: m // 2 + 1]  # coupe au-dessus de Nyquist : pas de repliement
+    if len(spectrum) < m // 2 + 1:  # voix plus grave (ratio < 1) : on complète par du silence
+        spectrum = np.pad(spectrum, (0, m // 2 + 1 - len(spectrum)))
     freqs = np.fft.rfftfreq(m, 1.0 / rate)
     with np.errstate(divide="ignore"):
         highpass = 1.0 / np.sqrt(1.0 + (highpass_hz / np.maximum(freqs, 1.0)) ** 4)
@@ -241,6 +250,13 @@ GEMINI_TTS_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model
 GEMINI_VOICE_STYLE = "Dis en français, d'un ton naturel et vivant de coéquipier de jeu : "
 
 
+def _gemini_style(settings: VoiceSettings) -> str:
+    effect = VOICE_EFFECTS.get(settings.voice_effect)
+    if effect is None:
+        return GEMINI_VOICE_STYLE
+    return f"Dis en français, {effect[4]} : "
+
+
 def gemini_synthesizer(settings: VoiceSettings) -> Synthesizer:
     """Voix Gemini (30 voix, avec ta clé Gemini) : PCM 24 kHz 16 bits mono."""
     import base64
@@ -258,7 +274,7 @@ def gemini_synthesizer(settings: VoiceSettings) -> Synthesizer:
                 GEMINI_TTS_URL.format(model=settings.gemini_tts_model),
                 headers={"x-goog-api-key": settings.gemini_key.get()},
                 json={
-                    "contents": [{"parts": [{"text": GEMINI_VOICE_STYLE + text}]}],
+                    "contents": [{"parts": [{"text": _gemini_style(settings) + text}]}],
                     "generationConfig": {
                         "responseModalities": ["AUDIO"],
                         "speechConfig": {
@@ -295,7 +311,110 @@ def gemini_synthesizer(settings: VoiceSettings) -> Synthesizer:
     return synthesize
 
 
+# Effets de voix, applicables à Edge, Gemini, OpenAI et Kokoro :
+# (hauteur en cents, passe-haut, présence, métal, consigne de jeu pour Gemini / OpenAI)
+VOICE_EFFECTS: dict[str, tuple[int, float, float, float, str]] = {
+    "enfant": (
+        380,
+        220.0,
+        3800.0,
+        0.0,
+        "avec la voix, l'énergie et la spontanéité d'un enfant de 8 ans",
+    ),
+    "robot": (
+        200,
+        200.0,
+        3500.0,
+        1.0,
+        "comme un petit robot attachant : débit régulier, un peu mécanique, articulé",
+    ),
+    "gros_robot": (
+        -350,
+        90.0,
+        2500.0,
+        1.0,
+        "comme un grand robot imposant : voix grave, lente, détachée, très mécanique",
+    ),
+}
+
+
+def time_stretch(samples: np.ndarray, rate: float, n_fft: int = 1024) -> np.ndarray:
+    """Change la durée sans changer la hauteur (vocodeur de phase, numpy seul).
+    ``rate`` > 1 : plus court ; < 1 : plus long."""
+    audio = samples.astype(np.float32)
+    if samples.dtype == np.int16:
+        audio /= 32768.0
+    hop = n_fft // 4
+    if len(audio) < n_fft * 2 or abs(rate - 1.0) < 1e-3:
+        return audio
+    window = np.hanning(n_fft).astype(np.float32)
+    frames = 1 + (len(audio) - n_fft) // hop
+    index = np.arange(n_fft)[None, :] + hop * np.arange(frames)[:, None]
+    spectrum = np.fft.rfft(audio[index] * window, axis=1)
+    steps = np.arange(0, frames - 1, rate)
+    expected = 2 * np.pi * hop * np.arange(spectrum.shape[1]) / n_fft
+    phase = np.angle(spectrum[0])
+    out = np.zeros(len(steps) * hop + n_fft, dtype=np.float32)
+    norm = np.zeros_like(out)
+    for k, step in enumerate(steps):
+        i = int(step)
+        frac = step - i
+        mag = (1 - frac) * np.abs(spectrum[i]) + frac * np.abs(spectrum[i + 1])
+        frame = np.fft.irfft(mag * np.exp(1j * phase), n_fft).astype(np.float32) * window
+        out[k * hop : k * hop + n_fft] += frame
+        norm[k * hop : k * hop + n_fft] += window**2
+        delta = np.angle(spectrum[i + 1]) - np.angle(spectrum[i]) - expected
+        delta -= 2 * np.pi * np.round(delta / (2 * np.pi))
+        phase += expected + delta
+    return out / np.maximum(norm, 1e-3)
+
+
+def with_effect(base: Synthesizer, effect: str, *, pre_slowed: bool = False) -> Synthesizer:
+    """Applique un effet (enfant, robot…) à n'importe quelle voix.
+
+    ``pre_slowed`` : la voix est déjà générée ralentie du bon facteur (Edge sait le faire,
+    c'est plus propre) ; sinon on l'étire d'abord sans changer sa hauteur."""
+    if effect not in VOICE_EFFECTS:
+        return base
+    cents, highpass, presence, metallic, _ = VOICE_EFFECTS[effect]
+    ratio = 2 ** (cents / 1200)
+
+    def synthesize(text: str) -> np.ndarray:
+        samples = base(text)
+        if not pre_slowed:
+            samples = time_stretch(samples, 1 / ratio)
+        return robot_voice(
+            samples, ratio, highpass_hz=highpass, presence_hz=presence, metallic=metallic
+        )
+
+    warm = getattr(base, "warm_up", None)
+    if warm is not None:
+        synthesize.warm_up = warm  # type: ignore[attr-defined]
+    return synthesize
+
+
+def _slowed_rate(rate: str, ratio: float) -> str:
+    try:
+        percent = int(rate.strip().rstrip("%"))
+    except ValueError:
+        percent = 0
+    return f"{round(((1 + percent / 100) / ratio - 1) * 100):+d}%"
+
+
 def make_synthesizer(settings: VoiceSettings) -> Synthesizer:
+    effect = settings.voice_effect if settings.voice_effect in VOICE_EFFECTS else ""
+    if effect and settings.tts_engine in ("edge", "gemini", "openai", "kokoro"):
+        if settings.tts_engine == "edge":
+            ratio = 2 ** (VOICE_EFFECTS[effect][0] / 1200)
+            base = edge_synthesizer(settings.tts_voice, _slowed_rate(settings.tts_rate, ratio))
+            return with_effect(base, effect, pre_slowed=True)
+        if settings.tts_engine == "gemini":
+            base = gemini_synthesizer(settings)  # garde l'effet : il devient une consigne de jeu
+        elif settings.tts_engine == "openai":
+            base = openai_synthesizer(settings)
+        else:
+            base = make_synthesizer(replace(settings, voice_effect=""))
+        return with_effect(base, effect)
     if settings.tts_engine == "veris":
         return veris_synthesizer(settings.kokoro_speed)
     if settings.tts_engine == "voixc":

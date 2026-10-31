@@ -92,3 +92,50 @@ def test_gallery_previews_without_choosing_then_chooses(qt_app, tmp_path, monkey
         assert page.gallery_buttons["gemini|Leda"].text() == "Choisir"
     finally:
         window.close()
+
+
+def _tone(seconds=1.0, hz=220.0):
+    t = np.arange(int(24000 * seconds)) / 24000
+    return (np.sin(2 * np.pi * hz * t) * 12000).astype(np.int16)
+
+
+def _pitch(samples):
+    spectrum = np.abs(np.fft.rfft(samples.astype(np.float32)))
+    return np.argmax(spectrum) * 24000 / len(samples)
+
+
+def test_effects_change_pitch_but_keep_duration():
+    base = lambda text: _tone()  # noqa: E731
+    for effect, higher in (("enfant", True), ("robot", True), ("gros_robot", False)):
+        out = speaker_module.with_effect(base, effect)("x")
+        assert abs(len(out) - 24000) < 600, effect  # même durée (± 25 ms)
+        assert (_pitch(out) > 235) if higher else (_pitch(out) < 190), (effect, _pitch(out))
+    assert speaker_module.with_effect(base, "") is base
+
+
+def test_edge_effect_slows_the_voice_before_raising_it(monkeypatch):
+    rates = []
+    monkeypatch.setattr(
+        speaker_module,
+        "edge_synthesizer",
+        lambda voice, rate: rates.append(rate) or (lambda t: _tone()),
+    )
+    settings = VoiceSettings(tts_engine="edge", tts_rate="+0%", voice_effect="enfant")
+    speaker_module.make_synthesizer(settings)("x")
+    assert rates == ["-20%"]  # 2^(380/1200) ≈ 1,245 → ralentie de 20 %
+
+
+def test_gemini_gets_the_style_of_the_effect(monkeypatch):
+    sent = {}
+
+    def post(url, headers, json, timeout):
+        sent.update(json)
+        pcm = base64.b64encode(_tone(0.2).tobytes()).decode()
+        return httpx.Response(
+            200, json={"candidates": [{"content": {"parts": [{"inlineData": {"data": pcm}}]}}]}
+        )
+
+    monkeypatch.setattr(httpx, "post", post)
+    settings = VoiceSettings(tts_engine="gemini", gemini_key=Secret("k"), voice_effect="robot")
+    speaker_module.make_synthesizer(settings)("Salut")
+    assert "robot" in sent["contents"][0]["parts"][0]["text"]
